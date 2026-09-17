@@ -11,6 +11,11 @@ to follow you back — ranked, explained, and **only ever suggested**.
 in this project at all (see [Safety](#safety)). You review each suggestion
 and follow people yourself, by hand, on github.com.
 
+> **Why this exists:** I don't have Facebook. I only want to follow people
+> I can genuinely learn from — and who might learn something from me too.
+> myGeeKy is a GitHub-friendly alternative for people like me: we want real
+> friends, and we're wary of fake ones.
+
 ## What it does
 
 1. **Understands you** — reads your CV (txt/md/pdf) plus your own GitHub
