@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv*/
+venv*/
+.env
+.pytest_cache/
+
+# MyGeeky never writes secrets to the repo, but keep the door shut anyway.
+*.token
+mygeeky_config.local.json

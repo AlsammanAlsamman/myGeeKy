@@ -1,0 +1,58 @@
+myGeeKy icon — AI image generation prompt
+==========================================
+
+Use this prompt with an image generation tool (DALL-E, Midjourney, Stable
+Diffusion, etc.) to produce the project logo. Suggested output size: 512x512
+or 1024x1024, exported as a transparent PNG, then cropped to a circle for
+PyPI/GitHub avatar use.
+
+Prompt:
+--------
+A cute, simple, flat-design circular icon logo. Inside the circle, two
+cartoon "geek" characters (round glasses, friendly smiling faces, one with
+messy hair and a laptop-print hoodie, the other with a bowtie and a
+"</>"-print t-shirt) are hugging each other warmly, viewed from the front.
+Around them, a few small minimalist red heart icons float in the air like
+confetti, evenly spaced near the top edge of the circle. Soft pastel flat
+color palette (light blue/teal background circle, warm skin tones, one
+character in orange, one in purple), thick clean vector outlines, no
+gradients, no text, no shadows, centered composition, generous padding
+inside the circle, app-icon / mascot-logo style, minimalist, friendly,
+inclusive, vector illustration, white background outside the circle.
+
+Negative prompt (avoid):
+--------
+text, letters, watermark, photorealistic, 3D render, complex background,
+extra limbs, distorted faces, clutter, gradients, drop shadows.
+
+
+Prompt for Gemini (Nano Banana / Imagen)
+==========================================
+Gemini's image generation doesn't use a separate negative-prompt field, so
+everything to avoid is folded into one natural-language description below.
+Paste this as-is.
+
+Prompt:
+--------
+Design a simple, flat, vector-style app icon, circular badge format, for a
+friendly open-source tool called "myGeeKy." Inside the circle: two goofy,
+excited cartoon "geek" characters mid-hug, viewed from the front, arms
+wrapped tightly around each other, big joyful grins, eyes closed with
+happiness. Give them fun, slightly wild, "crazy scientist" energy — messy
+tousled hair sticking up, oversized round glasses slightly crooked, one
+wearing a hoodie printed with a laptop icon, the other wearing a t-shirt
+printed with a "</>" code symbol, maybe one of them mid-jump with excitement
+so their feet lift off the ground. Centered directly above or around the
+two characters, a single bold, clean, solid red heart shape (or a small
+cluster of 3-4 small hearts floating like confetti), symbolizing warmth and
+connection. Use a soft, friendly pastel color palette: a light teal or
+sky-blue circular background, warm skin tones, one character's outfit in
+orange, the other's in purple, thick clean black or dark-navy vector
+outlines, completely flat shading with no gradients and no drop shadows.
+Centered composition with generous padding inside the circle so nothing
+touches the edge. No text or letters anywhere in the image. Clean white
+(or transparent) background outside the circle. The overall feel should be
+minimalist, playful, warm, and inclusive — a mascot logo suitable for a
+small square app icon or a round PyPI/GitHub avatar, similar in spirit to
+a modern flat-design emoji or sticker pack illustration, not photorealistic
+and not 3D-rendered.
