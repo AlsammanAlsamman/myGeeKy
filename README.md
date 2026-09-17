@@ -11,11 +11,6 @@ to follow you back — ranked, explained, and **only ever suggested**.
 in this project at all (see [Safety](#safety)). You review each suggestion
 and follow people yourself, by hand, on github.com.
 
-<p align="center">
-  <em>Icon generated from the prompt in <a href="icon_prompt.txt">icon_prompt.txt</a>,
-  then cropped to a true transparent circle.</em>
-</p>
-
 ## What it does
 
 1. **Understands you** — reads your CV (txt/md/pdf) plus your own GitHub
