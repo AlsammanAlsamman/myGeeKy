@@ -16,6 +16,36 @@ and follow people yourself, by hand, on github.com.
 > myGeeKy is a GitHub-friendly alternative for people like me: we want real
 > friends, and we're wary of fake ones.
 
+<p align="center">
+  <img src="docs/screenshot.png" width="380" alt="myGeeKy's live panel, docked and translucent, showing the Activity tab">
+</p>
+<p align="center"><em>The actual panel — translucent, docked to the screen edge, showing real activity from people you follow.</em></p>
+
+## How it works
+
+```mermaid
+flowchart TD
+    A["📄 Your CV + GitHub repos"] --> B["🔍 Search GitHub<br/>+ seed accounts/repos"]
+    B --> C["⚖️ Score &amp; filter<br/>bots · dormant accounts · real activity check"]
+    C --> D{"📋 Two ranked lists"}
+    D --> E["Likely to follow back"]
+    D --> F["Domain-fit highlights"]
+    E --> G["👀 You review a profile"]
+    F --> G
+    G --> H["🤝 You follow — by hand,<br/>on github.com"]
+    H --> I["📡 mygeeky learn<br/>checks who followed back"]
+    I -. retrains &amp; loops back .-> C
+
+    classDef manual fill:#ff6fd8,stroke:#7a5cff,color:#1a0f2e,font-weight:bold;
+    class H manual;
+```
+
+*(The pink step is the only place a "follow" ever happens — myGeeKy has no
+follow/unfollow code anywhere in the project; see [Safety](#safety).)*
+
+Want the fancier, animated, click-to-expand version of this diagram?
+**[Open the interactive walkthrough →](https://claude.ai/artifact/Lz4eCVAxiNE7LXp6r66eGV)**
+
 ## What it does
 
 1. **Understands you** — reads your CV (txt/md/pdf) plus your own GitHub
