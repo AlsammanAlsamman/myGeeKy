@@ -23,6 +23,8 @@ def _isolate_state(monkeypatch, tmp_path):
     monkeypatch.setattr(storage_module, "SUGGESTIONS_LOG", tmp_path / "suggestions_history.jsonl")
     monkeypatch.setattr(storage_module, "MODEL_HISTORY_LOG", tmp_path / "model_history.jsonl")
     monkeypatch.setattr(storage_module, "ACTIVITY_CACHE_FILE", tmp_path / "activity_cache.json")
+    monkeypatch.setattr(storage_module, "FOLLOWING_SNAPSHOT", tmp_path / "following_snapshot.json")
+    monkeypatch.setattr(storage_module, "TRAINING_LOG", tmp_path / "training_data.jsonl")
 
 
 def test_get_status_not_configured():
@@ -43,6 +45,34 @@ def test_set_theme_persists_and_rejects_unknown(monkeypatch, tmp_path):
 
     assert logic.set_theme(cfg, "not-a-real-theme") is False
     assert cfg.gui_theme == "aurora"  # unchanged by the rejected call
+
+
+def test_get_friend_stats_reads_local_data_only(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    cfg = MyGeekyConfig(github_username="me")
+
+    from mygeeky.storage import log_training_example, save_following_snapshot
+    save_following_snapshot(["a", "b", "c"])
+
+    recent = datetime.now(timezone.utc).isoformat()
+    stale = "2020-01-01T00:00:00+00:00"
+    log_training_example({"username": "a", "features": [0] * 5, "label": 1, "timestamp": recent})
+    log_training_example({"username": "b", "features": [0] * 5, "label": 0, "timestamp": recent})
+    log_training_example({"username": "c", "features": [0] * 5, "label": 1, "timestamp": stale})
+
+    stats = logic.get_friend_stats(cfg)
+    assert stats["total_friends"] == 3
+    assert stats["new_this_week"] == 2  # only the two "recent" entries
+    assert stats["total_labeled"] == 3
+    assert abs(stats["follow_back_rate"] - (2 / 3)) < 1e-9
+
+
+def test_get_friend_stats_no_data_yet(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    stats = logic.get_friend_stats(MyGeekyConfig())
+    assert stats["total_friends"] == 0
+    assert stats["new_this_week"] == 0
+    assert stats["follow_back_rate"] is None
 
 
 def test_get_suggestions_reads_local_log_only(monkeypatch, tmp_path):

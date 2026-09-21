@@ -4,12 +4,23 @@ requiring PySide6 to be importable."""
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from PySide6.QtCore import QPointF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import (
+    QEasingCurve,
+    QParallelAnimationGroup,
+    QPoint,
+    QPointF,
+    Qt,
+    QPropertyAnimation,
+    QThread,
+    QTimer,
+    Signal,
+)
+from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -23,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from . import app as logic
 from .app import THEME_NAMES, THEMES
-from ..config import MyGeekyConfig
+from ..config import AVATAR_CACHE_DIR, MyGeekyConfig
 
 ASSETS_DIR = Path(__file__).parent / "assets"
 ICON_WINDOW = ASSETS_DIR / "icon_64.png"
@@ -36,6 +47,47 @@ SWATCH_GRADIENTS = {
 }
 
 AVATAR_PALETTE = ["#e08a4f", "#7aa6e0", "#5ac8a8", "#ff6fd8", "#7a5cff", "#35c2e0", "#e05c5c"]
+
+
+def _build_spotlight_items(activity_events: list[dict[str, Any]],
+                            suggestions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalizes activity events and follow-back suggestions into one
+    interleaved rotation for the Live tab's ticker: recent real activity
+    (pushes, merges, new repos, releases, stars -- already exactly "what
+    they've been working on" and "repos they starred", straight from
+    GitHub's events feed) alternated with top suggestions, so the ticker
+    doesn't just show one or the other for several slides in a row."""
+    activity_items = [{
+        "kind": "activity",
+        "username": e.get("actor", ""),
+        "avatar_url": e.get("actor_avatar", ""),
+        "profile_url": e.get("profile_url", ""),
+        "headline": (e.get("verb", "") + (f" in {e['repo']}" if e.get("repo") else "")).strip(),
+        "detail": "",
+        "time_text": _time_ago(e.get("created_at", "")),
+    } for e in activity_events]
+
+    suggestion_items = [{
+        "kind": "suggestion",
+        "username": s.get("username", ""),
+        "avatar_url": s.get("avatar_url", ""),
+        "profile_url": s.get("profile_url", ""),
+        "headline": f"might follow back · score {s['score']:.2f}" if isinstance(s.get("score"), (int, float))
+                    else "matches your profile",
+        "detail": (s.get("bio") or "")[:70],
+        "time_text": "",
+    } for s in suggestions]
+
+    interleaved: list[dict[str, Any]] = []
+    i = j = 0
+    while i < len(activity_items) or j < len(suggestion_items):
+        if i < len(activity_items):
+            interleaved.append(activity_items[i])
+            i += 1
+        if j < len(suggestion_items):
+            interleaved.append(suggestion_items[j])
+            j += 1
+    return interleaved
 
 
 def _time_ago(iso: str) -> str:
@@ -63,6 +115,8 @@ def _avatar_color(name: str) -> str:
 
 
 def _avatar_label(username: str, size: int = 32) -> QLabel:
+    """The immediate, always-available fallback: a colored circle with initials.
+    `_avatar_widget` below upgrades this to a real photo once one loads."""
     parts = [p for p in username.replace("-", " ").replace("_", " ").split() if p]
     initials = "".join(p[0] for p in parts[:2]).upper() or "?"
     label = QLabel(initials)
@@ -72,6 +126,42 @@ def _avatar_label(username: str, size: int = 32) -> QLabel:
         f"background:{_avatar_color(username)}; color:white; border-radius:{size // 2}px; "
         f"font-weight:700; font-size:{max(9, size // 3)}px;"
     )
+    return label
+
+
+def _circular_pixmap(source: QPixmap, size: int) -> QPixmap:
+    """Crop + mask a square photo into a smooth circle with transparent corners."""
+    scaled = source.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    x = max(0, (scaled.width() - size) // 2)
+    y = max(0, (scaled.height() - size) // 2)
+    cropped = scaled.copy(x, y, size, size)
+
+    result = QPixmap(size, size)
+    result.fill(Qt.transparent)
+    painter = QPainter(result)
+    painter.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addEllipse(0, 0, size, size)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, cropped)
+    painter.end()
+    return result
+
+
+def _avatar_widget(username: str, avatar_url: str, size: int, loader: "AvatarLoader | None") -> QLabel:
+    """Starts as the colored-initials fallback, upgraded in place to the
+    person's real GitHub photo once it loads (async, cached)."""
+    label = _avatar_label(username, size)
+    if loader and avatar_url:
+        def _apply(pixmap: QPixmap) -> None:
+            try:
+                label.setPixmap(pixmap)
+                label.setText("")
+                label.setStyleSheet("background: transparent;")
+            except RuntimeError:
+                pass  # the widget was already destroyed (e.g. ticker rotated past it)
+
+        loader.request(avatar_url, size, _apply)
     return label
 
 
@@ -99,6 +189,62 @@ class _Worker(QThread):
         except Exception as exc:  # keep the worker thread from ever crashing the app
             result = {"error": str(exc)}
         self.done.emit(result)
+
+
+class AvatarLoader:
+    """Fetches GitHub avatar photos off the UI thread. Cached in memory for
+    this session and on disk (`AVATAR_CACHE_DIR`) across restarts, so the
+    same photo is only ever downloaded once."""
+
+    def __init__(self) -> None:
+        self._memory: dict[str, QPixmap] = {}
+        self._workers: list[_Worker] = []
+
+    def request(self, url: str, size: int, on_loaded: Callable[[QPixmap], None]) -> None:
+        if not url:
+            return
+        cache_key = f"{url}@{size}"
+        cached = self._memory.get(cache_key)
+        if cached is not None:
+            on_loaded(cached)
+            return
+
+        disk_path = AVATAR_CACHE_DIR / (hashlib.sha1(cache_key.encode()).hexdigest() + ".png")
+
+        def fetch() -> QPixmap | None:
+            if disk_path.exists():
+                pm = QPixmap(str(disk_path))
+                if not pm.isNull():
+                    return pm
+            try:
+                import requests
+                resp = requests.get(url, timeout=6)
+                resp.raise_for_status()
+            except Exception:
+                return None
+            raw = QPixmap()
+            if not raw.loadFromData(resp.content):
+                return None
+            circular = _circular_pixmap(raw, size)
+            try:
+                AVATAR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                circular.save(str(disk_path), "PNG")
+            except OSError:
+                pass
+            return circular
+
+        worker = _Worker(fetch)
+
+        def _finish(result: Any) -> None:
+            if isinstance(result, QPixmap) and not result.isNull():
+                self._memory[cache_key] = result
+                on_loaded(result)
+            if worker in self._workers:
+                self._workers.remove(worker)
+
+        worker.done.connect(_finish)
+        self._workers.append(worker)
+        worker.start()
 
 
 class TrendChart(QWidget):
@@ -158,13 +304,13 @@ class TrendChart(QWidget):
 
 class SuggestionCard(QFrame):
     def __init__(self, item: dict[str, Any], score_key: str, theme: dict[str, Any],
-                 on_open: Callable[[str], bool]) -> None:
+                 on_open: Callable[[str], bool], loader: "AvatarLoader | None" = None) -> None:
         super().__init__()
         self.setObjectName("card")
         row = QHBoxLayout(self)
         row.setContentsMargins(8, 8, 8, 8)
         row.setSpacing(8)
-        row.addWidget(_avatar_label(item.get("username", "?")))
+        row.addWidget(_avatar_widget(item.get("username", "?"), item.get("avatar_url", ""), 32, loader))
 
         body = QVBoxLayout()
         body.setSpacing(2)
@@ -199,12 +345,13 @@ class SuggestionCard(QFrame):
 
 
 class ActivityItem(QFrame):
-    def __init__(self, event: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+    def __init__(self, event: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 loader: "AvatarLoader | None" = None) -> None:
         super().__init__()
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 6, 0, 6)
         row.setSpacing(8)
-        row.addWidget(_avatar_label(event.get("actor", "?"), size=24))
+        row.addWidget(_avatar_widget(event.get("actor", "?"), event.get("actor_avatar", ""), 24, loader))
 
         body = QVBoxLayout()
         body.setSpacing(2)
@@ -226,12 +373,162 @@ class ActivityItem(QFrame):
         self.mousePressEvent = lambda ev: on_open(profile_url)  # noqa: ARG005
 
 
+class SpotlightCard(QFrame):
+    """One slide in the Live tab's ticker: a photo + headline + detail,
+    normalized from either an activity event or a suggestion (see
+    MyGeekyPanel._build_spotlight_items)."""
+
+    KIND_BADGES = {"activity": "LIVE", "suggestion": "SUGGESTED"}
+
+    def __init__(self, item: dict[str, Any], theme: dict[str, Any],
+                 on_open: Callable[[str], bool], loader: "AvatarLoader | None") -> None:
+        super().__init__()
+        self.setObjectName("card")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(10, 8, 10, 8)
+        row.setSpacing(10)
+        row.addWidget(_avatar_widget(item.get("username", "?"), item.get("avatar_url", ""), 40, loader))
+
+        body = QVBoxLayout()
+        body.setSpacing(1)
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
+        badge = QLabel(self.KIND_BADGES.get(item.get("kind"), ""))
+        badge.setStyleSheet(
+            f"color:{theme['accent']}; font-size:9px; font-weight:800; letter-spacing:0.6px; background:transparent;"
+        )
+        name_label = QLabel(item.get("username", ""))
+        name_label.setStyleSheet("font-weight:700; font-size:12.5px; background:transparent;")
+        top_row.addWidget(badge)
+        top_row.addWidget(name_label)
+        top_row.addStretch(1)
+        if item.get("time_text"):
+            time_label = QLabel(item["time_text"])
+            time_label.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+            top_row.addWidget(time_label)
+        body.addLayout(top_row)
+
+        headline = QLabel(item.get("headline", ""))
+        headline.setWordWrap(True)
+        headline.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
+        body.addWidget(headline)
+
+        if item.get("detail"):
+            detail = QLabel(item["detail"])
+            detail.setWordWrap(True)
+            detail.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+            body.addWidget(detail)
+
+        row.addLayout(body, 1)
+        self.setStyleSheet(f"#card {{ background:{theme['card_bg']}; border-radius:12px; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        profile_url = item.get("profile_url", "")
+        self.mousePressEvent = lambda ev: on_open(profile_url)  # noqa: ARG005
+
+
+class SpotlightTicker(QWidget):
+    """A single card at a time, auto-advancing through `set_items()` on a
+    timer, sliding the new card in from the right while the old one slides
+    out to the left -- the "sliding in one after another" live feed."""
+
+    def __init__(self, on_open: Callable[[str], bool], loader: "AvatarLoader | None") -> None:
+        super().__init__()
+        self._on_open = on_open
+        self._loader = loader
+        self._theme: dict[str, Any] = THEMES["midnight"]
+        self._items: list[dict[str, Any]] = []
+        self._index = -1
+        self._current: SpotlightCard | None = None
+        self._anim_group: QParallelAnimationGroup | None = None
+        self.setFixedHeight(72)
+
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._advance)
+
+    def set_theme(self, theme: dict[str, Any]) -> None:
+        self._theme = theme
+        if self._items:
+            self._show(max(self._index, 0), animate=False)
+
+    def set_items(self, items: list[dict[str, Any]]) -> None:
+        self._items = items
+        if not items:
+            if self._current is not None:
+                self._current.deleteLater()
+                self._current = None
+            self._index = -1
+            return
+        self._index = 0
+        self._show(0, animate=False)
+
+    def start(self, interval_ms: int) -> None:
+        if self._items:
+            self._timer.start(max(1200, interval_ms))
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def is_running(self) -> bool:
+        return self._timer.isActive()
+
+    def _advance(self) -> None:
+        if not self._items:
+            return
+        self._index = (self._index + 1) % len(self._items)
+        self._show(self._index, animate=True)
+
+    def _show(self, index: int, animate: bool) -> None:
+        item = self._items[index]
+        new_card = SpotlightCard(item, self._theme, self._on_open, self._loader)
+        new_card.setParent(self)
+        new_card.setGeometry(0, 0, self.width(), self.height())
+
+        old_card = self._current
+        self._current = new_card
+        new_card.show()
+
+        if not animate or old_card is None:
+            new_card.move(0, 0)
+            if old_card is not None:
+                old_card.deleteLater()
+            return
+
+        new_card.move(self.width(), 0)
+        group = QParallelAnimationGroup(self)
+
+        anim_new = QPropertyAnimation(new_card, b"pos", self)
+        anim_new.setDuration(420)
+        anim_new.setStartValue(QPoint(self.width(), 0))
+        anim_new.setEndValue(QPoint(0, 0))
+        anim_new.setEasingCurve(QEasingCurve.OutCubic)
+        group.addAnimation(anim_new)
+
+        anim_old = QPropertyAnimation(old_card, b"pos", self)
+        anim_old.setDuration(420)
+        anim_old.setStartValue(QPoint(0, 0))
+        anim_old.setEndValue(QPoint(-self.width(), 0))
+        anim_old.setEasingCurve(QEasingCurve.OutCubic)
+        group.addAnimation(anim_old)
+
+        group.finished.connect(old_card.deleteLater)
+        self._anim_group = group  # keep a reference alive until it finishes
+        group.start()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if self._current is not None:
+            self._current.setGeometry(0, 0, self.width(), self.height())
+
+
 class MyGeekyPanel(QWidget):
     def __init__(self, cfg: MyGeekyConfig) -> None:
         super().__init__()
         self.cfg = cfg
-        self.active_tab = "suggestions"
+        self.active_tab = "live"
         self._workers: list[_Worker] = []
+        self.avatar_loader = AvatarLoader()
+        self._last_activity_events: list[dict[str, Any]] = []
+        self._last_suggestions: list[dict[str, Any]] = []
 
         self.setWindowTitle("myGeeKy")
         if ICON_WINDOW.exists():
@@ -252,9 +549,11 @@ class MyGeekyPanel(QWidget):
         self._dock(folded=False)
 
         self._load_status()
+        self._load_live_stats()
         self._load_suggestions()
         self._refresh_activity(force=False)
         self._load_model_history()
+        self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
 
         self._activity_timer = QTimer(self)
         self._activity_timer.timeout.connect(lambda: self._refresh_activity(force=False))
@@ -315,7 +614,8 @@ class MyGeekyPanel(QWidget):
 
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
-        for name, label in (("suggestions", "Suggestions"), ("activity", "Activity"), ("model", "Model")):
+        for name, label in (("live", "Live"), ("suggestions", "Suggestions"),
+                             ("activity", "Activity"), ("model", "Model")):
             btn = QPushButton(label)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
@@ -326,12 +626,41 @@ class MyGeekyPanel(QWidget):
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
 
+        self._tab_order = ["live", "suggestions", "activity", "model"]
+        self.content_stack.addWidget(self._build_live_tab())
         self.content_stack.addWidget(self._build_suggestions_tab())
         self.content_stack.addWidget(self._build_activity_tab())
         self.content_stack.addWidget(self._build_model_tab())
 
         self.stack.addWidget(self.panel_frame)
         self.stack.setCurrentWidget(self.panel_frame)
+
+    def _build_live_tab(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setSpacing(8)
+
+        stats_row = QHBoxLayout()
+        stats_row.setSpacing(10)
+        self.stat_friends_label = QLabel("—")
+        self.stat_new_label = QLabel("—")
+        self.stat_rate_label = QLabel("—")
+        for lbl in (self.stat_friends_label, self.stat_new_label, self.stat_rate_label):
+            lbl.setStyleSheet("font-size:11px; font-weight:600; background:transparent;")
+            stats_row.addWidget(lbl)
+        stats_row.addStretch(1)
+        layout.addLayout(stats_row)
+
+        self.ticker = SpotlightTicker(logic.open_profile, self.avatar_loader)
+        layout.addWidget(self.ticker)
+
+        hint = QLabel("Recent activity and top suggestions, one at a time — click a card to open the profile.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("font-size:10px; background:transparent;")
+        layout.addWidget(hint)
+        layout.addStretch(1)
+        return page
 
     def _build_suggestions_tab(self) -> QScrollArea:
         page = QWidget()
@@ -454,6 +783,10 @@ class MyGeekyPanel(QWidget):
         self.status_label.setStyleSheet(f"font-size:11px; color:{theme['muted']}; background:transparent;")
         self.activity_updated_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
 
+        for lbl in (self.stat_friends_label, self.stat_new_label, self.stat_rate_label):
+            lbl.setStyleSheet(f"font-size:11px; font-weight:600; color:{theme['text']}; background:transparent;")
+        self.ticker.set_theme(theme)
+
         self.fold_btn.setStyleSheet(
             f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
             f"border-radius:8px; font-size:14px; }}"
@@ -540,6 +873,13 @@ class MyGeekyPanel(QWidget):
         else:
             self.status_label.setText("Run `mygeeky init` in a terminal to get started.")
 
+    def _load_live_stats(self) -> None:
+        stats = logic.get_friend_stats(self.cfg)
+        self.stat_friends_label.setText(f"👥 {stats['total_friends']} friends")
+        self.stat_new_label.setText(f"🆕 {stats['new_this_week']} new this week")
+        rate = stats["follow_back_rate"]
+        self.stat_rate_label.setText(f"🔁 {rate:.0%} follow back" if rate is not None else "🔁 no data yet")
+
     def _load_suggestions(self) -> None:
         self._render_suggestions(logic.get_suggestions(self.cfg))
 
@@ -568,6 +908,8 @@ class MyGeekyPanel(QWidget):
         domain = (data or {}).get("domain_highlights") or []
         self._set_card_list(self.followback_area, followback, "score", theme)
         self._set_card_list(self.domain_area, domain, "domain_fit", theme)
+        self._last_suggestions = followback
+        self._update_live_ticker()
 
     def _set_card_list(self, layout, items: list[dict[str, Any]], score_key: str, theme: dict[str, Any]) -> None:
         _clear_layout(layout)
@@ -577,7 +919,7 @@ class MyGeekyPanel(QWidget):
             layout.addWidget(empty)
             return
         for item in items:
-            layout.addWidget(SuggestionCard(item, score_key, theme, logic.open_profile))
+            layout.addWidget(SuggestionCard(item, score_key, theme, logic.open_profile, self.avatar_loader))
 
     # ------------------------------------------------------------------ activity
     def _refresh_activity(self, force: bool) -> None:
@@ -594,10 +936,20 @@ class MyGeekyPanel(QWidget):
             self.activity_area.addWidget(empty)
         else:
             for event in events:
-                self.activity_area.addWidget(ActivityItem(event, theme, logic.open_profile))
+                self.activity_area.addWidget(ActivityItem(event, theme, logic.open_profile, self.avatar_loader))
         fetched_at = (data or {}).get("fetched_at")
         if fetched_at:
             self.activity_updated_label.setText("updated " + _time_ago(fetched_at))
+        self._last_activity_events = events
+        self._update_live_ticker()
+
+    # ------------------------------------------------------------------ live spotlight ticker
+    def _update_live_ticker(self) -> None:
+        items = _build_spotlight_items(self._last_activity_events, self._last_suggestions)
+        was_running = self.ticker.is_running()
+        self.ticker.set_items(items)
+        if was_running:
+            self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
 
     # ------------------------------------------------------------------ model
     def _load_model_history(self) -> None:
@@ -626,6 +978,5 @@ class MyGeekyPanel(QWidget):
     # ------------------------------------------------------------------ tabs
     def _switch_tab(self, name: str) -> None:
         self.active_tab = name
-        index = {"suggestions": 0, "activity": 1, "model": 2}[name]
-        self.content_stack.setCurrentIndex(index)
+        self.content_stack.setCurrentIndex(self._tab_order.index(name))
         self._update_tab_styles()

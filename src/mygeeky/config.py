@@ -30,6 +30,7 @@ MODEL_HISTORY_LOG = DATA_DIR / "model_history.jsonl"
 ACTIVITY_CACHE_FILE = DATA_DIR / "activity_cache.json"
 CV_TEXT_FILE = DATA_DIR / "cv_text.txt"
 LOG_DIR = DATA_DIR / "logs"
+AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
 
 
 @dataclass
@@ -102,10 +103,13 @@ class MyGeekyConfig:
     gui_dock_side: str = "right"          # "right" or "left"
     gui_expanded_width: int = 380
     gui_folded_width: int = 48
-    gui_panel_height_fraction: float = 0.9    # fraction of screen height the panel occupies
+    gui_panel_height_fraction: float = 0.25   # fraction of screen height the panel occupies -- a short
+                                               # docked strip rather than a full sidebar; the Live tab's
+                                               # rotating spotlight is designed to fit this compact height
     gui_activity_refresh_minutes: int = 5     # min minutes between automatic activity-feed refreshes
     gui_activity_limit: int = 30              # how many recent activity events to show
     gui_theme: str = "midnight"               # "frosted" | "midnight" | "aurora" -- switchable live via the panel's swatch buttons
+    gui_live_rotate_seconds: float = 4.5      # how often the Live tab's spotlight card auto-advances
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -118,6 +122,7 @@ def ensure_dirs() -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    AVATAR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_config() -> MyGeekyConfig:

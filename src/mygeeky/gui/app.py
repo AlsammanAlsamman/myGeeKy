@@ -39,7 +39,9 @@ from ..config import MyGeekyConfig, load_config, save_config
 from ..github_client import GitHubClient
 from ..storage import (
     load_activity_cache,
+    load_following_snapshot,
     load_model_history,
+    load_training_examples,
     last_suggestions,
     save_activity_cache,
 )
@@ -161,6 +163,36 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
 
 def get_model_history() -> list[dict[str, Any]]:
     return load_model_history()
+
+
+def get_friend_stats(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Friend-count and follow-back stats for the Live tab -- built entirely
+    from local data already on disk (the last following snapshot and the
+    labeled training examples logged by `learn`/`bootstrap`), so viewing it
+    never triggers a network call of its own."""
+    total_friends = len(load_following_snapshot())
+
+    examples = load_training_examples()
+    now = datetime.now(timezone.utc)
+    new_this_week = 0
+    for e in examples:
+        try:
+            ts = datetime.fromisoformat(e.get("timestamp", ""))
+        except ValueError:
+            continue
+        if (now - ts).days < 7:
+            new_this_week += 1
+
+    total_labeled = len(examples)
+    positives = sum(1 for e in examples if e.get("label") == 1)
+    follow_back_rate = (positives / total_labeled) if total_labeled else None
+
+    return {
+        "total_friends": total_friends,
+        "new_this_week": new_this_week,
+        "follow_back_rate": follow_back_rate,
+        "total_labeled": total_labeled,
+    }
 
 
 def open_profile(url: str) -> bool:
