@@ -1,11 +1,12 @@
 <p align="center">
-  <img src="src/mygeeky/gui/assets/icon_256.png" width="120" alt="myGeeKy icon: two geeks hugging inside a heart">
+  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_256.png" width="120" alt="myGeeKy icon: two geeks hugging inside a heart">
 </p>
 
 <h1 align="center">myGeeKy</h1>
 <p align="center">Find fellow GitHub geeks who match your CV and repos — and are likely to follow you back.</p>
 
 <p align="center">
+  <a href="https://pypi.org/project/mygeeky/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mygeeky.svg"></a>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
   <img alt="Platform: Windows | Linux" src="https://img.shields.io/badge/platform-windows%20%7C%20linux-lightgrey.svg">
@@ -23,7 +24,7 @@ people yourself, by hand, on github.com.
 > friends, and we're wary of fake ones.
 
 <p align="center">
-  <img src="docs/screenshot.png" width="380" alt="myGeeKy's live panel, docked and translucent, showing the Live tab's scrolling activity feed">
+  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshot.png" width="380" alt="myGeeKy's live panel, docked and translucent, showing the Live tab's scrolling activity feed">
 </p>
 <p align="center"><em>The actual panel — translucent, docked to the screen edge, showing real activity from people you follow.</em></p>
 
@@ -32,11 +33,11 @@ people yourself, by hand, on github.com.
 GitHub's Markdown renderer strips `<script>` tags (security), so it can't
 run a live JS diagram inline — the image below is a preview of a real,
 animated, click-to-expand HTML/JS page that ships in this repo at
-[`docs/flowchart.html`](docs/flowchart.html):
+[`docs/flowchart.html`](https://github.com/AlsammanAlsamman/myGeeKy/blob/main/docs/flowchart.html):
 
 <p align="center">
   <a href="https://raw.githack.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart.html">
-    <img src="docs/flowchart_preview.png" width="480" alt="How myGeeKy works — click for the live interactive version">
+    <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart_preview.png" width="480" alt="How myGeeKy works — click for the live interactive version">
   </a>
 </p>
 
@@ -384,4 +385,4 @@ fit. Both lists go through the same activity-QC and bot/dormant filters.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](https://github.com/AlsammanAlsamman/myGeeKy/blob/main/LICENSE).
