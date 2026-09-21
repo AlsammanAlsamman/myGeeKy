@@ -5,6 +5,7 @@ requiring PySide6 to be importable."""
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -16,11 +17,22 @@ from PySide6.QtCore import (
     QPointF,
     Qt,
     QPropertyAnimation,
+    QRectF,
     QThread,
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QGuiApplication, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QGuiApplication,
+    QIcon,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -520,6 +532,121 @@ class SpotlightTicker(QWidget):
             self._current.setGeometry(0, 0, self.width(), self.height())
 
 
+_RGBA_RE = re.compile(r"rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)")
+_GRADIENT_STOP_RE = re.compile(r"stop:\s*([\d.]+)\s+((?:rgba?\([^)]*\))|#[0-9a-fA-F]{3,8})")
+
+
+def _parse_color(spec: str) -> QColor:
+    """THEMES colors are Qt-stylesheet strings, e.g. 'rgba(255,255,255,31)'
+    (Qt's rgba() alpha is 0-255, not the 0-1 the CSS spec uses elsewhere) --
+    QColor's own string constructor doesn't understand rgba(), only
+    #rrggbb/#aarrggbb and SVG color names, so it has to be hand-parsed."""
+    match = _RGBA_RE.match(spec.strip())
+    if match:
+        r, g, b = (int(float(match.group(i))) for i in (1, 2, 3))
+        a = int(float(match.group(4))) if match.group(4) is not None else 255
+        return QColor(r, g, b, a)
+    return QColor(spec)
+
+
+def _parse_bg_brush(spec: str, rect: QRectF) -> QBrush:
+    """theme['bg'] is a Qt-stylesheet qlineargradient(...) string (shared with
+    the QSS `background:` rule used elsewhere in this file). QColor can't
+    read that either -- passing it straight through silently produced solid
+    opaque black instead of the intended translucent glass gradient."""
+    stops = _GRADIENT_STOP_RE.findall(spec)
+    if not stops:
+        return QBrush(_parse_color(spec))
+    gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+    for pos, color in stops:
+        gradient.setColorAt(float(pos), _parse_color(color))
+    return QBrush(gradient)
+
+
+class RoundedPanel(QFrame):
+    """A frameless-window background frame with genuinely curved corners.
+
+    A stylesheet `border-radius` on a frame sitting directly on top of a
+    WA_TranslucentBackground top-level window doesn't reliably zero out the
+    alpha channel in the corner pixels on this Windows/Qt/DWM combination --
+    they render opaque-square instead of see-through-rounded. Painting the
+    shape by hand, explicitly clearing to transparent first, sidesteps that.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._bg_spec = ""
+        self._border_spec = ""
+        self._radius = 0.0
+
+    def set_style(self, bg: str, border: str, radius: float) -> None:
+        self._bg_spec = bg
+        self._border_spec = border
+        self._radius = radius
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.fillRect(self.rect(), Qt.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        path = QPainterPath()
+        path.addRoundedRect(rect, self._radius, self._radius)
+        painter.fillPath(path, _parse_bg_brush(self._bg_spec, rect))
+        painter.setPen(QPen(_parse_color(self._border_spec), 1))
+        painter.drawPath(path)
+        painter.end()
+
+
+class RoundedButton(QPushButton):
+    """A pill-shaped button with hand-painted, always-transparent corners.
+
+    Same rationale as RoundedPanel -- used for the folded/collapsed state
+    of the panel, which is just this one button standing in for the whole
+    window.
+    """
+
+    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self._bg_spec = ""
+        self._border_spec = ""
+        self._text_color = QColor("#ffffff")
+        self._radius = 18.0
+
+    def set_style(self, bg: str, border: str, text_color: str, radius: float = 18.0) -> None:
+        self._bg_spec = bg
+        self._border_spec = border
+        self._text_color = QColor(text_color)
+        self._radius = radius
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.fillRect(self.rect(), Qt.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+
+        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        # This button doubles as the folded state: a narrow, full-height strip
+        # docked to the screen edge, not a compact pill -- so the radius is a
+        # small fixed value, never proportional to the (tall) widget height.
+        radius = min(self._radius, rect.width() / 2.0, rect.height() / 2.0)
+        path = QPainterPath()
+        path.addRoundedRect(rect, radius, radius)
+        painter.fillPath(path, _parse_bg_brush(self._bg_spec, rect))
+        painter.setPen(QPen(_parse_color(self._border_spec), 1))
+        painter.drawPath(path)
+
+        painter.setPen(self._text_color)
+        painter.setFont(self.font())
+        painter.drawText(rect, Qt.AlignCenter, self.text())
+        painter.end()
+
+
 class MyGeekyPanel(QWidget):
     def __init__(self, cfg: MyGeekyConfig) -> None:
         super().__init__()
@@ -567,12 +694,12 @@ class MyGeekyPanel(QWidget):
         self.stack = QStackedWidget()
         outer.addWidget(self.stack)
 
-        self.folded_widget = QPushButton("myGeeKy")
+        self.folded_widget = RoundedButton("myGeeKy")
         self.folded_widget.setCursor(Qt.PointingHandCursor)
         self.folded_widget.clicked.connect(self.unfold)
         self.stack.addWidget(self.folded_widget)
 
-        self.panel_frame = QFrame()
+        self.panel_frame = RoundedPanel()
         self.panel_frame.setObjectName("panel")
         panel_layout = QVBoxLayout(self.panel_frame)
         panel_layout.setContentsMargins(16, 14, 16, 16)
@@ -765,21 +892,12 @@ class MyGeekyPanel(QWidget):
 
     def _apply_theme(self) -> None:
         theme = THEMES[self._theme_name()]
-        radius = 20
-        if self.cfg.gui_dock_side == "left":
-            corner = f"0px {radius}px {radius}px 0px"
-        else:
-            corner = f"{radius}px 0px 0px {radius}px"
-
-        self.panel_frame.setStyleSheet(
-            f"#panel {{ background:{theme['bg']}; border:1px solid {theme['border']}; "
-            f"border-radius:{corner}; }}"
-            f"QLabel {{ color:{theme['text']}; }}"
-        )
-        self.folded_widget.setStyleSheet(
-            f"QPushButton {{ background:{theme['bg']}; border:1px solid {theme['border']}; "
-            f"border-radius:{corner}; color:{theme['text']}; font-weight:600; }}"
-        )
+        self.panel_frame.set_style(theme["bg"], theme["border"], radius=22.0)
+        self.panel_frame.setStyleSheet(f"QLabel {{ color:{theme['text']}; }}")
+        self.folded_widget.set_style(theme["bg"], theme["border"], theme["text"])
+        folded_font = self.folded_widget.font()
+        folded_font.setBold(True)
+        self.folded_widget.setFont(folded_font)
         self.status_label.setStyleSheet(f"font-size:11px; color:{theme['muted']}; background:transparent;")
         self.activity_updated_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
 
