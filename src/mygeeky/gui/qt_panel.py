@@ -562,30 +562,42 @@ _RGBA_RE = re.compile(r"rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\
 _GRADIENT_STOP_RE = re.compile(r"stop:\s*([\d.]+)\s+((?:rgba?\([^)]*\))|#[0-9a-fA-F]{3,8})")
 
 
-def _parse_color(spec: str) -> QColor:
+def _parse_color(spec: str, force_alpha: int | None = None) -> QColor:
     """THEMES colors are Qt-stylesheet strings, e.g. 'rgba(255,255,255,31)'
     (Qt's rgba() alpha is 0-255, not the 0-1 the CSS spec uses elsewhere) --
     QColor's own string constructor doesn't understand rgba(), only
-    #rrggbb/#aarrggbb and SVG color names, so it has to be hand-parsed."""
+    #rrggbb/#aarrggbb and SVG color names, so it has to be hand-parsed.
+
+    force_alpha overrides whatever alpha the spec itself carries -- used to
+    paint the outer panel fully opaque regardless of the theme's own baked-in
+    glass alpha, so the Transparency slider (a plain setWindowOpacity
+    multiplier) has real headroom: multiplying can only ever *reduce*
+    opacity below what's painted, never raise it, so at 0% the content
+    itself must already be fully solid or the slider could never reach it."""
     match = _RGBA_RE.match(spec.strip())
     if match:
         r, g, b = (int(float(match.group(i))) for i in (1, 2, 3))
-        a = int(float(match.group(4))) if match.group(4) is not None else 255
+        a = force_alpha if force_alpha is not None else (
+            int(float(match.group(4))) if match.group(4) is not None else 255
+        )
         return QColor(r, g, b, a)
-    return QColor(spec)
+    color = QColor(spec)
+    if force_alpha is not None:
+        color.setAlpha(force_alpha)
+    return color
 
 
-def _parse_bg_brush(spec: str, rect: QRectF) -> QBrush:
+def _parse_bg_brush(spec: str, rect: QRectF, force_alpha: int | None = None) -> QBrush:
     """theme['bg'] is a Qt-stylesheet qlineargradient(...) string (shared with
     the QSS `background:` rule used elsewhere in this file). QColor can't
     read that either -- passing it straight through silently produced solid
     opaque black instead of the intended translucent glass gradient."""
     stops = _GRADIENT_STOP_RE.findall(spec)
     if not stops:
-        return QBrush(_parse_color(spec))
+        return QBrush(_parse_color(spec, force_alpha))
     gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
     for pos, color in stops:
-        gradient.setColorAt(float(pos), _parse_color(color))
+        gradient.setColorAt(float(pos), _parse_color(color, force_alpha))
     return QBrush(gradient)
 
 
@@ -621,8 +633,11 @@ class RoundedPanel(QFrame):
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         path = QPainterPath()
         path.addRoundedRect(rect, self._radius, self._radius)
-        painter.fillPath(path, _parse_bg_brush(self._bg_spec, rect))
-        painter.setPen(QPen(_parse_color(self._border_spec), 1))
+        # Painted fully opaque regardless of the theme's own glass alpha --
+        # the window-level Transparency slider (setWindowOpacity) is the only
+        # thing that should make this see-through; see _parse_color.
+        painter.fillPath(path, _parse_bg_brush(self._bg_spec, rect, force_alpha=255))
+        painter.setPen(QPen(_parse_color(self._border_spec, force_alpha=255), 1))
         painter.drawPath(path)
         painter.end()
 
@@ -663,8 +678,10 @@ class RoundedButton(QPushButton):
         radius = min(self._radius, rect.width() / 2.0, rect.height() / 2.0)
         path = QPainterPath()
         path.addRoundedRect(rect, radius, radius)
-        painter.fillPath(path, _parse_bg_brush(self._bg_spec, rect))
-        painter.setPen(QPen(_parse_color(self._border_spec), 1))
+        # Painted fully opaque for the same reason as RoundedPanel -- the
+        # window-level Transparency slider needs real headroom above 0%.
+        painter.fillPath(path, _parse_bg_brush(self._bg_spec, rect, force_alpha=255))
+        painter.setPen(QPen(_parse_color(self._border_spec, force_alpha=255), 1))
         painter.drawPath(path)
 
         painter.setPen(self._text_color)
