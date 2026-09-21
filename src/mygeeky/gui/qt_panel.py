@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSlider,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -738,15 +739,12 @@ class MyGeekyPanel(QWidget):
         header.addWidget(logo)
         header.addStretch(1)
 
-        self.swatch_buttons: dict[str, QPushButton] = {}
-        for name in ("aurora", "midnight", "frosted"):
-            btn = QPushButton()
-            btn.setFixedSize(15, 15)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setToolTip(name.capitalize())
-            btn.clicked.connect(lambda checked=False, n=name: self._on_theme_clicked(n))
-            self.swatch_buttons[name] = btn
-            header.addWidget(btn)
+        self.settings_btn = QPushButton("⚙")
+        self.settings_btn.setFixedSize(26, 26)
+        self.settings_btn.setCursor(Qt.PointingHandCursor)
+        self.settings_btn.setToolTip("Settings — theme & transparency")
+        self.settings_btn.clicked.connect(self._toggle_settings)
+        header.addWidget(self.settings_btn)
 
         self.fold_btn = QPushButton("⟩")
         self.fold_btn.setFixedSize(26, 26)
@@ -754,6 +752,10 @@ class MyGeekyPanel(QWidget):
         self.fold_btn.clicked.connect(self.fold)
         header.addWidget(self.fold_btn)
         panel_layout.addLayout(header)
+
+        self.settings_panel = self._build_settings_panel()
+        self.settings_panel.setVisible(False)
+        panel_layout.addWidget(self.settings_panel)
 
         self.status_label = QLabel("Loading…")
         self.status_label.setWordWrap(True)
@@ -890,6 +892,61 @@ class MyGeekyPanel(QWidget):
         page.setAutoFillBackground(False)
         return scroll
 
+    def _build_settings_panel(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("settings")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        theme_row = QHBoxLayout()
+        theme_label = QLabel("Theme")
+        theme_label.setStyleSheet("font-size:11px; font-weight:600; background:transparent;")
+        theme_row.addWidget(theme_label)
+        theme_row.addStretch(1)
+        self.swatch_buttons: dict[str, QPushButton] = {}
+        for name in ("aurora", "midnight", "frosted"):
+            btn = QPushButton()
+            btn.setFixedSize(17, 17)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setToolTip(name.capitalize())
+            btn.clicked.connect(lambda checked=False, n=name: self._on_theme_clicked(n))
+            self.swatch_buttons[name] = btn
+            theme_row.addWidget(btn)
+        layout.addLayout(theme_row)
+
+        opacity_row = QHBoxLayout()
+        opacity_label = QLabel("Transparency")
+        opacity_label.setStyleSheet("font-size:11px; font-weight:600; background:transparent;")
+        self.opacity_value_label = QLabel("")
+        self.opacity_value_label.setStyleSheet("font-size:10.5px; background:transparent;")
+        opacity_row.addWidget(opacity_label)
+        opacity_row.addStretch(1)
+        opacity_row.addWidget(self.opacity_value_label)
+        layout.addLayout(opacity_row)
+
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setRange(int(logic.MIN_OPACITY * 100), int(logic.MAX_OPACITY * 100))
+        self.opacity_slider.setCursor(Qt.PointingHandCursor)
+        self.opacity_slider.setValue(int(round(self.cfg.gui_opacity * 100)))
+        self.opacity_slider.valueChanged.connect(self._on_opacity_preview)
+        self.opacity_slider.sliderReleased.connect(self._on_opacity_committed)
+        layout.addWidget(self.opacity_slider)
+
+        return panel
+
+    def _toggle_settings(self) -> None:
+        self.settings_panel.setVisible(not self.settings_panel.isVisible())
+
+    def _on_opacity_preview(self, value: int) -> None:
+        """Applied live while dragging -- only persisted on release
+        (_on_opacity_committed) so we're not hitting disk on every tick."""
+        self.setWindowOpacity(value / 100.0)
+        self.opacity_value_label.setText(f"{value}%")
+
+    def _on_opacity_committed(self) -> None:
+        logic.set_opacity(self.cfg, self.opacity_slider.value() / 100.0)
+
     def _build_model_tab(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -928,6 +985,19 @@ class MyGeekyPanel(QWidget):
             f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
             f"border-radius:8px; font-size:14px; }}"
             f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+        )
+        self.settings_btn.setStyleSheet(
+            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+            f"border-radius:8px; font-size:13px; }}"
+            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+        )
+        self.settings_panel.setStyleSheet(f"#settings {{ background:{theme['card_bg']}; border-radius:12px; }}")
+        self.opacity_value_label.setStyleSheet(f"font-size:10.5px; color:{theme['muted']}; background:transparent;")
+        self.opacity_slider.setStyleSheet(
+            f"QSlider::groove:horizontal {{ height:4px; background:{theme['border']}; border-radius:2px; }}"
+            f"QSlider::sub-page:horizontal {{ background:{theme['accent']}; border-radius:2px; }}"
+            f"QSlider::handle:horizontal {{ background:{theme['accent']}; width:14px; height:14px; "
+            f"margin:-5px 0; border-radius:7px; }}"
         )
         for name, btn in self.swatch_buttons.items():
             active = name == self._theme_name()

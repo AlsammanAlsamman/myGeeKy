@@ -173,16 +173,23 @@ folded tab to expand it; click the arrow to fold it back to a slim strip.
   training-set size over time, so you can watch it actually improve as you
   run `mygeeky bootstrap`/`learn`.
 
-**Three glass styles, switchable live** with the swatch buttons in the header
-(no restart needed): **Midnight Glass** (dark, cool-toned, the default),
-**Frosted White** (light, warm, iOS-control-center-like), and **Vibrant
-Aurora** (saturated, colorful, leans into the geeky/hearts branding). Your
-pick is saved to `gui_theme` and remembered next time you open the panel.
+**⚙ Settings** — click the small gear icon in the header to open a compact
+panel with:
+- **Theme**, switchable live (no restart needed): **Midnight Glass** (dark,
+  cool-toned, the default), **Frosted White** (light, warm,
+  iOS-control-center-like), and **Vibrant Aurora** (saturated, colorful,
+  leans into the geeky/hearts branding).
+- **Transparency**, a slider from 35% to 100% window opacity, applied live
+  as you drag.
+
+Both choices are saved (`gui_theme`, `gui_opacity`) and remembered next time
+you open the panel.
 
 Config: `gui_dock_side` (`"right"`/`"left"`), `gui_expanded_width`,
 `gui_folded_width`, `gui_panel_height_fraction`, `gui_activity_refresh_minutes`,
-`gui_activity_limit`, `gui_theme` (`"midnight"`/`"frosted"`/`"aurora"`) — same
-`mygeeky config set` mechanism as everything else.
+`gui_activity_limit`, `gui_theme` (`"midnight"`/`"frosted"`/`"aurora"`),
+`gui_opacity` (`0.35`-`1.0`) — same `mygeeky config set` mechanism as
+everything else.
 
 No LLM/AI is used anywhere in the GUI (or the rest of myGeeKy) — the
 suggestions, activity feed, and model chart are all built from the same
@@ -242,9 +249,11 @@ mygeeky config reset
 | `training_mass_follow_outlier` | exclude training examples from accounts following more than this | `3000` |
 | `gui_dock_side` | which screen edge the live panel docks to (`"right"`/`"left"`) | `"right"` |
 | `gui_expanded_width` / `gui_folded_width` | panel width in pixels, expanded vs. folded | `380` / `48` |
-| `gui_panel_height_fraction` | panel height as a fraction of the screen height | `0.9` |
+| `gui_panel_height_fraction` | panel height as a fraction of the screen height | `0.25` |
 | `gui_activity_refresh_minutes` | minimum minutes between automatic activity-feed refreshes | `5` |
 | `gui_activity_limit` | how many recent activity events to show | `30` |
+| `gui_theme` | glass style (`"midnight"`/`"frosted"`/`"aurora"`) | `"midnight"` |
+| `gui_opacity` | whole-window transparency, adjustable via the ⚙ settings panel | `1.0` |
 
 ## Safety
 

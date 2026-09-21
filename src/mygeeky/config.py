@@ -110,6 +110,7 @@ class MyGeekyConfig:
     gui_activity_limit: int = 30              # how many recent activity events to show
     gui_theme: str = "midnight"               # "frosted" | "midnight" | "aurora" -- switchable live via the panel's swatch buttons
     gui_live_rotate_seconds: float = 4.5      # how often the Live tab's spotlight card auto-advances
+    gui_opacity: float = 1.0                  # whole-window opacity (0.35-1.0), adjustable via the settings icon
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

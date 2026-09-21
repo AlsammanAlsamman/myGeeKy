@@ -47,6 +47,19 @@ def test_set_theme_persists_and_rejects_unknown(monkeypatch, tmp_path):
     assert cfg.gui_theme == "aurora"  # unchanged by the rejected call
 
 
+def test_set_opacity_persists_and_rejects_out_of_range(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    cfg = MyGeekyConfig(github_username="me")
+    save_config(cfg)
+
+    assert logic.set_opacity(cfg, 0.6) is True
+    assert cfg.gui_opacity == 0.6
+
+    assert logic.set_opacity(cfg, 0.1) is False  # below MIN_OPACITY
+    assert logic.set_opacity(cfg, 1.5) is False  # above MAX_OPACITY
+    assert cfg.gui_opacity == 0.6  # unchanged by the rejected calls
+
+
 def test_get_friend_stats_reads_local_data_only(monkeypatch, tmp_path):
     _isolate_state(monkeypatch, tmp_path)
     cfg = MyGeekyConfig(github_username="me")

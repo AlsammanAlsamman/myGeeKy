@@ -116,6 +116,18 @@ def set_theme(cfg: MyGeekyConfig, theme: str) -> bool:
     return True
 
 
+MIN_OPACITY = 0.35
+MAX_OPACITY = 1.0
+
+
+def set_opacity(cfg: MyGeekyConfig, opacity: float) -> bool:
+    if not (MIN_OPACITY <= opacity <= MAX_OPACITY):
+        return False
+    cfg.gui_opacity = opacity
+    save_config(cfg)
+    return True
+
+
 def get_suggestions(cfg: MyGeekyConfig) -> dict[str, Any]:
     return {
         "followback": last_suggestions(cfg.max_suggestions_returned, list_type="followback"),
