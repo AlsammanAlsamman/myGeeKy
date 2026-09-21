@@ -440,8 +440,8 @@ class SpotlightCard(QFrame):
 
 class SpotlightTicker(QWidget):
     """A single card at a time, auto-advancing through `set_items()` on a
-    timer, sliding the new card in from the right while the old one slides
-    out to the left -- the "sliding in one after another" live feed."""
+    timer, sliding the new card up from below while the old one slides up
+    and out the top -- a vertical news-ticker feed, one story at a time."""
 
     def __init__(self, on_open: Callable[[str], bool], loader: "AvatarLoader | None") -> None:
         super().__init__()
@@ -505,12 +505,12 @@ class SpotlightTicker(QWidget):
                 old_card.deleteLater()
             return
 
-        new_card.move(self.width(), 0)
+        new_card.move(0, self.height())
         group = QParallelAnimationGroup(self)
 
         anim_new = QPropertyAnimation(new_card, b"pos", self)
         anim_new.setDuration(420)
-        anim_new.setStartValue(QPoint(self.width(), 0))
+        anim_new.setStartValue(QPoint(0, self.height()))
         anim_new.setEndValue(QPoint(0, 0))
         anim_new.setEasingCurve(QEasingCurve.OutCubic)
         group.addAnimation(anim_new)
@@ -518,7 +518,7 @@ class SpotlightTicker(QWidget):
         anim_old = QPropertyAnimation(old_card, b"pos", self)
         anim_old.setDuration(420)
         anim_old.setStartValue(QPoint(0, 0))
-        anim_old.setEndValue(QPoint(-self.width(), 0))
+        anim_old.setEndValue(QPoint(0, -self.height()))
         anim_old.setEasingCurve(QEasingCurve.OutCubic)
         group.addAnimation(anim_old)
 
