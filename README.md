@@ -1,15 +1,21 @@
 <p align="center">
-  <img src="src/mygeeky/gui/assets/icon_256.png" width="140" alt="myGeeKy icon: two geeks hugging inside a heart">
+  <img src="src/mygeeky/gui/assets/icon_256.png" width="120" alt="myGeeKy icon: two geeks hugging inside a heart">
 </p>
 
 <h1 align="center">myGeeKy</h1>
+<p align="center">Find fellow GitHub geeks who match your CV and repos — and are likely to follow you back.</p>
 
-Find fellow GitHub geeks who match your CV and repos, and who are likely
-to follow you back — ranked, explained, and **only ever suggested**.
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
+  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
+  <img alt="Platform: Windows | Linux" src="https://img.shields.io/badge/platform-windows%20%7C%20linux-lightgrey.svg">
+  <img alt="No auto-follow, ever" src="https://img.shields.io/badge/auto--follow-never-critical.svg">
+</p>
 
-**myGeeKy never follows anyone for you.** There is no follow/unfollow code
-in this project at all (see [Safety](#safety)). You review each suggestion
-and follow people yourself, by hand, on github.com.
+**myGeeKy never follows anyone for you.** There's no follow/unfollow code
+in this project at all (see [Safety](#safety)) — every suggestion is ranked,
+explained, and only ever a suggestion. You look, you click, you follow
+people yourself, by hand, on github.com.
 
 > **Why this exists:** I don't have Facebook. I only want to follow people
 > I can genuinely learn from — and who might learn something from me too.
@@ -17,7 +23,7 @@ and follow people yourself, by hand, on github.com.
 > friends, and we're wary of fake ones.
 
 <p align="center">
-  <img src="docs/screenshot.png" width="380" alt="myGeeKy's live panel, docked and translucent, showing the Activity tab">
+  <img src="docs/screenshot.png" width="380" alt="myGeeKy's live panel, docked and translucent, showing the Live tab's scrolling activity feed">
 </p>
 <p align="center"><em>The actual panel — translucent, docked to the screen edge, showing real activity from people you follow.</em></p>
 
@@ -217,6 +223,9 @@ mygeeky config set languages "Python, Rust, Go"
 mygeeky config reset
 ```
 
+<details>
+<summary><strong>Full parameter table</strong> — every key, what it does, and its default</summary>
+
 | Key | Meaning | Default |
 |---|---|---|
 | `languages` | languages you're looking for | `[]` (any) |
@@ -255,6 +264,8 @@ mygeeky config reset
 | `gui_theme` | glass style (`"midnight"`/`"frosted"`/`"aurora"`) | `"midnight"` |
 | `gui_opacity` | whole-window transparency, adjustable via the ⚙ settings panel | `1.0` |
 
+</details>
+
 ## Safety
 
 - **No follow/unfollow code exists in this project.** `github_client.py`
@@ -290,6 +301,9 @@ Every result-producing command supports `--json`:
 mygeeky run --json
 ```
 
+<details>
+<summary><strong>Example output shape</strong></summary>
+
 ```json
 {
   "followback": [
@@ -322,10 +336,15 @@ mygeeky run --json
 }
 ```
 
+</details>
+
 An agent can read this list and *present* it to you — it should never be
 wired up to auto-follow anyone; that defeats the entire point of this tool.
 
 ## How the "learning" works
+
+<details>
+<summary><strong>Bootstrapping, retraining, and how to read the AUC</strong></summary>
 
 **Bootstrapping (day one):** `mygeeky bootstrap` looks at accounts you
 *already* follow, checks (read-only) whether each one follows you back,
@@ -349,6 +368,8 @@ it on faith — with a small training set, treat it as directional, not
 precise. This is intentionally simple and transparent rather than a black
 box — you can inspect `score_breakdown` on every suggestion to see the
 heuristic and learned components separately.
+
+</details>
 
 ## Two lists, on purpose
 
