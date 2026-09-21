@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How myGeeKy Works</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Sora:wght@400;500;600;700&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0b0c18; font-family: "Sora", system-ui, sans-serif;
+    display: flex; justify-content: center; padding: 56px 20px 72px;
+  }
+  a { color: #9fd8ff; }
+  a:hover { color: #c9ecff; }
+  .wrap { width: 100%; max-width: 560px; }
+  .header { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; }
+  .header img {
+    width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.14), 0 8px 24px rgba(255,111,216,0.18);
+  }
+  .header h1 {
+    font-family: "Fraunces", serif; font-weight: 700; font-size: 30px;
+    color: #f4f4fb; line-height: 1.05; margin: 0;
+  }
+  .tagline { color: #9497b8; font-size: 14.5px; line-height: 1.5; margin: 0 0 40px 72px; max-width: 420px; }
+  .tagline em { color: #e7b8ff; font-style: normal; }
+
+  .rail { position: relative; }
+  .line {
+    position: absolute; left: 27px; top: 6px; bottom: 6px; width: 2px;
+    background: linear-gradient(180deg, #8b6bff 0%, #ff6fd8 45%, #38e2c4 100%);
+    opacity: 0.55; border-radius: 2px;
+  }
+  .pulse-dot {
+    position: absolute; left: 22px; width: 8px; height: 8px; border-radius: 50%;
+    background: radial-gradient(circle, #ffe3fa 0%, #ff6fd8 60%, transparent 100%);
+    box-shadow: 0 0 10px 2px rgba(255,111,216,0.7);
+    animation: flowdown 4.2s linear infinite;
+  }
+  .pulse-dot.d2 { animation-delay: 1.4s; }
+  .pulse-dot.d3 { animation-delay: 2.8s; }
+  @keyframes flowdown {
+    0%   { top: 0%;   opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  .steps { display: flex; flex-direction: column; gap: 14px; }
+  .step-row { display: flex; gap: 16px; align-items: flex-start; }
+  .badge-col { flex: 0 0 56px; display: flex; justify-content: center; padding-top: 2px; }
+  .badge-num {
+    width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-family: "Fraunces", serif; font-weight: 700; font-size: 13.5px; color: #0b0c18;
+    background: linear-gradient(135deg, #c9c2ff, #8b6bff);
+    box-shadow: 0 0 0 4px #0b0c18, 0 0 14px rgba(139,107,255,0.35);
+    transition: transform .18s ease;
+  }
+  .step-row.follow .badge-num { background: linear-gradient(135deg, #ff9fe6, #ff6fd8); }
+  .step-row:hover .badge-num { transform: scale(1.08); }
+
+  .card {
+    flex: 1; cursor: pointer; padding: 14px 16px; border-radius: 14px;
+    background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.09);
+    transition: border-color .18s ease;
+  }
+  .step-row.follow .card { border-color: rgba(255,111,216,0.4); }
+  .step-row:hover .card { border-color: rgba(255,255,255,0.22); }
+  .step-row.follow:hover .card { border-color: rgba(255,111,216,0.65); }
+
+  .card-top { display: flex; align-items: center; gap: 10px; }
+  .card-icon { font-size: 18px; }
+  .card-title { font-family: "Fraunces", serif; font-weight: 600; font-size: 16.5px; color: #f4f4fb; }
+  .step-row.follow .card-title { color: #ff9fe6; }
+  .chevron { margin-left: auto; color: #6f7290; font-size: 14px; width: 14px; text-align: center; }
+  .summary { margin-top: 5px; color: #c7c9de; font-size: 13.5px; line-height: 1.5; }
+  .detail {
+    margin-top: 0; max-height: 0; overflow: hidden; opacity: 0;
+    color: #9497b8; font-size: 12.5px; line-height: 1.6;
+    transition: max-height .25s ease, opacity .2s ease, margin-top .25s ease;
+  }
+  .card.expanded .detail {
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);
+    max-height: 200px; opacity: 1;
+  }
+
+  .loop-note {
+    margin: 22px 0 34px 72px; display: inline-flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border: 1px dashed rgba(139,107,255,0.5); border-radius: 999px;
+    color: #b9adff; font-size: 12px; font-weight: 600;
+  }
+  .loop-note em { font-style: normal; color: #ff9fe6; }
+
+  .footer { border-top: 1px solid rgba(255,255,255,0.09); padding-top: 20px; display: flex; flex-direction: column; gap: 6px; }
+  .footer .headline { color: #f4f4fb; font-size: 13.5px; font-weight: 600; }
+  .footer .sub { color: #8386a6; font-size: 12.5px; line-height: 1.6; }
+
+  @media (max-width: 480px) {
+    .tagline, .loop-note { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <img src="icon_256.png" alt="myGeeKy">
+    <h1>How myGeeKy Works</h1>
+  </div>
+  <p class="tagline">
+    Finds fellow GitHub geeks who match your CV and repos and are likely to
+    follow back — ranked, explained, and only ever <em>suggested</em>.
+  </p>
+
+  <div class="rail">
+    <div class="line"></div>
+    <div class="pulse-dot"></div>
+    <div class="pulse-dot d2"></div>
+    <div class="pulse-dot d3"></div>
+    <div class="steps" id="steps"></div>
+  </div>
+
+  <div class="loop-note">↻&nbsp; loops back to step 3 — the model keeps adapting to who actually follows <em>you</em> back</div>
+
+  <div class="footer">
+    <div class="headline">No follow/unfollow code exists in this project — anywhere.</div>
+    <div class="sub">MIT-licensed, read-only by design. <a href="https://github.com/AlsammanAlsamman/myGeeKy" target="_blank" rel="noopener">github.com/AlsammanAlsamman/myGeeKy</a></div>
+  </div>
+
+</div>
+
+<script>
+  var STEPS = [
+    { id: "s1", num: 1, icon: "📄", title: "Read you",
+      summary: "Your CV + your own GitHub repos become a profile — languages, topics, keywords.",
+      detail: "No manual tagging. myGeeKy reads your public repos' languages/topics and, optionally, your CV text, and builds a weighted TF-IDF interest profile automatically." },
+    { id: "s2", num: 2, icon: "🔍", title: "Go looking",
+      summary: "Searches GitHub — plus any seed accounts or repos you add — for people who match.",
+      detail: "Candidates come from GitHub's own user search, followers of well-known accounts in your field, and stargazers of relevant repos, not one generic query." },
+    { id: "s3", num: 3, icon: "⚖️", title: "Score & filter",
+      summary: "Scores fit and follow-back odds, then drops bots, dormant accounts, and inactive repos.",
+      detail: "A real per-repo activity check (not just a profile timestamp), a follow-back-likelihood heuristic, and a small learned model combine into one score." },
+    { id: "s4", num: 4, icon: "📋", title: "Two lists",
+      summary: "“Likely to follow back” and “Domain-fit highlights” — ranked separately.",
+      detail: "Some of the best-fit people follow almost no one on GitHub, so a follow-back-only ranking would bury them. Both lists ship, independently." },
+    { id: "s5", num: 5, icon: "👀", title: "You look",
+      summary: "You review a suggested profile and click Open.",
+      detail: "Opens their real GitHub profile in your browser — bio, repos, activity — so you decide, not a heuristic." },
+    { id: "s6", num: 6, icon: "🤝", title: "You follow — by hand", follow: true,
+      summary: "Only ever on github.com, by you. myGeeKy has no follow/unfollow code at all.",
+      detail: "There is no code path in this project that can follow anyone — not a hidden flag, not an “auto” mode. It literally does not exist in the source." },
+    { id: "s7", num: 7, icon: "📡", title: "It learns",
+      summary: "mygeeky learn checks who followed back and retrains the model on real outcomes.",
+      detail: "Weekly (or whenever you run it), it compares your following list, labels new follows by whether they followed back, and retrains — looping back to step 3." }
+  ];
+
+  var container = document.getElementById("steps");
+  var expanded = "s1";
+
+  function render() {
+    container.innerHTML = "";
+    STEPS.forEach(function (step) {
+      var row = document.createElement("div");
+      row.className = "step-row" + (step.follow ? " follow" : "");
+
+      var badgeCol = document.createElement("div");
+      badgeCol.className = "badge-col";
+      var badge = document.createElement("div");
+      badge.className = "badge-num";
+      badge.textContent = step.num;
+      badgeCol.appendChild(badge);
+
+      var card = document.createElement("div");
+      card.className = "card" + (expanded === step.id ? " expanded" : "");
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      card.setAttribute("aria-expanded", expanded === step.id ? "true" : "false");
+
+      var top = document.createElement("div");
+      top.className = "card-top";
+      top.innerHTML =
+        '<span class="card-icon">' + step.icon + '</span>' +
+        '<span class="card-title">' + step.title + '</span>' +
+        '<span class="chevron">' + (expanded === step.id ? "−" : "+") + '</span>';
+
+      var summary = document.createElement("div");
+      summary.className = "summary";
+      summary.textContent = step.summary;
+
+      var detail = document.createElement("div");
+      detail.className = "detail";
+      detail.textContent = step.detail;
+
+      card.appendChild(top);
+      card.appendChild(summary);
+      card.appendChild(detail);
+
+      function toggle() {
+        expanded = expanded === step.id ? null : step.id;
+        render();
+      }
+      card.addEventListener("click", toggle);
+      card.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
+      });
+
+      row.appendChild(badgeCol);
+      row.appendChild(card);
+      container.appendChild(row);
+    });
+  }
+
+  render();
+</script>
+</body>
+</html>

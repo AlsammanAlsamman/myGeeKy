@@ -23,28 +23,27 @@ and follow people yourself, by hand, on github.com.
 
 ## How it works
 
-```mermaid
-flowchart TD
-    A["📄 Your CV + GitHub repos"] --> B["🔍 Search GitHub<br/>+ seed accounts/repos"]
-    B --> C["⚖️ Score &amp; filter<br/>bots · dormant accounts · real activity check"]
-    C --> D{"📋 Two ranked lists"}
-    D --> E["Likely to follow back"]
-    D --> F["Domain-fit highlights"]
-    E --> G["👀 You review a profile"]
-    F --> G
-    G --> H["🤝 You follow — by hand,<br/>on github.com"]
-    H --> I["📡 mygeeky learn<br/>checks who followed back"]
-    I -. retrains &amp; loops back .-> C
+GitHub's Markdown renderer strips `<script>` tags (security), so it can't
+run a live JS diagram inline — the image below is a preview of a real,
+animated, click-to-expand HTML/JS page that ships in this repo at
+[`docs/flowchart.html`](docs/flowchart.html):
 
-    classDef manual fill:#ff6fd8,stroke:#7a5cff,color:#1a0f2e,font-weight:bold;
-    class H manual;
-```
+<p align="center">
+  <a href="https://raw.githack.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart.html">
+    <img src="docs/flowchart_preview.png" width="480" alt="How myGeeKy works — click for the live interactive version">
+  </a>
+</p>
 
-*(The pink step is the only place a "follow" ever happens — myGeeKy has no
-follow/unfollow code anywhere in the project; see [Safety](#safety).)*
+**[▶ Open the live interactive version](https://raw.githack.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart.html)**
+— real vanilla JS (click any step to expand it), served straight off this
+repo via [githack](https://raw.githack.com), no build step, no server.
+(If that link is ever slow/unavailable: clone the repo and open
+`docs/flowchart.html` directly in a browser — it's fully self-contained,
+zero dependencies.)
 
-Want the fancier, animated, click-to-expand version of this diagram?
-**[Open the interactive walkthrough →](https://claude.ai/artifact/Lz4eCVAxiNE7LXp6r66eGV)**
+*The pink "You follow — by hand" step is the only place a follow ever
+happens — myGeeKy has no follow/unfollow code anywhere in the project; see
+[Safety](#safety).*
 
 ## What it does
 
