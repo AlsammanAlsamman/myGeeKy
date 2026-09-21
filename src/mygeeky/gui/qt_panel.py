@@ -355,6 +355,11 @@ class SuggestionCard(QFrame):
         row.addWidget(open_btn)
 
         self.setStyleSheet(f"#card {{ background:{theme['card_bg']}; border-radius:10px; }}")
+        # Clicking anywhere on the card -- the avatar included -- opens the
+        # profile too, not just the explicit button (the button consumes its
+        # own clicks first since it's a child widget, so no double-trigger).
+        self.setCursor(Qt.PointingHandCursor)
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
 
 
 class ActivityItem(QFrame):
@@ -925,10 +930,15 @@ class MyGeekyPanel(QWidget):
         opacity_row.addWidget(self.opacity_value_label)
         layout.addLayout(opacity_row)
 
+        # The slider reads as "Transparency": 0 = no transparency (fully
+        # opaque) .. 100 = full transparency (invisible). That's the inverse
+        # of Qt's own windowOpacity (1.0 = opaque, 0.0 = invisible), so the
+        # slider's own range is always a plain 0-100 regardless of the
+        # opacity bounds in app.py -- see _slider_to_opacity/_opacity_to_slider.
         self.opacity_slider = QSlider(Qt.Horizontal)
-        self.opacity_slider.setRange(int(logic.MIN_OPACITY * 100), int(logic.MAX_OPACITY * 100))
+        self.opacity_slider.setRange(0, 100)
         self.opacity_slider.setCursor(Qt.PointingHandCursor)
-        self.opacity_slider.setValue(int(round(self.cfg.gui_opacity * 100)))
+        self.opacity_slider.setValue(self._opacity_to_slider(self.cfg.gui_opacity))
         self.opacity_slider.valueChanged.connect(self._on_opacity_preview)
         self.opacity_slider.sliderReleased.connect(self._on_opacity_committed)
         layout.addWidget(self.opacity_slider)
@@ -938,14 +948,22 @@ class MyGeekyPanel(QWidget):
     def _toggle_settings(self) -> None:
         self.settings_panel.setVisible(not self.settings_panel.isVisible())
 
+    @staticmethod
+    def _slider_to_opacity(value: int) -> float:
+        return 1.0 - (value / 100.0)
+
+    @staticmethod
+    def _opacity_to_slider(opacity: float) -> int:
+        return int(round((1.0 - opacity) * 100))
+
     def _on_opacity_preview(self, value: int) -> None:
         """Applied live while dragging -- only persisted on release
         (_on_opacity_committed) so we're not hitting disk on every tick."""
-        self.setWindowOpacity(value / 100.0)
+        self.setWindowOpacity(self._slider_to_opacity(value))
         self.opacity_value_label.setText(f"{value}%")
 
     def _on_opacity_committed(self) -> None:
-        logic.set_opacity(self.cfg, self.opacity_slider.value() / 100.0)
+        logic.set_opacity(self.cfg, self._slider_to_opacity(self.opacity_slider.value()))
 
     def _build_model_tab(self) -> QWidget:
         page = QWidget()

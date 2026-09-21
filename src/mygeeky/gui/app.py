@@ -116,7 +116,7 @@ def set_theme(cfg: MyGeekyConfig, theme: str) -> bool:
     return True
 
 
-MIN_OPACITY = 0.35
+MIN_OPACITY = 0.0
 MAX_OPACITY = 1.0
 
 

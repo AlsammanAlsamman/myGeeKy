@@ -55,9 +55,12 @@ def test_set_opacity_persists_and_rejects_out_of_range(monkeypatch, tmp_path):
     assert logic.set_opacity(cfg, 0.6) is True
     assert cfg.gui_opacity == 0.6
 
-    assert logic.set_opacity(cfg, 0.1) is False  # below MIN_OPACITY
+    assert logic.set_opacity(cfg, 0.0) is True  # fully transparent is allowed
+    assert cfg.gui_opacity == 0.0
+
+    assert logic.set_opacity(cfg, -0.1) is False  # below MIN_OPACITY
     assert logic.set_opacity(cfg, 1.5) is False  # above MAX_OPACITY
-    assert cfg.gui_opacity == 0.6  # unchanged by the rejected calls
+    assert cfg.gui_opacity == 0.0  # unchanged by the rejected calls
 
 
 def test_get_friend_stats_reads_local_data_only(monkeypatch, tmp_path):

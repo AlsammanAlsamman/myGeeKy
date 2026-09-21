@@ -186,8 +186,8 @@ panel with:
   cool-toned, the default), **Frosted White** (light, warm,
   iOS-control-center-like), and **Vibrant Aurora** (saturated, colorful,
   leans into the geeky/hearts branding).
-- **Transparency**, a slider from 35% to 100% window opacity, applied live
-  as you drag.
+- **Transparency**, a slider from 0% (fully opaque) to 100% (fully
+  transparent), applied live as you drag.
 
 Both choices are saved (`gui_theme`, `gui_opacity`) and remembered next time
 you open the panel.
@@ -195,7 +195,8 @@ you open the panel.
 Config: `gui_dock_side` (`"right"`/`"left"`), `gui_expanded_width`,
 `gui_folded_width`, `gui_panel_height_fraction`, `gui_activity_refresh_minutes`,
 `gui_activity_limit`, `gui_theme` (`"midnight"`/`"frosted"`/`"aurora"`),
-`gui_opacity` (`0.35`-`1.0`) — same `mygeeky config set` mechanism as
+`gui_opacity` (`0.0`-`1.0`, note the settings panel's slider shows this
+inverted, as "Transparency") — same `mygeeky config set` mechanism as
 everything else.
 
 No LLM/AI is used anywhere in the GUI (or the rest of myGeeKy) — the
