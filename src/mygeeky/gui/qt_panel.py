@@ -439,9 +439,15 @@ class SpotlightCard(QFrame):
 
 
 class SpotlightTicker(QWidget):
-    """A single card at a time, auto-advancing through `set_items()` on a
-    timer, sliding the new card up from below while the old one slides up
-    and out the top -- a vertical news-ticker feed, one story at a time."""
+    """A vertical news-feed strip: as many cards as the available height
+    fits, stacked and all visible at once, scrolling up together on a
+    timer -- the newest story rises in at the bottom while the oldest
+    visible one scrolls off the top. Fills whatever space its parent
+    layout gives it (see `_build_live_tab`'s stretch factor) rather than
+    a fixed one-card height, so a taller panel shows more stories at once."""
+
+    CARD_HEIGHT = 72
+    CARD_SPACING = 8
 
     def __init__(self, on_open: Callable[[str], bool], loader: "AvatarLoader | None") -> None:
         super().__init__()
@@ -449,33 +455,56 @@ class SpotlightTicker(QWidget):
         self._loader = loader
         self._theme: dict[str, Any] = THEMES["midnight"]
         self._items: list[dict[str, Any]] = []
-        self._index = -1
-        self._current: SpotlightCard | None = None
+        self._next_index = 0
+        self._cards: list[SpotlightCard] = []
         self._anim_group: QParallelAnimationGroup | None = None
-        self.setFixedHeight(72)
+        self.setMinimumHeight(self.CARD_HEIGHT)
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._advance)
 
+    def _visible_count(self) -> int:
+        step = self.CARD_HEIGHT + self.CARD_SPACING
+        return max(1, (self.height() + self.CARD_SPACING) // step)
+
+    def _slot_y(self, slot: int) -> int:
+        return slot * (self.CARD_HEIGHT + self.CARD_SPACING)
+
+    def _make_card(self, item: dict[str, Any]) -> SpotlightCard:
+        card = SpotlightCard(item, self._theme, self._on_open, self._loader)
+        card.setParent(self)
+        return card
+
     def set_theme(self, theme: dict[str, Any]) -> None:
         self._theme = theme
         if self._items:
-            self._show(max(self._index, 0), animate=False)
+            self._fill()
 
     def set_items(self, items: list[dict[str, Any]]) -> None:
         self._items = items
-        if not items:
-            if self._current is not None:
-                self._current.deleteLater()
-                self._current = None
-            self._index = -1
+        self._fill()
+
+    def _fill(self) -> None:
+        """(Re)populate every visible slot from scratch -- first load,
+        theme change, and any resize (the slot count depends on height)."""
+        for card in self._cards:
+            card.deleteLater()
+        self._cards = []
+        if not self._items:
             return
-        self._index = 0
-        self._show(0, animate=False)
+        count = min(self._visible_count(), len(self._items))
+        for slot in range(count):
+            card = self._make_card(self._items[slot % len(self._items)])
+            card.setGeometry(0, self._slot_y(slot), self.width(), self.CARD_HEIGHT)
+            card.show()
+            self._cards.append(card)
+        self._next_index = count % len(self._items)
 
     def start(self, interval_ms: int) -> None:
-        if self._items:
+        if len(self._items) > len(self._cards):
             self._timer.start(max(1200, interval_ms))
+        else:
+            self._timer.stop()
 
     def stop(self) -> None:
         self._timer.stop()
@@ -484,52 +513,43 @@ class SpotlightTicker(QWidget):
         return self._timer.isActive()
 
     def _advance(self) -> None:
-        if not self._items:
-            return
-        self._index = (self._index + 1) % len(self._items)
-        self._show(self._index, animate=True)
-
-    def _show(self, index: int, animate: bool) -> None:
-        item = self._items[index]
-        new_card = SpotlightCard(item, self._theme, self._on_open, self._loader)
-        new_card.setParent(self)
-        new_card.setGeometry(0, 0, self.width(), self.height())
-
-        old_card = self._current
-        self._current = new_card
-        new_card.show()
-
-        if not animate or old_card is None:
-            new_card.move(0, 0)
-            if old_card is not None:
-                old_card.deleteLater()
+        if not self._cards or len(self._items) <= len(self._cards):
             return
 
-        new_card.move(0, self.height())
+        departing = self._cards.pop(0)
+        visible_n = len(self._cards) + 1  # slot count before this update
+
+        incoming = self._make_card(self._items[self._next_index])
+        self._next_index = (self._next_index + 1) % len(self._items)
+        incoming.setGeometry(0, self._slot_y(visible_n), self.width(), self.CARD_HEIGHT)
+        incoming.show()
+        self._cards.append(incoming)
+
         group = QParallelAnimationGroup(self)
 
-        anim_new = QPropertyAnimation(new_card, b"pos", self)
-        anim_new.setDuration(420)
-        anim_new.setStartValue(QPoint(0, self.height()))
-        anim_new.setEndValue(QPoint(0, 0))
-        anim_new.setEasingCurve(QEasingCurve.OutCubic)
-        group.addAnimation(anim_new)
+        anim_out = QPropertyAnimation(departing, b"pos", self)
+        anim_out.setDuration(420)
+        anim_out.setStartValue(departing.pos())
+        anim_out.setEndValue(QPoint(0, -self.CARD_HEIGHT))
+        anim_out.setEasingCurve(QEasingCurve.OutCubic)
+        group.addAnimation(anim_out)
 
-        anim_old = QPropertyAnimation(old_card, b"pos", self)
-        anim_old.setDuration(420)
-        anim_old.setStartValue(QPoint(0, 0))
-        anim_old.setEndValue(QPoint(0, -self.height()))
-        anim_old.setEasingCurve(QEasingCurve.OutCubic)
-        group.addAnimation(anim_old)
+        for slot, card in enumerate(self._cards):
+            anim = QPropertyAnimation(card, b"pos", self)
+            anim.setDuration(420)
+            anim.setStartValue(card.pos())
+            anim.setEndValue(QPoint(0, self._slot_y(slot)))
+            anim.setEasingCurve(QEasingCurve.OutCubic)
+            group.addAnimation(anim)
 
-        group.finished.connect(old_card.deleteLater)
+        group.finished.connect(departing.deleteLater)
         self._anim_group = group  # keep a reference alive until it finishes
         group.start()
 
     def resizeEvent(self, event) -> None:  # noqa: N802
         super().resizeEvent(event)
-        if self._current is not None:
-            self._current.setGeometry(0, 0, self.width(), self.height())
+        if self._items:
+            self._fill()
 
 
 _RGBA_RE = re.compile(r"rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)")
@@ -780,13 +800,12 @@ class MyGeekyPanel(QWidget):
         layout.addLayout(stats_row)
 
         self.ticker = SpotlightTicker(logic.open_profile, self.avatar_loader)
-        layout.addWidget(self.ticker)
+        layout.addWidget(self.ticker, 1)
 
-        hint = QLabel("Recent activity and top suggestions, one at a time — click a card to open the profile.")
+        hint = QLabel("Recent activity and top suggestions, scrolling live — click a card to open the profile.")
         hint.setWordWrap(True)
         hint.setStyleSheet("font-size:10px; background:transparent;")
         layout.addWidget(hint)
-        layout.addStretch(1)
         return page
 
     def _build_suggestions_tab(self) -> QScrollArea:
