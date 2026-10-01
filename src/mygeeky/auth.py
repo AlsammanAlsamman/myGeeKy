@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import getpass
 import os
+import shutil
+import subprocess
 
 import keyring
 from keyring.errors import PasswordDeleteError
@@ -42,16 +44,32 @@ class TokenNotFoundError(RuntimeError):
     pass
 
 
+def _gh_cli_token() -> str | None:
+    """The token of a logged-in GitHub CLI (`gh auth login`), if any -- so
+    myGeeKy works on any of your machines where `gh` is already set up,
+    without storing a second token. myGeeKy's API client only ever issues
+    GET requests, so a broader gh token still can't follow anyone."""
+    if not shutil.which("gh"):
+        return None
+    try:
+        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    token = r.stdout.strip()
+    return token if r.returncode == 0 and token else None
+
+
 def get_token(username: str) -> str | None:
-    """Resolve the GitHub token: env var first, then OS keyring."""
+    """Resolve the GitHub token: env var first, then OS keyring, then the GitHub CLI."""
     env_token = os.environ.get(ENV_VAR)
     if env_token:
         return env_token.strip()
     try:
-        return keyring.get_password(SERVICE_NAME, username)
+        token = keyring.get_password(SERVICE_NAME, username)
     except Exception:
         # Some headless/CI environments have no keyring backend at all.
-        return None
+        token = None
+    return token or _gh_cli_token()
 
 
 def token_source(username: str) -> str:
@@ -62,6 +80,8 @@ def token_source(username: str) -> str:
             return "OS keyring (encrypted secret store)"
     except Exception:
         pass
+    if _gh_cli_token():
+        return "GitHub CLI login (`gh auth token`)"
     return "none"
 
 

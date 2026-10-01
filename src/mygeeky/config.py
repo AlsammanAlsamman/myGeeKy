@@ -29,6 +29,9 @@ MODEL_FILE = DATA_DIR / "model.pkl"
 MODEL_HISTORY_LOG = DATA_DIR / "model_history.jsonl"
 ACTIVITY_CACHE_FILE = DATA_DIR / "activity_cache.json"
 CV_TEXT_FILE = DATA_DIR / "cv_text.txt"
+SCHOLAR_PROFILE_FILE = DATA_DIR / "scholar_profile.json"
+CONTRIBUTE_LOG = DATA_DIR / "contribute_history.jsonl"
+SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
 
@@ -37,6 +40,11 @@ AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
 class MyGeekyConfig:
     # Identity
     github_username: str = ""
+
+    # Where your profile comes from beyond your GitHub repos -- all optional.
+    # `mygeeky profile refresh` re-reads these (CV pdf -> text, ORCID + OpenAlex).
+    cv_path: str = ""                     # remembered so the CV can be re-extracted when it changes
+    orcid_id: str = ""                    # e.g. "0000-0002-1825-0097"; enables ORCID + OpenAlex enrichment
 
     # What "geeks like him/her" means -- all optional, all adjustable.
     languages: list[str] = field(default_factory=list)      # e.g. ["Python", "Rust"]
@@ -90,6 +98,24 @@ class MyGeekyConfig:
     rate_limit_sleep_seconds: float = 1.5
     search_pause_seconds: float = 2.1     # GitHub's search endpoints have their own, tighter rate limit (~30/min)
 
+    # Repos to contribute to (`mygeeky contribute`): active, non-archived repos
+    # matching your profile, with open beginner/help-wanted issues and
+    # maintainers who actually merge outside contributors' PRs. Suggest-only:
+    # you fork and open PRs yourself.
+    contribute_min_stars: int = 10
+    contribute_max_stars: int = 20000      # huge projects rarely merge drive-by PRs quickly
+    contribute_pushed_within_days: int = 90
+    contribute_queries: int = 10           # how many profile terms to turn into repo searches
+    contribute_check_top_n: int = 25       # how many top repos get the (costlier) maintainer check
+    contribute_max_returned: int = 10
+    contribute_extra_terms: list[str] = field(default_factory=list)  # always searched, e.g. ["gwas", "snakemake"]
+
+    # Cross-machine sync: your data dir is a clone of a PRIVATE GitHub repo
+    # (`mygeeky sync init`). Uses your normal git/gh credentials, never
+    # myGeeKy's read-only token, and never syncs any secret.
+    sync_repo: str = ""                    # "owner/name", set by `mygeeky sync init`
+    sync_auto: bool = True                 # `pipeline` pulls first and pushes last when sync is set up
+
     # Learning
     min_training_samples: int = 8         # need at least this many labeled examples before ML kicks in
     ml_blend_weight: float = 0.5          # how much the learned model influences the final score once trained
@@ -134,7 +160,9 @@ def load_config() -> MyGeekyConfig:
         return MyGeekyConfig()
     raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     base = asdict(MyGeekyConfig())
-    base.update(raw)
+    # ignore keys this version doesn't know -- a config synced from another
+    # machine may have been written by a newer myGeeKy
+    base.update({k: v for k, v in raw.items() if k in base})
     return MyGeekyConfig(**base)
 
 

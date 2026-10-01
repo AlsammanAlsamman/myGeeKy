@@ -13,6 +13,7 @@ from typing import Any, Iterable
 
 from .config import (
     ACTIVITY_CACHE_FILE,
+    CONTRIBUTE_LOG,
     EXCLUDED_FILE,
     FOLLOWING_SNAPSHOT,
     MODEL_HISTORY_LOG,
@@ -104,3 +105,17 @@ def load_activity_cache() -> dict[str, Any] | None:
 def save_activity_cache(events: list[dict[str, Any]], fetched_at: str) -> None:
     ensure_dirs()
     ACTIVITY_CACHE_FILE.write_text(json.dumps({"fetched_at": fetched_at, "events": events}), encoding="utf-8")
+
+
+def log_contributions(records: Iterable[dict[str, Any]]) -> None:
+    for r in records:
+        append_jsonl(CONTRIBUTE_LOG, r)
+
+
+def last_contributions(limit: int = 10) -> list[dict[str, Any]]:
+    """The most recent `mygeeky contribute` run's results, best first."""
+    records = read_jsonl(CONTRIBUTE_LOG)
+    if not records:
+        return []
+    latest = records[-1].get("timestamp")
+    return [r for r in records if r.get("timestamp") == latest][:limit]

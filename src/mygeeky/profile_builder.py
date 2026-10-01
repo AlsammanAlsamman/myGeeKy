@@ -75,10 +75,10 @@ def build_profile_from_github(client: GitHubClient, username: str, max_repo_page
 
 
 def build_self_profile(client: GitHubClient, username: str, cv_text: str, keywords: list[str],
-                        max_repo_pages: int = 5) -> Profile:
+                        max_repo_pages: int = 5, scholar_text: str = "") -> Profile:
     profile = build_profile_from_github(client, username, max_repo_pages=max_repo_pages)
     if profile is None:
         profile = Profile(username=username)
-    extra = " \n ".join([cv_text or "", " ".join(keywords)])
+    extra = " \n ".join([cv_text or "", scholar_text or "", " ".join(keywords)])
     profile.corpus = f"{profile.corpus}\n{extra}".strip()
     return profile

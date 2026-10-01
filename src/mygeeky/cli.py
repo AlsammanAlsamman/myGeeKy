@@ -47,6 +47,7 @@ from .storage import (
     save_following_snapshot,
 )
 from .text_utils import load_cv_text
+from . import scholar
 
 
 def _now() -> str:
@@ -92,11 +93,9 @@ def init() -> None:
         default="s",
     )
     if cv_choice.lower() == "p":
-        cv_path = click.prompt("Path to your CV file")
-        text = load_cv_text(cv_path)
-        CV_TEXT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        CV_TEXT_FILE.write_text(text, encoding="utf-8")
-        click.echo(f"Saved CV text ({len(text)} chars) to {CV_TEXT_FILE}")
+        cv_path = click.prompt("Path to your CV file", default=cfg.cv_path or None)
+        text = _import_cv(cv_path)
+        cfg.cv_path = cv_path
     elif cv_choice.lower() == "t":
         click.echo("Paste/type your CV text. Finish with a single line containing just: END")
         lines = []
@@ -109,6 +108,16 @@ def init() -> None:
         CV_TEXT_FILE.parent.mkdir(parents=True, exist_ok=True)
         CV_TEXT_FILE.write_text(text, encoding="utf-8")
         click.echo(f"Saved CV text ({len(text)} chars) to {CV_TEXT_FILE}")
+
+    cv_orcid = scholar.find_orcid_in_text(_load_cv_text())
+    click.echo("\nYour ORCID iD lets myGeeKy read your publications (ORCID + OpenAlex) to match\n"
+               "you by research topic too. Blank to skip.")
+    orcid = click.prompt("ORCID iD", default=cfg.orcid_id or cv_orcid or "", show_default=True)
+    cfg.orcid_id = scholar.normalize_orcid(orcid)
+    if orcid.strip() and not cfg.orcid_id:
+        click.echo("That doesn't look like an ORCID iD -- skipped (set later with `mygeeky config set orcid_id ...`).")
+    elif cfg.orcid_id:
+        _refresh_scholar(cfg.orcid_id)
 
     click.echo("\nWhat kind of geeks are you looking for? (comma-separated, blank to skip any)")
     langs = click.prompt("Programming languages", default=", ".join(cfg.languages) or "", show_default=False)
@@ -170,6 +179,74 @@ def init() -> None:
         "  mygeeky run              # get suggestions now\n"
         "  mygeeky schedule show    # see how to run this automatically every week\n"
     )
+
+
+def _import_cv(cv_path: str) -> str:
+    text = load_cv_text(cv_path)
+    CV_TEXT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CV_TEXT_FILE.write_text(text, encoding="utf-8")
+    click.echo(f"Saved CV text ({len(text)} chars) to {CV_TEXT_FILE}")
+    return text
+
+
+def _refresh_scholar(orcid: str) -> None:
+    click.echo(f"Fetching publications for ORCID {orcid} (ORCID + OpenAlex)...")
+    prof = scholar.refresh_scholar_profile(orcid)
+    oa = prof["openalex"]
+    click.echo(f"  ORCID: {len(prof['orcid_record']['titles'])} works, "
+               f"{len(prof['orcid_record']['keywords'])} keywords")
+    click.echo(f"  OpenAlex: {len(oa['works'])} works fetched, topics: {', '.join(oa['topics'][:5]) or '-'}")
+
+
+# --------------------------------------------------------------------------- profile
+@main.group()
+def profile() -> None:
+    """Your profile sources: CV, ORCID, OpenAlex publications."""
+
+
+@profile.command("refresh")
+@click.option("--cv", "cv_path", default=None, help="CV file (.pdf/.txt/.md); remembered for next time.")
+@click.option("--orcid", default=None, help="ORCID iD or orcid.org URL; remembered for next time.")
+def profile_refresh(cv_path: str | None, orcid: str | None) -> None:
+    """Re-read your CV and re-fetch your publications. Run after updating your CV."""
+    cfg = load_config()
+    if cv_path:
+        cfg.cv_path = cv_path
+    if orcid is not None:
+        cfg.orcid_id = scholar.normalize_orcid(orcid)
+        if orcid and not cfg.orcid_id:
+            raise click.ClickException(f"'{orcid}' is not a valid ORCID iD.")
+    save_config(cfg)
+    if cfg.cv_path:
+        _import_cv(cfg.cv_path)
+    else:
+        click.echo("No CV path set (use --cv).")
+    if cfg.orcid_id:
+        _refresh_scholar(cfg.orcid_id)
+    else:
+        click.echo("No ORCID iD set (use --orcid).")
+
+
+@profile.command("show")
+def profile_show() -> None:
+    """Summarize what myGeeKy knows about you (no network calls)."""
+    cfg = load_config()
+    cv = _load_cv_text()
+    sp = scholar.load_scholar_profile()
+    click.echo(f"GitHub:   {cfg.github_username or '(not set)'}")
+    click.echo(f"CV:       {cfg.cv_path or '(no path)'} -- {len(cv)} chars of text stored")
+    click.echo(f"ORCID:    {cfg.orcid_id or '(not set)'}")
+    if sp:
+        oa = sp.get("openalex") or {}
+        click.echo(f"Publications: {len(oa.get('works') or [])} from OpenAlex, "
+                   f"{len((sp.get('orcid_record') or {}).get('titles') or [])} on ORCID "
+                   f"(fetched {sp.get('fetched_at', '?')[:10]})")
+        click.echo(f"Research topics: {', '.join(scholar.scholar_topics(sp)) or '-'}")
+    corpus = "\n".join([cv, scholar.scholar_corpus(sp), " ".join(cfg.keywords)])
+    vocab = build_domain_vocabulary(corpus, cfg.domain_vocab_size)
+    if vocab:
+        top = sorted(vocab, key=vocab.get, reverse=True)
+        click.echo(f"Top terms (CV + publications, before GitHub repos): {', '.join(top[:15])}")
 
 
 # --------------------------------------------------------------------------- auth
@@ -259,6 +336,12 @@ def _load_cv_text() -> str:
     if CV_TEXT_FILE.exists():
         return CV_TEXT_FILE.read_text(encoding="utf-8", errors="ignore")
     return ""
+
+
+def _self_profile(client: GitHubClient, cfg: MyGeekyConfig):
+    """You, as myGeeKy sees you: GitHub repos + CV text + ORCID/OpenAlex publications."""
+    return build_self_profile(client, cfg.github_username, _load_cv_text(), cfg.keywords,
+                              scholar_text=scholar.scholar_corpus(scholar.load_scholar_profile()))
 
 
 def _gather_candidates(client: GitHubClient, cfg: MyGeekyConfig, exclude: set[str],
@@ -378,7 +461,7 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
         raise click.ClickException("Run `mygeeky init` first.")
     client = _client_for(cfg)
 
-    self_profile = build_self_profile(client, cfg.github_username, _load_cv_text(), cfg.keywords)
+    self_profile = _self_profile(client, cfg)
     vocabulary = build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size)
 
     following = set(client.list_following(cfg.github_username))
@@ -594,7 +677,7 @@ def bootstrap(limit: int) -> None:
         click.echo(f"You follow {len(full_following)} accounts; checking the first {limit} "
                     "(raise with --limit for more).")
 
-    self_profile = build_self_profile(client, cfg.github_username, _load_cv_text(), cfg.keywords)
+    self_profile = _self_profile(client, cfg)
     click.echo(f"Checking follow-back status for {len(to_check)} accounts you already follow...")
     n_labeled, n_back = _label_and_log(client, cfg, self_profile, to_check)
 
@@ -632,7 +715,7 @@ def learn() -> None:
 
     from .storage import last_suggestions
     recent = {r["username"]: r for r in last_suggestions(1000)}
-    self_profile = build_self_profile(client, cfg.github_username, _load_cv_text(), cfg.keywords)
+    self_profile = _self_profile(client, cfg)
 
     n_labeled, n_back = _label_and_log(client, cfg, self_profile, newly_followed, recent)
 
@@ -646,11 +729,141 @@ def learn() -> None:
 # --------------------------------------------------------------------------- pipeline (for the weekly schedule)
 @main.command()
 def pipeline() -> None:
-    """Run `learn` then `run` -- intended for the weekly scheduled task."""
+    """Sync pull, `learn`, `run`, `contribute`, sync push -- intended for the weekly scheduled task."""
+    from . import sync as sync_mod
+    cfg = load_config()
+    syncing = bool(cfg.sync_repo and cfg.sync_auto and sync_mod.is_initialized())
     ctx = click.get_current_context()
+    if syncing:
+        try:
+            msg = sync_mod.pull()
+            click.echo(msg)
+            if msg.startswith("Pulled"):
+                _retrain_and_report(load_config())
+        except sync_mod.SyncError as exc:
+            click.echo(f"[mygeeky] sync pull failed, continuing with local data: {exc}", err=True)
     ctx.invoke(learn)
     click.echo("")
     ctx.invoke(run, as_json=False)
+    click.echo("")
+    ctx.invoke(contribute, as_json=False, last=False)
+    if syncing:
+        try:
+            click.echo(sync_mod.push())
+        except sync_mod.SyncError as exc:
+            click.echo(f"[mygeeky] sync push failed (will retry next run): {exc}", err=True)
+
+
+# --------------------------------------------------------------------------- contribute
+def _run_contribute(cfg: MyGeekyConfig) -> list[dict]:
+    from .contribute import suggest_repositories
+    from .storage import log_contributions
+    if not cfg.github_username:
+        raise click.ClickException("Run `mygeeky init` first.")
+    client = _client_for(cfg)
+    self_profile = _self_profile(client, cfg)
+    vocabulary = build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size)
+    results = suggest_repositories(client, cfg, self_profile, vocabulary,
+                                   keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()),
+                                   log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    log_contributions(results)
+    return results
+
+
+def _print_contributions(results: list[dict], as_json: bool) -> None:
+    if as_json:
+        click.echo(json.dumps(results, indent=2))
+        return
+    if not results:
+        click.echo("No repos cleared the filters. Try `mygeeky config set contribute_extra_terms \"term1, term2\"` "
+                   "or widen `contribute_pushed_within_days` / the star range.")
+        return
+    click.echo(f"\n{len(results)} repos you could improve (fork + PR them yourself -- myGeeKy never will):\n")
+    for r in results:
+        lang = f" [{r['language']}]" if r["language"] else ""
+        click.echo(f"  {r['score']:.3f}  {r['full_name']}{lang}  \u2605{r['stars']}")
+        if r["description"]:
+            click.echo(f"         {r['description'][:100]}")
+        if r["reasons"]:
+            click.echo(f"         why: {'; '.join(r['reasons'])}")
+        for issue in r["starter_issues"][:2]:
+            click.echo(f"         \u2192 {issue['title'][:80]}  {issue['url']}")
+        click.echo(f"         {r['repo_url']}")
+    click.echo("\nPick an issue, fork the repo, and send a small focused PR.")
+
+
+@main.command()
+@click.option("--json", "as_json", is_flag=True, help="Print results as JSON (for scripts/AI agents).")
+@click.option("--last", is_flag=True, help="Re-print the last results without querying GitHub.")
+def contribute(as_json: bool, last: bool) -> None:
+    """Suggest repos matching your CV/repos/publications that you could fork,
+    improve, and likely get merged. Never forks or opens PRs for you."""
+    if last:
+        from .storage import last_contributions
+        _print_contributions(last_contributions(), as_json)
+        return
+    _print_contributions(_run_contribute(load_config()), as_json)
+
+
+# --------------------------------------------------------------------------- sync
+@main.group()
+def sync() -> None:
+    """Keep your myGeeKy data in a PRIVATE GitHub repo, to use it from any computer."""
+
+
+def _sync_call(fn, *args) -> str:
+    from . import sync as sync_mod
+    try:
+        return fn(*args)
+    except sync_mod.SyncError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@sync.command("init")
+@click.option("--repo", default=None, help="owner/name of the private repo [default: <you>/mygeeky-data].")
+def sync_init(repo: str | None) -> None:
+    """Create (if needed) the private repo and connect this machine to it."""
+    from . import sync as sync_mod
+    cfg = load_config()
+    if not cfg.github_username and not repo:
+        raise click.ClickException("Run `mygeeky init` first, or pass --repo owner/name.")
+    repo = repo or f"{cfg.github_username}/mygeeky-data"
+    click.echo(f"Syncing with PRIVATE repo {repo} -- it will hold your CV text and history.")
+    click.echo(_sync_call(sync_mod.init, repo))
+    cfg = load_config()  # may have just been replaced by the synced config
+    cfg.sync_repo = repo
+    save_config(cfg)
+    _retrain_quietly()
+    _sync_call(sync_mod.push)
+
+
+def _retrain_quietly() -> None:
+    from .config import MODEL_FILE
+    if not MODEL_FILE.exists() and load_training_examples():
+        _retrain_and_report(load_config())
+
+
+@sync.command("push")
+def sync_push() -> None:
+    """Commit and push this machine's data."""
+    from . import sync as sync_mod
+    click.echo(_sync_call(sync_mod.push))
+
+
+@sync.command("pull")
+def sync_pull() -> None:
+    """Fetch data from your other machines (then retrain the model locally)."""
+    from . import sync as sync_mod
+    msg = _sync_call(sync_mod.pull)
+    click.echo(msg)
+    if msg.startswith("Pulled"):
+        _retrain_and_report(load_config())
+
+
+@sync.command("status")
+def sync_status() -> None:
+    from . import sync as sync_mod
+    click.echo(sync_mod.status())
 
 
 # --------------------------------------------------------------------------- schedule

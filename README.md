@@ -93,6 +93,71 @@ happens — myGeeKy has no follow/unfollow code anywhere in the project; see
      reporting cross-validated AUC so you can see how trustworthy it is,
      and excluding mass-follow outliers from training.
 
+## Repos you could improve (`mygeeky contribute`)
+
+Beyond people, myGeeKy suggests **repositories you could fork, improve,
+and realistically get merged**, matched to your CV, repos, and
+publications:
+
+```bash
+mygeeky contribute          # search + rank (a few minutes; GitHub's search API is rate-limited)
+mygeeky contribute --last   # re-print the last results
+mygeeky contribute --json   # for scripts / AI agents
+```
+
+1. Your profile is turned into a handful of search terms: your
+   publications' OpenAlex keywords, topics used across your repos, and the
+   CV vocabulary. Explicit `topics` / `contribute_extra_terms` always come first.
+2. GitHub is searched for **active, non-archived, non-fork** repos matching
+   those terms that have open `good first issue` / `help wanted` issues.
+3. Each repo is ranked on fit (content similarity, a language you use,
+   recency), then the top few get the check that actually predicts a merge:
+   **of its recently closed PRs from outside contributors, how many did the
+   maintainers merge?** Bot PRs and insiders' own PRs don't count.
+4. Each suggestion lists its unassigned, recent starter issues and a
+   plain-language "why".
+
+As with people, this only ever *suggests*: there is no fork, PR, or comment
+code anywhere. You open the repo, fork it, and send the PR yourself.
+
+## Your profile: CV + GitHub + ORCID/OpenAlex
+
+```bash
+mygeeky profile refresh --cv ~/cv.pdf --orcid 0000-0002-1825-0097   # both remembered
+mygeeky profile refresh     # after updating your CV: re-extract the PDF, re-fetch publications
+mygeeky profile show        # what myGeeKy knows about you (no network)
+```
+
+- **CV**: PDF/txt/md, converted to text (`pip install "mygeeky[pdf]"` for PDF).
+- **ORCID** (public API) and **OpenAlex** (looked up by your ORCID): your
+  publication titles, abstracts, keywords and research topics. They're free and
+  need no key. They feed both people matching and repo suggestions.
+- **Google Scholar is deliberately not used**: it has no API and blocks
+  automated access. OpenAlex indexes the same publications.
+
+## Use it from any computer (`mygeeky sync`)
+
+Your myGeeKy data can live in a **private** GitHub repo, so the model keeps
+learning no matter which machine you run it on:
+
+```bash
+mygeeky sync init                      # creates <you>/mygeeky-data (private) and pushes
+mygeeky sync init --repo you/other     # or use/choose another private repo
+mygeeky sync pull | push | status
+```
+
+On a new computer: `pip install mygeeky`, then `gh auth login` and
+`mygeeky sync init` again. It pulls your config, CV text, publications,
+history and training data. `mygeeky pipeline` (the weekly job) then does
+**pull → learn → run → contribute → push** automatically.
+
+- It refuses to sync to a public repo.
+- Never synced: any token, caches, logs, and the pickled model. Loading a
+  pickle that came over the network could run code, so the model is
+  retrained locally from the synced training data instead.
+- `.jsonl` logs use git's `union` merge, so two machines in the same week merge cleanly.
+- Git uses your own `gh`/git credentials. myGeeKy's API client stays read-only.
+
 ## Install
 
 ```bash
@@ -130,7 +195,10 @@ mygeeky run --json          # same, as JSON (for scripts / AI agents)
 mygeeky suggestions         # re-print the last run's results without re-querying GitHub
 mygeeky bootstrap           # seed the model from accounts you already follow (run once, early)
 mygeeky learn               # check who you followed since last time, learn from who followed back
-mygeeky pipeline            # learn, then run — this is what the weekly schedule calls
+mygeeky contribute          # repos you could fork, improve, and get merged
+mygeeky profile refresh     # re-read your CV + publications (ORCID/OpenAlex)
+mygeeky sync push|pull      # keep your data in your private GitHub repo
+mygeeky pipeline            # sync pull, learn, run, contribute, sync push — the weekly job
 mygeeky gui                 # launch the live glass panel (needs `pip install "mygeeky[gui]"`)
 ```
 
@@ -255,6 +323,12 @@ mygeeky config reset
 | `similarity_threshold` | minimum blended score to be suggested | `0.08` |
 | `content_similarity_weight` / `follow_back_ratio_weight` / `activity_weight` | heuristic scoring weights | `0.5` / `0.3` / `0.2` |
 | `rate_limit_sleep_seconds` / `search_pause_seconds` | pacing for normal vs. GitHub's tighter search-API rate limit | `1.5` / `2.1` |
+| `cv_path` / `orcid_id` | CV file and ORCID iD used by `mygeeky profile refresh` | `""` / `""` |
+| `contribute_extra_terms` | terms always searched by `contribute`, e.g. `gwas, snakemake` | `[]` |
+| `contribute_min_stars` / `contribute_max_stars` | star range for repo suggestions | `10` / `20000` |
+| `contribute_pushed_within_days` | a suggested repo must have been pushed to this recently | `90` |
+| `contribute_queries` / `contribute_check_top_n` / `contribute_max_returned` | search terms used / repos given the maintainer check / results shown | `10` / `25` / `10` |
+| `sync_repo` / `sync_auto` | private data repo (set by `sync init`) / whether `pipeline` pulls+pushes | `""` / `true` |
 | `min_training_samples` | labeled examples needed before the ML model kicks in | `8` |
 | `ml_blend_weight` | how much the learned model influences the final score once trained | `0.5` |
 | `training_mass_follow_outlier` | exclude training examples from accounts following more than this | `3000` |
@@ -281,6 +355,11 @@ mygeeky config reset
   `mygeeky auth status` shows *where* it's coming from — never the value.
   An environment variable (`MYGEEKY_GITHUB_TOKEN`) is supported as an
   explicit, opt-in fallback for CI/agent contexts.
+- **Token fallback to the GitHub CLI.** If no keyring token or env var is
+  set, myGeeKy uses `gh auth token` when `gh` is logged in. This is still only
+  used for GET requests.
+- **Sync writes only to your own private data repo**, through `git`
+  with your own credentials, never through myGeeKy's API client.
 - **Minimal token scope.** myGeeKy only reads public profile/repo/follower
   data — create your token with **no scopes at all**, or a fine-grained
   token limited to read-only public repositories/followers. Never grant it

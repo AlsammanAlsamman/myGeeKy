@@ -117,6 +117,43 @@ class GitHubClient:
         resp = self._get(f"/users/{source_username}/following/{target_username}")
         return resp.status_code == 204
 
+    def search_repositories(self, query: str, max_pages: int = 1, per_page: int = 30,
+                             sort: str = "updated") -> list[dict[str, Any]]:
+        repos: list[dict[str, Any]] = []
+        for page in range(1, max_pages + 1):
+            resp = self._get(
+                "/search/repositories",
+                params={"q": query, "per_page": per_page, "page": page, "sort": sort},
+                is_search=True,
+            )
+            if resp.status_code != 200:
+                break
+            items = resp.json().get("items", [])
+            repos.extend(items)
+            if len(items) < per_page:
+                break
+        return repos
+
+    def list_open_issues(self, owner_repo: str, label: str, per_page: int = 10) -> list[dict[str, Any]]:
+        """Open issues (not PRs) carrying `label`, newest first."""
+        resp = self._get(f"/repos/{owner_repo}/issues",
+                         params={"state": "open", "labels": label, "per_page": per_page,
+                                 "sort": "created", "direction": "desc"})
+        if resp.status_code != 200:
+            return []
+        return [i for i in resp.json() if "pull_request" not in i]
+
+    def list_closed_pulls(self, owner_repo: str, per_page: int = 30) -> list[dict[str, Any]]:
+        """Most recently updated closed PRs -- each carries `merged_at` and the
+        author's `author_association`, enough to tell whether maintainers
+        merge outside contributors' work."""
+        resp = self._get(f"/repos/{owner_repo}/pulls",
+                         params={"state": "closed", "per_page": per_page,
+                                 "sort": "updated", "direction": "desc"})
+        if resp.status_code != 200:
+            return []
+        return resp.json()
+
     def search_users(self, query: str, max_pages: int = 3, per_page: int = 30) -> Iterator[dict[str, Any]]:
         for page in range(1, max_pages + 1):
             resp = self._get(
