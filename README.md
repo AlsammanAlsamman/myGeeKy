@@ -1,32 +1,126 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_256.png" width="120" alt="myGeeKy icon: two geeks hugging inside a heart">
+  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_256.png" width="128" alt="myGeeKy icon: two geeks hugging inside a heart">
 </p>
 
 <h1 align="center">myGeeKy</h1>
-<p align="center">Find fellow GitHub geeks who match your CV and repos — and are likely to follow you back.</p>
 
 <p align="center">
-  <a href="https://pypi.org/project/mygeeky/"><img alt="PyPI" src="https://img.shields.io/pypi/v/mygeeky.svg"></a>
-  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg">
-  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
-  <img alt="Platform: Windows | Linux" src="https://img.shields.io/badge/platform-windows%20%7C%20linux-lightgrey.svg">
-  <img alt="No auto-follow, ever" src="https://img.shields.io/badge/auto--follow-never-critical.svg">
+  <b>Find GitHub people who share your research — and will actually follow you back.</b><br>
+  <sub>Your CV, your repos, your ORCID &amp; Google Scholar papers → people and projects worth your time.</sub>
 </p>
 
-**myGeeKy never follows anyone for you.** There's no follow/unfollow code
-in this project at all (see [Safety](#safety)) — every suggestion is ranked,
-explained, and only ever a suggestion. You look, you click, you follow
-people yourself, by hand, on github.com.
+<p align="center">
+  <a href="https://pypi.org/project/mygeeky/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/mygeeky?color=7fd8ff&label=pypi"></a>
+  <a href="https://pypi.org/project/mygeeky/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/mygeeky?color=7a5cff"></a>
+  <a href="https://pepy.tech/projects/mygeeky"><img alt="Downloads" src="https://img.shields.io/pepy/dt/mygeeky?color=ff6fd8&label=downloads"></a>
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-35e0c1.svg">
+  <img alt="Platform: Windows | Linux" src="https://img.shields.io/badge/platform-windows%20%7C%20linux-lightgrey.svg">
+  <img alt="Auto-follow: never" src="https://img.shields.io/badge/auto--follow-never-critical.svg">
+</p>
+
+<p align="center">
+  <a href="#-quick-start">Quick start</a> ·
+  <a href="#-the-live-panel">Live panel</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#safety">Safety</a> ·
+  <a href="#all-parameters-adjustable-or-leave-at-the-defaults">All settings</a>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/hero.png" width="900" alt="The myGeeKy panel's Live, Suggestions and Repos tabs, side by side">
+</p>
+<p align="center"><sub><em>Real screenshots, real data: the Live feed, people likely to follow back, and repos you could contribute to.</em></sub></p>
 
 > **Why this exists:** I don't have Facebook. I only want to follow people
 > I can genuinely learn from — and who might learn something from me too.
 > myGeeKy is a GitHub-friendly alternative for people like me: we want real
 > friends, and we're wary of fake ones.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshot.png" width="380" alt="myGeeKy's live panel, docked and translucent, showing the Live tab's scrolling activity feed">
-</p>
-<p align="center"><em>The actual panel — translucent, docked to the screen edge, showing real activity from people you follow.</em></p>
+## ✨ Highlights
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**🧬 Knows your field, not just your language**<br>
+Builds your profile from your CV, your GitHub repos, and — if you give
+them — your ORCID/OpenAlex and Google Scholar publications. Finds people
+through the repos *in your field* they own and contribute to.
+
+</td>
+<td width="50%" valign="top">
+
+**🔁 Ranks by real follow-back odds**<br>
+Skips famous accounts that follow almost nobody, mass-followers,
+organizations and dormant profiles — then learns from who actually
+followed you back, and gets better every week.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**🛠️ Repos you could improve**<br>
+Active projects matching your work, with open starter issues, ranked by
+how often their maintainers merge outside contributors' PRs.
+
+</td>
+<td valign="top">
+
+**🪟 A glass panel on your screen edge**<br>
+Live feed of what your friends are doing, your suggestions and repos —
+always on top, three themes, folds down to a tiny icon.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**☁️ Your data, on every computer**<br>
+Optional sync through a **private** GitHub repo you own. No server, no
+account, no telemetry.
+
+</td>
+<td valign="top">
+
+**🛡️ Suggest-only, by design**<br>
+There is **no follow/unfollow code in this project at all**. You look,
+you click, you follow people yourself, by hand, on github.com.
+
+</td>
+</tr>
+</table>
+
+## 🚀 Quick start
+
+```bash
+pip install "mygeeky[gui,pdf]"
+mygeeky init          # GitHub username (required); CV, ORCID, Google Scholar (optional)
+mygeeky run           # who to follow
+mygeeky contribute    # which repos to improve
+mygeeky gui           # the live panel
+```
+
+`init` asks a few questions — only your GitHub username is required, every
+other answer can be skipped and changed later. Details in
+[Quick start](#quick-start) below.
+
+## 🪟 The live panel
+
+<table>
+<tr>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/live.png" width="240" alt="Live tab"><br><sub><b>Live</b> — friends' activity + top suggestions, scrolling</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/suggestions.png" width="240" alt="Suggestions tab"><br><sub><b>Suggestions</b> — click someone to open them; they leave the list</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/repos.png" width="240" alt="Repos tab"><br><sub><b>Repos</b> — projects in your field with starter issues</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="240" alt="Activity tab"><br><sub><b>Activity</b> — what people you follow are doing</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — how well it predicts follow-backs, over time</sub></td>
+<td align="center" valign="middle"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_128.png" width="58" alt="Folded icon"><br><sub><b>Folded</b> — just the icon on the screen edge, half-transparent until you hover it</sub></td>
+</tr>
+</table>
+
+More in [Live glass panel](#live-glass-panel-optional-gui) below.
 
 ## How it works
 
@@ -125,7 +219,7 @@ mygeeky contribute --json   # for scripts / AI agents
 As with people, this only ever *suggests*: there is no fork, PR, or comment
 code anywhere. You open the repo, fork it, and send the PR yourself.
 
-## Your profile: CV + GitHub + ORCID/OpenAlex
+## Your profile: CV + GitHub + ORCID/OpenAlex + Google Scholar
 
 ```bash
 mygeeky profile refresh --cv ~/cv.pdf --orcid 0000-0002-1825-0097 \

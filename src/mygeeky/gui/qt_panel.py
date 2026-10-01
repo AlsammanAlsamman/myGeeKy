@@ -186,6 +186,7 @@ def _clear_layout(layout) -> None:
         item = layout.takeAt(0)
         widget = item.widget()
         if widget is not None:
+            widget.hide()  # deleteLater only runs on a later event-loop turn
             widget.deleteLater()
 
 
@@ -386,6 +387,19 @@ class ActivityItem(QFrame):
         self.mousePressEvent = lambda ev: on_open(profile_url)  # noqa: ARG005
 
 
+class _ClickableLabel(QLabel):
+    """A word-wrapping label that acts like a link button."""
+
+    def __init__(self, text: str, on_click: Callable[[], Any]) -> None:
+        super().__init__(text)
+        self._on_click = on_click
+        self.setWordWrap(True)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        self._on_click()
+
+
 class RepoCard(QFrame):
     """One `mygeeky contribute` result: repo, why it fits, and its best
     starter issues. Every click only opens a GitHub page -- forking and the
@@ -407,6 +421,8 @@ class RepoCard(QFrame):
         title_row = QHBoxLayout()
         name_label = QLabel(item.get("full_name", ""))
         name_label.setStyleSheet("font-weight:600; font-size:12.5px; background:transparent;")
+        name_label.setToolTip(item.get("full_name", ""))
+        name_label.setMinimumWidth(1)  # a long owner/name is clipped instead of widening the card
         score = item.get("score")
         score_label = QLabel(f"{score:.2f}" if isinstance(score, (int, float)) else "")
         score_label.setStyleSheet(f"color:{theme['muted']}; font-size:12px; background:transparent;")
@@ -441,12 +457,18 @@ class RepoCard(QFrame):
         )
         for issue in (item.get("starter_issues") or [])[:2]:
             title = issue.get("title") or ""
-            issue_btn = QPushButton("→ " + (title[:57] + "…" if len(title) > 60 else title))
-            issue_btn.setToolTip(title)
-            issue_btn.setCursor(Qt.PointingHandCursor)
-            issue_btn.setStyleSheet(btn_style)
-            issue_btn.clicked.connect(lambda checked=False, u=issue.get("url", ""): on_open(u))
-            outer.addWidget(issue_btn)
+            # a wrapping label, not a QPushButton: button text never wraps, so a
+            # long issue title would force the card wider than the panel
+            issue_row = _ClickableLabel("→ " + (title[:97] + "…" if len(title) > 100 else title),
+                                        lambda u=issue.get("url", ""): on_open(u))
+            issue_row.setObjectName("issue")
+            issue_row.setToolTip(title)
+            issue_row.setStyleSheet(
+                f"#issue {{ background:{theme['btn_bg']}; color:{theme['text']}; border-radius:7px; "
+                f"padding:5px 8px; font-size:11px; }}"
+                f"#issue:hover {{ background:{theme['btn_hover']}; }}"
+            )
+            outer.addWidget(issue_row)
 
         repo_url = item.get("repo_url", "")
         actions = QHBoxLayout()
@@ -569,6 +591,7 @@ class SpotlightTicker(QWidget):
         """(Re)populate every visible slot from scratch -- first load,
         theme change, and any resize (the slot count depends on height)."""
         for card in self._cards:
+            card.hide()  # deleteLater only runs on a later event-loop turn
             card.deleteLater()
         self._cards = []
         if not self._items:
@@ -1138,7 +1161,14 @@ class MyGeekyPanel(QWidget):
     def _apply_theme(self) -> None:
         theme = THEMES[self._theme_name()]
         self.panel_frame.set_style(theme["bg"], theme["border"], radius=22.0)
-        self.panel_frame.setStyleSheet(f"QLabel {{ color:{theme['text']}; }}")
+        self.panel_frame.setStyleSheet(
+            f"QLabel {{ color:{theme['text']}; }}"
+            f"QScrollBar:vertical {{ background:transparent; width:6px; margin:2px 0; }}"
+            f"QScrollBar::handle:vertical {{ background:{theme['btn_hover']}; border-radius:3px; min-height:24px; }}"
+            f"QScrollBar::handle:vertical:hover {{ background:{theme['accent']}; }}"
+            f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height:0; }}"
+            f"QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background:transparent; }}"
+        )
         self.folded_widget.set_style(theme["bg"], theme["border"], theme["text"])
         folded_font = self.folded_widget.font()
         folded_font.setBold(True)

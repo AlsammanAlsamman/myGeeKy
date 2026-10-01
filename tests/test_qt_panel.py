@@ -58,10 +58,16 @@ def test_repo_card_buttons_only_open_github_pages(qapp):
     from mygeeky.gui.app import THEMES
     from mygeeky.gui.qt_panel import RepoCard
 
+    from mygeeky.gui.qt_panel import _ClickableLabel
+
     opened = []
     card = RepoCard(_repo_item(), THEMES["midnight"], lambda u: opened.append(u) or True)
+    issues = card.findChildren(_ClickableLabel)
+    assert len(issues) == 2  # starter issues capped at 2
+    for row in issues:
+        row.mousePressEvent(None)
     buttons = card.findChildren(QPushButton)
-    assert len(buttons) == 4  # 2 starter issues (capped) + Fork + Open
+    assert [b.text() for b in buttons] == ["Fork →", "Open →"]
     for b in buttons:
         b.click()
     assert opened == [
@@ -70,6 +76,16 @@ def test_repo_card_buttons_only_open_github_pages(qapp):
         "https://github.com/owner/tool/fork",
         "https://github.com/owner/tool",
     ]
+
+
+def test_repo_card_with_long_names_fits_a_narrow_panel(qapp):
+    from mygeeky.gui.app import THEMES
+    from mygeeky.gui.qt_panel import RepoCard
+
+    item = dict(_repo_item(), full_name="Some-Very-Long-Organisation-Name-Team/an-equally-long-repository-name",
+                starter_issues=[{"title": "A really long issue title " * 6, "url": "u"}])
+    card = RepoCard(item, THEMES["midnight"], lambda u: True)
+    assert card.minimumSizeHint().width() <= 340
 
 
 def test_panel_has_repos_tab_and_renders_logged_results(qapp, monkeypatch):
