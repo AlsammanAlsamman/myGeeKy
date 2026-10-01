@@ -26,9 +26,23 @@ USERS = {
                    "followers": 40, "following": 30, "public_repos": 4, "type": "User"},
     "org_account": {"login": "org_account", "bio": "population genetics org", "company": "",
                      "followers": 500, "following": 1, "public_repos": 40, "type": "Organization"},
+    # a famous account: perfect topic match, but follows 1 person against 10k followers
+    "celebrity": {"login": "celebrity", "bio": "population genetics GWAS educator", "company": "",
+                  "followers": 10000, "following": 1, "public_repos": 30, "type": "User"},
+    # only reachable through a repo in your field, never through the plain user search
+    "fieldmate": {"login": "fieldmate", "bio": "GWAS fine-mapping and population genetics", "company": "",
+                  "followers": 30, "following": 40, "public_repos": 8, "type": "User"},
 }
 
+def _active_repo(owner: str, name: str) -> dict:
+    return {"name": name, "description": "GWAS population genetics", "language": "Python",
+            "topics": ["gwas"], "fork": False, "pushed_at": iso(3), "created_at": iso(400),
+            "full_name": f"{owner}/{name}", "stargazers_count": 7}
+
+
 REPOS = {
+    "celebrity": [_active_repo("celebrity", "popgen-course")],
+    "fieldmate": [_active_repo("fieldmate", "finemap")],
     "matchy": [{"name": "gwastool", "description": "GWAS pipeline", "language": "Python",
                 "topics": ["gwas"], "fork": False, "pushed_at": iso(10), "created_at": iso(400),
                 "full_name": "matchy/gwastool", "stargazers_count": 5}],
@@ -67,8 +81,15 @@ class FakeClient:
         return []
 
     def search_users(self, query, max_pages=3, per_page=30):
-        for login in ["matchy", "bot_massfollow", "dormant", "stale_repo", "org_account"]:
+        for login in ["matchy", "bot_massfollow", "dormant", "stale_repo", "org_account", "celebrity"]:
             yield {"login": login}
+
+    def search_repositories(self, query, max_pages=1, per_page=30, sort="updated"):
+        return [{"full_name": "lab/gwas-suite", "stargazers_count": 40,
+                 "owner": {"login": "lab", "type": "Organization"}}]
+
+    def list_contributors(self, owner_repo, per_page=30):
+        return [{"login": "fieldmate", "type": "User"}, {"login": "dependabot[bot]", "type": "Bot"}]
 
     def is_following(self, source, target):
         return False
@@ -163,3 +184,24 @@ def test_bootstrap_labels_and_excludes_mass_follow_outlier(monkeypatch, tmp_path
     assert result.exit_code == 0, result.output
     assert "4 follow you back" in result.output
     assert "excluded 1 mass-follow outlier" in result.output
+
+
+def test_famous_accounts_kept_out_of_followback_but_not_domain(monkeypatch):
+    monkeypatch.setattr(mg_cli, "_client_for", lambda cfg: FakeClient())
+    results = mg_cli._run_suggestions(_cfg())
+    assert "celebrity" not in [r["username"] for r in results["followback"]]
+    assert "celebrity" in [r["username"] for r in results["domain_highlights"]]
+
+
+def test_people_from_domain_repos_are_found_and_prioritized(monkeypatch):
+    monkeypatch.setattr(mg_cli, "_client_for", lambda cfg: FakeClient())
+    cfg = _cfg()
+    cfg.topics = ["gwas"]
+    pool = mg_cli._gather_candidates(FakeClient(), cfg, exclude=set(), following=set(),
+                                     domain_terms=["gwas"])
+    assert pool["fieldmate"] == ["domain_repo_contributor:lab/gwas-suite"]
+    assert "dependabot[bot]" not in pool and "lab" not in pool  # bots and orgs skipped
+    assert next(iter(pool)) == "fieldmate"  # targeted source outranks the plain search
+
+    results = mg_cli._run_suggestions(cfg)
+    assert "fieldmate" in [r["username"] for r in results["followback"]]

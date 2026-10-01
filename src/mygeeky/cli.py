@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import click
 
@@ -72,6 +72,12 @@ def main() -> None:
 
     myGeeKy only ever suggests people. It never follows anyone for you.
     """
+    # On Windows, piped/redirected output (e.g. the scheduled weekly task's
+    # log) falls back to cp1252, which can't encode the ★/→ used in output.
+    import sys
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 # --------------------------------------------------------------------------- init
@@ -116,8 +122,16 @@ def init() -> None:
     cfg.orcid_id = scholar.normalize_orcid(orcid)
     if orcid.strip() and not cfg.orcid_id:
         click.echo("That doesn't look like an ORCID iD -- skipped (set later with `mygeeky config set orcid_id ...`).")
-    elif cfg.orcid_id:
-        _refresh_scholar(cfg.orcid_id)
+
+    click.echo("\nYour Google Scholar profile adds your research interests and paper titles.\n"
+               "Paste its URL (or just the user id). Blank to skip.")
+    gs = click.prompt("Google Scholar profile", default=cfg.scholar_id or "", show_default=bool(cfg.scholar_id))
+    cfg.scholar_id = scholar.normalize_scholar_id(gs)
+    if gs.strip() and not cfg.scholar_id:
+        click.echo("That doesn't look like a Scholar profile URL -- skipped "
+                   "(set later with `mygeeky profile refresh --scholar URL`).")
+    if cfg.orcid_id or cfg.scholar_id:
+        _refresh_scholar(cfg)
 
     click.echo("\nWhat kind of geeks are you looking for? (comma-separated, blank to skip any)")
     langs = click.prompt("Programming languages", default=", ".join(cfg.languages) or "", show_default=False)
@@ -189,25 +203,36 @@ def _import_cv(cv_path: str) -> str:
     return text
 
 
-def _refresh_scholar(orcid: str) -> None:
-    click.echo(f"Fetching publications for ORCID {orcid} (ORCID + OpenAlex)...")
-    prof = scholar.refresh_scholar_profile(orcid)
-    oa = prof["openalex"]
-    click.echo(f"  ORCID: {len(prof['orcid_record']['titles'])} works, "
-               f"{len(prof['orcid_record']['keywords'])} keywords")
-    click.echo(f"  OpenAlex: {len(oa['works'])} works fetched, topics: {', '.join(oa['topics'][:5]) or '-'}")
+def _refresh_scholar(cfg: MyGeekyConfig) -> None:
+    click.echo("Fetching your publications...")
+    prof = scholar.refresh_scholar_profile(cfg.orcid_id, cfg.scholar_id)
+    if cfg.orcid_id:
+        oa = prof["openalex"]
+        click.echo(f"  ORCID: {len(prof['orcid_record']['titles'])} works, "
+                   f"{len(prof['orcid_record']['keywords'])} keywords")
+        click.echo(f"  OpenAlex: {len(oa['works'])} works fetched, topics: {', '.join(oa['topics'][:5]) or '-'}")
+    if cfg.scholar_id:
+        gs = prof.get("google_scholar")
+        if prof.get("google_scholar_blocked"):
+            click.echo("  Google Scholar refused the request (it limits automated access) -- "
+                       + ("kept the copy from last time." if gs else "try again later."))
+        if gs:
+            click.echo(f"  Google Scholar: {len(gs['titles'])} papers, "
+                       f"interests: {', '.join(gs['interests']) or '-'}")
 
 
 # --------------------------------------------------------------------------- profile
 @main.group()
 def profile() -> None:
-    """Your profile sources: CV, ORCID, OpenAlex publications."""
+    """Your profile sources: CV, ORCID/OpenAlex and Google Scholar publications."""
 
 
 @profile.command("refresh")
 @click.option("--cv", "cv_path", default=None, help="CV file (.pdf/.txt/.md); remembered for next time.")
 @click.option("--orcid", default=None, help="ORCID iD or orcid.org URL; remembered for next time.")
-def profile_refresh(cv_path: str | None, orcid: str | None) -> None:
+@click.option("--scholar", "scholar_url", default=None,
+              help="Google Scholar profile URL or user id; remembered for next time.")
+def profile_refresh(cv_path: str | None, orcid: str | None, scholar_url: str | None) -> None:
     """Re-read your CV and re-fetch your publications. Run after updating your CV."""
     cfg = load_config()
     if cv_path:
@@ -216,15 +241,21 @@ def profile_refresh(cv_path: str | None, orcid: str | None) -> None:
         cfg.orcid_id = scholar.normalize_orcid(orcid)
         if orcid and not cfg.orcid_id:
             raise click.ClickException(f"'{orcid}' is not a valid ORCID iD.")
+    if scholar_url is not None:
+        cfg.scholar_id = scholar.normalize_scholar_id(scholar_url)
+        if scholar_url and not cfg.scholar_id:
+            raise click.ClickException(f"'{scholar_url}' is not a Google Scholar profile URL or user id.")
     save_config(cfg)
     if cfg.cv_path:
         _import_cv(cfg.cv_path)
     else:
         click.echo("No CV path set (use --cv).")
-    if cfg.orcid_id:
-        _refresh_scholar(cfg.orcid_id)
-    else:
+    if cfg.orcid_id or cfg.scholar_id:
+        _refresh_scholar(cfg)
+    if not cfg.orcid_id:
         click.echo("No ORCID iD set (use --orcid).")
+    if not cfg.scholar_id:
+        click.echo("No Google Scholar profile set (use --scholar).")
 
 
 @profile.command("show")
@@ -236,10 +267,12 @@ def profile_show() -> None:
     click.echo(f"GitHub:   {cfg.github_username or '(not set)'}")
     click.echo(f"CV:       {cfg.cv_path or '(no path)'} -- {len(cv)} chars of text stored")
     click.echo(f"ORCID:    {cfg.orcid_id or '(not set)'}")
+    click.echo(f"Scholar:  {cfg.scholar_id or '(not set)'}")
     if sp:
         oa = sp.get("openalex") or {}
         click.echo(f"Publications: {len(oa.get('works') or [])} from OpenAlex, "
-                   f"{len((sp.get('orcid_record') or {}).get('titles') or [])} on ORCID "
+                   f"{len((sp.get('orcid_record') or {}).get('titles') or [])} on ORCID, "
+                   f"{len((sp.get('google_scholar') or {}).get('titles') or [])} on Google Scholar "
                    f"(fetched {sp.get('fetched_at', '?')[:10]})")
         click.echo(f"Research topics: {', '.join(scholar.scholar_topics(sp)) or '-'}")
     corpus = "\n".join([cv, scholar.scholar_corpus(sp), " ".join(cfg.keywords)])
@@ -344,12 +377,23 @@ def _self_profile(client: GitHubClient, cfg: MyGeekyConfig):
                               scholar_text=scholar.scholar_corpus(scholar.load_scholar_profile()))
 
 
+def _domain_repo_queries(cfg: MyGeekyConfig, terms: list[str]) -> list[str]:
+    since = (datetime.now(timezone.utc) - timedelta(days=cfg.contribute_pushed_within_days)).strftime("%Y-%m-%d")
+    queries = []
+    for term in terms:
+        quoted = f'"{term}"' if " " in term else term
+        queries.append(f"{quoted} in:name,description,topics fork:false archived:false "
+                       f"stars:>=2 pushed:>{since}")
+    return queries
+
+
 def _gather_candidates(client: GitHubClient, cfg: MyGeekyConfig, exclude: set[str],
-                        following: set[str]) -> dict[str, list[str]]:
+                        following: set[str], domain_terms: list[str] | None = None) -> dict[str, list[str]]:
     """Collect candidates from every configured source and tag each with
     where it came from. Returns {username: [source, ...]}, capped to
     `max_candidates_per_run` and prioritized by how many independent
-    sources corroborate each candidate."""
+    sources corroborate each candidate, then by whether any source is more
+    targeted than the plain user search."""
     pool: dict[str, set[str]] = defaultdict(set)
 
     def add(login: str, source: str) -> None:
@@ -406,7 +450,30 @@ def _gather_candidates(client: GitHubClient, cfg: MyGeekyConfig, exclude: set[st
             except Exception:
                 pass
 
-    ranked = sorted(pool.items(), key=lambda kv: len(kv[1]), reverse=True)
+    # 6. People behind active repos in your own field (owners + top contributors)
+    if cfg.include_domain_repo_people and domain_terms:
+        repos: dict[str, dict] = {}
+        for q in _domain_repo_queries(cfg, domain_terms[: cfg.domain_repo_terms]):
+            for r in client.search_repositories(q, max_pages=1, per_page=10):
+                repos.setdefault(r.get("full_name") or "", r)
+        repos.pop("", None)
+        top = sorted(repos.values(), key=lambda r: r.get("stargazers_count", 0), reverse=True)
+        for r in top[: cfg.domain_repo_count]:
+            full = r["full_name"]
+            owner = r.get("owner") or {}
+            if owner.get("type") == "User":
+                add(owner.get("login"), f"domain_repo_owner:{full}")
+            try:
+                for c in client.list_contributors(full, per_page=10):
+                    if c.get("type") == "User":
+                        add(c.get("login"), f"domain_repo_contributor:{full}")
+            except Exception:
+                pass
+
+    def priority(kv: tuple[str, set[str]]) -> tuple[int, bool]:
+        return len(kv[1]), any(not s.startswith("search:") for s in kv[1])
+
+    ranked = sorted(pool.items(), key=priority, reverse=True)
     return {login: sorted(sources) for login, sources in ranked[: cfg.max_candidates_per_run]}
 
 
@@ -456,6 +523,13 @@ def _apply_activity_qc(client: GitHubClient, cfg: MyGeekyConfig, ranked: list[di
     return kept
 
 
+def _plausible_followback(r: dict, cfg: MyGeekyConfig) -> bool:
+    """Someone following 1 account against 10k followers won't notice you."""
+    if r["followers"] > cfg.followback_max_followers:
+        return False
+    return r["following"] / max(r["followers"], 1) >= cfg.followback_min_ratio
+
+
 def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
     if not cfg.github_username:
         raise click.ClickException("Run `mygeeky init` first.")
@@ -471,7 +545,10 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
     if cfg.exclude_already_following:
         excluded |= {u.lower() for u in following}
 
-    candidates = _gather_candidates(client, cfg, excluded, following)
+    from .contribute import search_terms
+    domain_terms = search_terms(cfg, self_profile, vocabulary,
+                                keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()))
+    candidates = _gather_candidates(client, cfg, excluded, following, domain_terms)
     model = LearnedModel.load()
 
     ts = _now()
@@ -514,7 +591,8 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
 
     activity_cache: dict[str, bool] = {}
 
-    followback_ranked = sorted((r for r in scored if r["score"] >= cfg.similarity_threshold),
+    followback_ranked = sorted((r for r in scored if r["score"] >= cfg.similarity_threshold
+                                and _plausible_followback(r, cfg)),
                                 key=lambda r: r["score"], reverse=True)
     followback_kept = _apply_activity_qc(client, cfg, followback_ranked, cfg.max_suggestions_returned, activity_cache)
 

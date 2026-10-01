@@ -132,6 +132,7 @@ def sync_env(tmp_path, monkeypatch):
         monkeypatch.setattr(sync, "DATA_DIR", data)
         monkeypatch.setattr(sync, "CONFIG_FILE", conf / "config.json")
         monkeypatch.setattr(sync, "SYNCED_CONFIG_FILE", data / "config.synced.json")
+        monkeypatch.setattr(sync, "MODEL_FILE", data / "model.pkl")
         monkeypatch.setattr(sync, "ensure_dirs", lambda: None)
         return data, conf / "config.json"
 
@@ -162,3 +163,22 @@ def test_sync_round_trip_merges_logs_and_skips_model(sync_env):
     assert sync.pull() == "Pulled updates from GitHub."
     lines = (data_a / "training_data.jsonl").read_text().split()
     assert sorted(lines) == sorted(['{"u":', '"a1"}', '{"u":', '"b1"}', '{"u":', '"a2"}'])
+
+
+def test_joining_existing_data_drops_stale_local_model(sync_env):
+    sync, use_machine = sync_env
+
+    data_a, conf_a = use_machine("a")
+    conf_a.write_text(json.dumps({"github_username": "me"}))
+    (data_a / "training_data.jsonl").write_text('{"u": "a1"}\n')
+    sync.init("me/mygeeky-data")
+
+    # machine b used myGeeKy on its own first, so it has a model trained on other data
+    data_b, conf_b = use_machine("b")
+    conf_b.write_text(json.dumps({"github_username": "me"}))
+    (data_b / "model.pkl").write_bytes(b"trained on b's old data")
+    sync.init("me/mygeeky-data")
+
+    assert not (data_b / "model.pkl").exists()  # so the caller retrains from synced data
+    backups = list(data_b.parent.glob("data.backup-*"))
+    assert len(backups) == 1 and (backups[0] / "model.pkl").exists()

@@ -103,6 +103,13 @@ class GitHubClient:
         be genuinely interested in the subject matter, not just search-matched."""
         return self._list_paginated_logins(f"/repos/{owner_repo}/stargazers", max_pages=max_pages)
 
+    def list_contributors(self, owner_repo: str, per_page: int = 30) -> list[dict[str, Any]]:
+        """Top contributors by commit count (logins + `type`, so bots can be skipped)."""
+        resp = self._get(f"/repos/{owner_repo}/contributors", params={"per_page": per_page})
+        if resp.status_code != 200:
+            return []
+        return resp.json()
+
     def list_received_events(self, username: str, per_page: int = 30) -> list[dict[str, Any]]:
         """Public activity from the accounts `username` follows (GitHub's own
         news-feed data source) -- one cheap call covers everyone you follow,

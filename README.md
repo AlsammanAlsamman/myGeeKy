@@ -54,11 +54,14 @@ happens — myGeeKy has no follow/unfollow code anywhere in the project; see
 
 ## What it does
 
-1. **Understands you** — reads your CV (txt/md/pdf) plus your own GitHub
-   repos (languages, topics, descriptions) to build a profile of what
+1. **Understands you** — reads your CV (txt/md/pdf), your own GitHub
+   repos (languages, topics, descriptions) and, if you give them, your
+   ORCID/OpenAlex and Google Scholar publications to build a profile of what
    you're into, and auto-derives a weighted "domain vocabulary" from that
    corpus (not a hardcoded field-specific wordlist).
 2. **Collects candidates from multiple sources**, not just a plain search:
+   the owners and contributors of active repos matching your research terms
+   (ranked first — a plain language search mostly returns famous accounts),
    GitHub user search (language/location/follower filters), followers of
    well-known accounts in your field (`seed_accounts`), stargazers of
    relevant repos (`seed_repos`), stargazers of your own repos, and
@@ -73,7 +76,9 @@ happens — myGeeKy has no follow/unfollow code anywhere in the project; see
    profile's `updated_at` alone can just reflect a bio edit).
 4. **Scores each surviving candidate** on:
    - content similarity to your CV/repos (TF-IDF + cosine similarity)
-   - how likely they are to follow back (their own following/follower ratio)
+   - how likely they are to follow back (their own following/follower ratio);
+     for the follow-back list, accounts that follow almost nobody relative to
+     their audience, or have more than `followback_max_followers`, are skipped
    - how active their account is
    - once you've used it a while: a learned model (see below)
 5. **Suggests two ranked lists**, not one — printed, or returned as JSON.
@@ -123,7 +128,8 @@ code anywhere. You open the repo, fork it, and send the PR yourself.
 ## Your profile: CV + GitHub + ORCID/OpenAlex
 
 ```bash
-mygeeky profile refresh --cv ~/cv.pdf --orcid 0000-0002-1825-0097   # both remembered
+mygeeky profile refresh --cv ~/cv.pdf --orcid 0000-0002-1825-0097 \
+    --scholar "https://scholar.google.com/citations?user=XXXXXXXXXXXX"   # all remembered
 mygeeky profile refresh     # after updating your CV: re-extract the PDF, re-fetch publications
 mygeeky profile show        # what myGeeKy knows about you (no network)
 ```
@@ -132,8 +138,11 @@ mygeeky profile show        # what myGeeKy knows about you (no network)
 - **ORCID** (public API) and **OpenAlex** (looked up by your ORCID): your
   publication titles, abstracts, keywords and research topics. They're free and
   need no key. They feed both people matching and repo suggestions.
-- **Google Scholar is deliberately not used**: it has no API and blocks
-  automated access. OpenAlex indexes the same publications.
+- **Google Scholar** (optional): your research interests and up to 100 paper
+  titles, read from your own public profile page. Scholar has no API and limits
+  automated access, so this is one request per `profile refresh`, never part of
+  a normal run; if Google refuses it, the last fetched copy is kept and
+  ORCID/OpenAlex still cover your publications.
 
 ## Use it from any computer (`mygeeky sync`)
 
@@ -176,8 +185,9 @@ mygeeky run       # get your first batch of suggestions
 `mygeeky init` asks a short set of questions — all optional, all editable
 later:
 
-- Your GitHub username
+- Your GitHub username (the only required answer)
 - Your CV (a file path, pasted text, or skip)
+- Your ORCID iD and your Google Scholar profile URL (each optional)
 - Languages / topics / keywords / locations you're looking for
 - Optional extra candidate sources: well-known accounts in your field, relevant repos
 - Follower-count range, `max_following`, minimum repo count, how many suggestions per run
@@ -239,6 +249,11 @@ folded tab to expand it; click the arrow to fold it back to a slim strip.
   browser. That's the *only* thing a click ever does — myGeeKy still never
   follows anyone; a "Refresh" button re-runs a real search on demand (it
   never does this on a timer, to avoid hammering GitHub's rate limits).
+- **Repos tab** — the results of `mygeeky contribute`: repos you could
+  improve, each with why it fits you, its top starter issues, and
+  **Fork →** / **Open →** buttons. Those buttons only open the GitHub page;
+  forking and the PR stay yours. It shows the last run's results, and
+  "Refresh" runs a new repo search only when you click it.
 - **Activity tab** — a live feed of what people you follow are actually
   doing (pushes, merged PRs, new repos, releases, stars...), from GitHub's
   own events API. Refreshes automatically, but no more often than
@@ -260,8 +275,17 @@ panel with:
 Both choices are saved (`gui_theme`, `gui_opacity`) and remembered next time
 you open the panel.
 
+Clicking a person in the Suggestions list (or a suggestion in the Live tab)
+opens their profile and removes them from the list — they're added to your
+excluded list, so later runs skip them too. People you follow from the browser
+drop out on the next activity refresh (within `gui_activity_refresh_minutes`).
+
+Folded, the panel shrinks to just the app icon on the screen edge,
+half-transparent until you hover it. It always stays inside the screen it's
+on, including on multi-monitor setups.
+
 Config: `gui_dock_side` (`"right"`/`"left"`), `gui_expanded_width`,
-`gui_folded_width`, `gui_panel_height_fraction`, `gui_activity_refresh_minutes`,
+`gui_folded_width`, `gui_folded_height`, `gui_folded_opacity`, `gui_panel_height_fraction`, `gui_activity_refresh_minutes`,
 `gui_activity_limit`, `gui_theme` (`"midnight"`/`"frosted"`/`"aurora"`),
 `gui_opacity` (`0.0`-`1.0`, note the settings panel's slider shows this
 inverted, as "Transparency") — same `mygeeky config set` mechanism as
@@ -323,7 +347,9 @@ mygeeky config reset
 | `similarity_threshold` | minimum blended score to be suggested | `0.08` |
 | `content_similarity_weight` / `follow_back_ratio_weight` / `activity_weight` | heuristic scoring weights | `0.5` / `0.3` / `0.2` |
 | `rate_limit_sleep_seconds` / `search_pause_seconds` | pacing for normal vs. GitHub's tighter search-API rate limit | `1.5` / `2.1` |
-| `cv_path` / `orcid_id` | CV file and ORCID iD used by `mygeeky profile refresh` | `""` / `""` |
+| `cv_path` / `orcid_id` / `scholar_id` | CV file, ORCID iD and Google Scholar user id used by `mygeeky profile refresh` | `""` / `""` / `""` |
+| `include_domain_repo_people` / `domain_repo_terms` / `domain_repo_count` | candidates = owners/contributors of active repos matching your profile terms | `true` / `6` / `20` |
+| `followback_min_ratio` / `followback_max_followers` | follow-back list only: skip accounts with following/followers below this, or more followers than this | `0.05` / `3000` |
 | `contribute_extra_terms` | terms always searched by `contribute`, e.g. `gwas, snakemake` | `[]` |
 | `contribute_min_stars` / `contribute_max_stars` | star range for repo suggestions | `10` / `20000` |
 | `contribute_pushed_within_days` | a suggested repo must have been pushed to this recently | `90` |
@@ -333,7 +359,8 @@ mygeeky config reset
 | `ml_blend_weight` | how much the learned model influences the final score once trained | `0.5` |
 | `training_mass_follow_outlier` | exclude training examples from accounts following more than this | `3000` |
 | `gui_dock_side` | which screen edge the live panel docks to (`"right"`/`"left"`) | `"right"` |
-| `gui_expanded_width` / `gui_folded_width` | panel width in pixels, expanded vs. folded | `380` / `48` |
+| `gui_expanded_width` / `gui_folded_width` / `gui_folded_height` | panel size in pixels, expanded vs. folded (the folded icon) | `380` / `58` / `58` |
+| `gui_folded_opacity` | folded icon's opacity (fully opaque while hovered) | `0.5` |
 | `gui_panel_height_fraction` | panel height as a fraction of the screen height | `0.25` |
 | `gui_activity_refresh_minutes` | minimum minutes between automatic activity-feed refreshes | `5` |
 | `gui_activity_limit` | how many recent activity events to show | `30` |

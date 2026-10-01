@@ -25,6 +25,8 @@ def _isolate_state(monkeypatch, tmp_path):
     monkeypatch.setattr(storage_module, "ACTIVITY_CACHE_FILE", tmp_path / "activity_cache.json")
     monkeypatch.setattr(storage_module, "FOLLOWING_SNAPSHOT", tmp_path / "following_snapshot.json")
     monkeypatch.setattr(storage_module, "TRAINING_LOG", tmp_path / "training_data.jsonl")
+    monkeypatch.setattr(storage_module, "CONTRIBUTE_LOG", tmp_path / "contribute_history.jsonl")
+    monkeypatch.setattr(storage_module, "EXCLUDED_FILE", tmp_path / "excluded.json")
 
 
 def test_get_status_not_configured():
@@ -106,6 +108,33 @@ def test_get_suggestions_reads_local_log_only(monkeypatch, tmp_path):
     assert [r["username"] for r in data["domain_highlights"]] == ["expert"]
 
 
+def test_get_contributions_returns_latest_run_only(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    cfg = MyGeekyConfig(github_username="me", contribute_max_returned=2)
+
+    from mygeeky.storage import log_contributions
+    log_contributions([{"full_name": "old/repo", "timestamp": "2026-01-01T00:00:00+00:00"}])
+    log_contributions([{"full_name": f"new/r{i}", "timestamp": "2026-02-01T00:00:00+00:00"} for i in range(3)])
+
+    assert [r["full_name"] for r in logic.get_contributions(cfg)] == ["new/r0", "new/r1"]
+
+
+def test_get_contributions_empty_without_log(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    assert logic.get_contributions(MyGeekyConfig(github_username="me")) == []
+
+
+def test_refresh_contributions_without_username_errors_cleanly():
+    assert "error" in logic.refresh_contributions(MyGeekyConfig())
+
+
+def test_refresh_contributions_surfaces_failures_as_error(monkeypatch):
+    def boom(cfg):
+        raise RuntimeError("rate limited")
+    monkeypatch.setattr(logic, "_run_contribute", boom)
+    assert logic.refresh_contributions(MyGeekyConfig(github_username="me")) == {"error": "rate limited"}
+
+
 def test_open_profile_rejects_non_github_urls():
     assert logic.open_profile("https://evil.example.com/phish") is False
     assert logic.open_profile(123) is False  # not even a string -- never reaches Qt
@@ -149,12 +178,36 @@ def test_get_activity_force_bypasses_cache(monkeypatch, tmp_path):
     from mygeeky.storage import save_activity_cache
     save_activity_cache([{"actor": "stale-friend"}], datetime.now(timezone.utc).isoformat())
 
-    monkeypatch.setattr(logic, "_build_client", lambda cfg: object())
+    class FakeClient:
+        def list_following(self, username):
+            return ["NewFollow"]
+
+    monkeypatch.setattr(logic, "_build_client", lambda cfg: FakeClient())
     monkeypatch.setattr(logic, "get_recent_activity", lambda client, username, limit: [{"actor": "fresh-friend"}])
 
     result = logic.get_activity(cfg, force=True)
     assert result["cached"] is False
     assert result["events"] == [{"actor": "fresh-friend"}]
+    from mygeeky.storage import load_activity_cache, load_following_snapshot
+    assert load_activity_cache()["following"] == ["NewFollow"]
+    assert load_following_snapshot() == set()  # `learn`'s baseline is never touched by the panel
+
+
+def test_clicked_and_followed_people_drop_out_of_suggestions(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    cfg = MyGeekyConfig(github_username="me")
+
+    from mygeeky.storage import load_excluded, log_suggestions, save_activity_cache
+    log_suggestions([{"username": u, "score": 0.5, "list": "followback"} for u in ("Alice", "Bob", "Carol")]
+                    + [{"username": "Bob", "domain_fit": 0.9, "list": "domain"}])
+
+    logic.mark_suggestion_seen("Alice")
+    assert "alice" in load_excluded()  # future `mygeeky run`s skip her too
+    save_activity_cache([], datetime.now(timezone.utc).isoformat(), following=["bob"])
+
+    data = logic.get_suggestions(cfg)
+    assert [r["username"] for r in data["followback"]] == ["Carol"]
+    assert data["domain_highlights"] == []
 
 
 def test_panel_geometry_docks_to_configured_side():
@@ -173,3 +226,30 @@ def test_panel_geometry_docks_to_configured_side():
     x2, y2, w2, h2 = logic._panel_geometry(cfg, folded=True, screen_rect=screen_rect)
     assert w2 == 40
     assert x2 > 0  # docked right -> pushed to the right edge
+
+
+def test_panel_geometry_never_spills_onto_neighbouring_screen():
+    pytest.importorskip("PySide6", reason="PySide6 (the 'gui' extra) is not installed")
+    from PySide6.QtCore import QRect
+
+    cfg = MyGeekyConfig(gui_dock_side="right", gui_expanded_width=380)
+    primary = QRect(0, 0, 2560, 1392)            # a second monitor starts at x=2560
+    x, y, w, h = logic._panel_geometry(cfg, folded=False, screen_rect=primary, min_width=461)
+    assert w == 461 and x + w == 2560            # content needed 461px: right edge stays on this screen
+
+    left_monitor = QRect(-1920, -151, 1920, 1080)  # negative origin, e.g. a screen left of the primary
+    x, y, w, h = logic._panel_geometry(cfg, folded=False, screen_rect=left_monitor)
+    assert x + w == 0 and y >= -151
+
+    cfg.gui_dock_side = "left"
+    x, y, w, h = logic._panel_geometry(cfg, folded=False, screen_rect=left_monitor)
+    assert x == -1920                            # not clamped to 0, which is on another screen
+
+
+def test_folded_tab_is_small():
+    pytest.importorskip("PySide6", reason="PySide6 (the 'gui' extra) is not installed")
+    from PySide6.QtCore import QRect
+
+    cfg = MyGeekyConfig(gui_folded_width=48, gui_folded_height=120)
+    x, y, w, h = logic._panel_geometry(cfg, folded=True, screen_rect=QRect(0, 0, 2560, 1392))
+    assert (w, h) == (48, 120) and x == 2560 - 48

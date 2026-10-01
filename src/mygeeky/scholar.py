@@ -1,15 +1,15 @@
-"""Scholarly profile enrichment: ORCID + OpenAlex.
-
-Both are free, open, read-only APIs that need no key:
+"""Scholarly profile enrichment: ORCID + OpenAlex + (optionally) Google Scholar.
 
 - ORCID public API (pub.orcid.org) -- your self-declared keywords and the
   titles of works on your ORCID record.
 - OpenAlex (api.openalex.org) -- looked up by the same ORCID iD; adds
   research topics and publication titles/abstracts.
-
-Google Scholar is deliberately NOT used: it has no public API and actively
-blocks automated access, so scraping it would be both fragile and against
-its terms. OpenAlex indexes the same publications and is built for this.
+- Google Scholar -- your OWN public profile page, read once per
+  `mygeeky profile refresh` (one request: name, research interests, up to
+  100 paper titles). Scholar has no API and blocks heavy automated use, so
+  this is deliberately a single polite fetch of one page, never part of a
+  normal run; if Google answers with a block/CAPTCHA, the previously cached
+  Scholar data is kept and ORCID/OpenAlex carry the profile.
 
 The result is cached as JSON under the data dir (it's part of what
 `mygeeky sync` carries between your machines), so normal runs don't
@@ -18,6 +18,7 @@ re-query either service -- `mygeeky profile refresh` does.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from datetime import datetime, timezone
@@ -30,6 +31,14 @@ from .config import SCHOLAR_PROFILE_FILE, ensure_dirs
 ORCID_API = "https://pub.orcid.org/v3.0"
 OPENALEX_API = "https://api.openalex.org"
 ORCID_RE = re.compile(r"\b(\d{4}-\d{4}-\d{4}-\d{3}[\dX])\b")
+SCHOLAR_URL = "https://scholar.google.com/citations"
+SCHOLAR_ID_RE = re.compile(r"^[\w-]{12}$")
+# Scholar serves a stripped page (or a block) to non-browser user agents.
+SCHOLAR_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 USER_AGENT = "mygeeky (https://github.com/AlsammanAlsamman/myGeeKy)"
 
 
@@ -43,6 +52,41 @@ def find_orcid_in_text(text: str) -> str:
     """The first ORCID-shaped iD in a CV. CVs often list co-authors' iDs
     too, so this is only a suggestion for `init` to confirm, never trusted silently."""
     return normalize_orcid(text)
+
+
+def normalize_scholar_id(value: str) -> str:
+    """Accept a bare Scholar user id or a profile URL; return the id, or "" if invalid."""
+    value = (value or "").strip()
+    m = re.search(r"[?&]user=([\w-]+)", value)
+    candidate = m.group(1) if m else value
+    return candidate if SCHOLAR_ID_RE.match(candidate) else ""
+
+
+def parse_scholar_page(page: str) -> dict[str, Any] | None:
+    """Name, research interests and paper titles from a Scholar profile page;
+    None if it isn't one (a CAPTCHA/consent page, or the layout changed)."""
+    name = re.search(r'id="gsc_prf_in">([^<]+)<', page)
+    if not name:
+        return None
+    interests = re.findall(r'class="gsc_prf_inta[^"]*"[^>]*>([^<]+)<', page)
+    titles = re.findall(r'class="gsc_a_at"[^>]*>([^<]+)<', page)
+    return {"name": html.unescape(name.group(1)),
+            "interests": [html.unescape(i) for i in interests],
+            "titles": [html.unescape(t) for t in titles]}
+
+
+def fetch_google_scholar(scholar_id: str, timeout: int = 30) -> dict[str, Any] | None:
+    try:
+        resp = requests.get(SCHOLAR_URL, params={"user": scholar_id, "hl": "en", "cstart": 0, "pagesize": 100},
+                            headers=SCHOLAR_HEADERS, timeout=timeout)
+    except requests.RequestException:
+        return None
+    if resp.status_code != 200:
+        return None
+    parsed = parse_scholar_page(resp.text)
+    if parsed:
+        parsed["user_id"] = scholar_id
+    return parsed
 
 
 def _get_json(url: str, params: dict[str, Any] | None = None, headers: dict[str, str] | None = None,
@@ -108,17 +152,28 @@ def fetch_openalex(orcid: str, max_works: int = 100) -> dict[str, Any]:
             "works_count": author.get("works_count", 0), "topics": topics, "works": works}
 
 
-def refresh_scholar_profile(orcid: str) -> dict[str, Any]:
-    """Fetch ORCID + OpenAlex for `orcid` and cache the combined result."""
+def refresh_scholar_profile(orcid: str = "", scholar_id: str = "") -> dict[str, Any]:
+    """Fetch ORCID + OpenAlex for `orcid` and/or the Google Scholar profile
+    `scholar_id` (either may be blank) and cache the combined result.
+    `profile["google_scholar_blocked"]` is True when Scholar refused the
+    request; any Scholar data cached by an earlier refresh is kept then."""
     orcid = normalize_orcid(orcid)
-    if not orcid:
-        raise ValueError("Not a valid ORCID iD (expected e.g. 0000-0002-1825-0097).")
-    profile = {
+    scholar_id = normalize_scholar_id(scholar_id)
+    profile: dict[str, Any] = {
         "orcid": orcid,
         "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "orcid_record": fetch_orcid(orcid),
-        "openalex": fetch_openalex(orcid),
+        "orcid_record": fetch_orcid(orcid) if orcid else {"keywords": [], "titles": []},
+        "openalex": fetch_openalex(orcid) if orcid else {"author_id": "", "topics": [], "works": []},
     }
+    if scholar_id:
+        gs = fetch_google_scholar(scholar_id)
+        if gs is None:
+            profile["google_scholar_blocked"] = True
+            previous = (load_scholar_profile() or {}).get("google_scholar")
+            if previous and previous.get("user_id") == scholar_id:
+                gs = previous
+        if gs:
+            profile["google_scholar"] = gs
     ensure_dirs()
     SCHOLAR_PROFILE_FILE.write_text(json.dumps(profile, indent=1), encoding="utf-8")
     return profile
@@ -140,9 +195,11 @@ def scholar_corpus(profile: dict[str, Any] | None) -> str:
         return ""
     orcid_rec = profile.get("orcid_record") or {}
     oa = profile.get("openalex") or {}
+    gs = profile.get("google_scholar") or {}
     parts: list[str] = []
     parts += (orcid_rec.get("keywords") or []) * 3
     parts += (oa.get("topics") or []) * 3
+    parts += (gs.get("interests") or []) * 3
     oa_titles = set()
     for w in oa.get("works") or []:
         oa_titles.add((w.get("title") or "").lower())
@@ -150,16 +207,22 @@ def scholar_corpus(profile: dict[str, Any] | None) -> str:
         parts += w.get("keywords") or []
         if w.get("abstract"):
             parts.append(w["abstract"])
-    # ORCID titles that OpenAlex didn't already cover
-    parts += [t for t in orcid_rec.get("titles") or [] if t.lower() not in oa_titles]
+    # ORCID / Google Scholar titles that OpenAlex didn't already cover
+    for t in list(orcid_rec.get("titles") or []) + list(gs.get("titles") or []):
+        if t.lower() not in oa_titles:
+            oa_titles.add(t.lower())
+            parts.append(t)
     return "\n".join(p for p in parts if p)
 
 
 def scholar_topics(profile: dict[str, Any] | None) -> list[str]:
     if not profile:
         return []
-    return list((profile.get("orcid_record") or {}).get("keywords") or []) + \
+    topics = list((profile.get("orcid_record") or {}).get("keywords") or []) + \
+        list((profile.get("google_scholar") or {}).get("interests") or []) + \
         list((profile.get("openalex") or {}).get("topics") or [])
+    seen: set[str] = set()
+    return [t for t in topics if not (t.lower() in seen or seen.add(t.lower()))]
 
 
 def scholar_keyword_counts(profile: dict[str, Any] | None) -> dict[str, int]:
@@ -171,6 +234,7 @@ def scholar_keyword_counts(profile: dict[str, Any] | None) -> dict[str, int]:
     for w in (profile.get("openalex") or {}).get("works") or []:
         for k in w.get("keywords") or []:
             counts[k.lower()] = counts.get(k.lower(), 0) + 1
-    for k in (profile.get("orcid_record") or {}).get("keywords") or []:
+    for k in list((profile.get("orcid_record") or {}).get("keywords") or []) + \
+            list((profile.get("google_scholar") or {}).get("interests") or []):
         counts[k.lower()] = counts.get(k.lower(), 0) + 3
     return counts

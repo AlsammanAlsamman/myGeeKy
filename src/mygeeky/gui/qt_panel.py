@@ -12,12 +12,14 @@ from typing import Any, Callable
 
 from PySide6.QtCore import (
     QEasingCurve,
+    QEvent,
     QParallelAnimationGroup,
     QPoint,
     QPointF,
     Qt,
     QPropertyAnimation,
     QRectF,
+    QSize,
     QThread,
     QTimer,
     Signal,
@@ -52,6 +54,7 @@ from ..config import AVATAR_CACHE_DIR, MyGeekyConfig
 ASSETS_DIR = Path(__file__).parent / "assets"
 ICON_WINDOW = ASSETS_DIR / "icon_64.png"
 ICON_HEADER = ASSETS_DIR / "icon_32.png"
+ICON_FOLDED = ASSETS_DIR / "icon_128.png"   # drawn at ~58px: start large so it downscales crisply
 
 SWATCH_GRADIENTS = {
     "frosted": "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #fff6ee, stop:1 #cfe0ff)",
@@ -316,8 +319,11 @@ class TrendChart(QWidget):
 
 
 class SuggestionCard(QFrame):
+    """Clicking anywhere on the card opens the profile; the panel then drops
+    the person from the suggestions (see MyGeekyPanel._on_suggestion_clicked)."""
+
     def __init__(self, item: dict[str, Any], score_key: str, theme: dict[str, Any],
-                 on_open: Callable[[str], bool], loader: "AvatarLoader | None" = None) -> None:
+                 on_click: Callable[[dict[str, Any]], None], loader: "AvatarLoader | None" = None) -> None:
         super().__init__()
         self.setObjectName("card")
         row = QHBoxLayout(self)
@@ -339,27 +345,16 @@ class SuggestionCard(QFrame):
         body.addLayout(title_row)
 
         bio_label = QLabel((item.get("bio") or "")[:80])
+        bio_label.setWordWrap(True)  # a long bio must not widen the card past the panel
         bio_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
         body.addWidget(bio_label)
         row.addLayout(body, 1)
 
-        open_btn = QPushButton("Open →")
-        open_btn.setCursor(Qt.PointingHandCursor)
-        open_btn.setStyleSheet(
-            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
-            f"border-radius:7px; padding:5px 8px; font-size:11px; }}"
-            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
-        )
-        url = item.get("profile_url", "")
-        open_btn.clicked.connect(lambda: on_open(url))
-        row.addWidget(open_btn)
-
-        self.setStyleSheet(f"#card {{ background:{theme['card_bg']}; border-radius:10px; }}")
-        # Clicking anywhere on the card -- the avatar included -- opens the
-        # profile too, not just the explicit button (the button consumes its
-        # own clicks first since it's a child widget, so no double-trigger).
+        self.setStyleSheet(f"#card {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"#card:hover {{ background:{theme['btn_bg']}; }}")
+        self.setToolTip("Open profile")
         self.setCursor(Qt.PointingHandCursor)
-        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+        self.mousePressEvent = lambda ev: on_click(item)  # noqa: ARG005
 
 
 class ActivityItem(QFrame):
@@ -389,6 +384,86 @@ class ActivityItem(QFrame):
         self.setCursor(Qt.PointingHandCursor)
         profile_url = event.get("profile_url", "")
         self.mousePressEvent = lambda ev: on_open(profile_url)  # noqa: ARG005
+
+
+class RepoCard(QFrame):
+    """One `mygeeky contribute` result: repo, why it fits, and its best
+    starter issues. Every click only opens a GitHub page -- forking and the
+    PR are always left to the user."""
+
+    def __init__(self, item: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 loader: "AvatarLoader | None" = None) -> None:
+        super().__init__()
+        self.setObjectName("card")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 8, 8, 8)
+        outer.setSpacing(4)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        row.addWidget(_avatar_widget(item.get("owner", "?"), item.get("owner_avatar_url", ""), 32, loader))
+        body = QVBoxLayout()
+        body.setSpacing(2)
+        title_row = QHBoxLayout()
+        name_label = QLabel(item.get("full_name", ""))
+        name_label.setStyleSheet("font-weight:600; font-size:12.5px; background:transparent;")
+        score = item.get("score")
+        score_label = QLabel(f"{score:.2f}" if isinstance(score, (int, float)) else "")
+        score_label.setStyleSheet(f"color:{theme['muted']}; font-size:12px; background:transparent;")
+        title_row.addWidget(name_label, 1)
+        title_row.addWidget(score_label)
+        body.addLayout(title_row)
+
+        meta = [f"★{item.get('stars', 0)}"]
+        if item.get("language"):
+            meta.insert(0, item["language"])
+        meta_label = QLabel(" · ".join(meta))
+        meta_label.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        body.addWidget(meta_label)
+        row.addLayout(body, 1)
+        outer.addLayout(row)
+
+        if item.get("description"):
+            desc = QLabel(item["description"][:120])
+            desc.setWordWrap(True)
+            desc.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            outer.addWidget(desc)
+        if item.get("reasons"):
+            why = QLabel("why: " + "; ".join(item["reasons"]))
+            why.setWordWrap(True)
+            why.setStyleSheet(f"color:{theme['accent']}; font-size:10.5px; background:transparent;")
+            outer.addWidget(why)
+
+        btn_style = (
+            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+            f"border-radius:7px; padding:5px 8px; font-size:11px; text-align:left; }}"
+            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+        )
+        for issue in (item.get("starter_issues") or [])[:2]:
+            title = issue.get("title") or ""
+            issue_btn = QPushButton("→ " + (title[:57] + "…" if len(title) > 60 else title))
+            issue_btn.setToolTip(title)
+            issue_btn.setCursor(Qt.PointingHandCursor)
+            issue_btn.setStyleSheet(btn_style)
+            issue_btn.clicked.connect(lambda checked=False, u=issue.get("url", ""): on_open(u))
+            outer.addWidget(issue_btn)
+
+        repo_url = item.get("repo_url", "")
+        actions = QHBoxLayout()
+        actions.addStretch(1)
+        for label, url in (("Fork →", item.get("fork_url", "")), ("Open →", repo_url)):
+            btn = QPushButton(label)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet(btn_style)
+            btn.clicked.connect(lambda checked=False, u=url: on_open(u))
+            actions.addWidget(btn)
+        outer.addLayout(actions)
+
+        self.setStyleSheet(f"#card {{ background:{theme['card_bg']}; border-radius:10px; }}")
+        # Clicking the card body opens the repo; the issue/Fork/Open buttons
+        # consume their own clicks first, so no double-trigger.
+        self.setCursor(Qt.PointingHandCursor)
+        self.mousePressEvent = lambda ev: on_open(repo_url)  # noqa: ARG005
 
 
 class SpotlightCard(QFrame):
@@ -656,6 +731,12 @@ class RoundedButton(QPushButton):
         self._border_spec = ""
         self._text_color = QColor("#ffffff")
         self._radius = 18.0
+        self._icon: QPixmap | None = None
+
+    def set_icon(self, pixmap: QPixmap) -> None:
+        """Icon-only mode: just the icon, filling the button, no pill behind it."""
+        self._icon = pixmap
+        self.update()
 
     def set_style(self, bg: str, border: str, text_color: str, radius: float = 18.0) -> None:
         self._bg_spec = bg
@@ -672,6 +753,13 @@ class RoundedButton(QPushButton):
         painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
 
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if self._icon is not None and not self._icon.isNull():
+            side = int(min(rect.width(), rect.height()))
+            icon = self._icon.scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            painter.drawPixmap(int(rect.center().x() - icon.width() / 2),
+                               int(rect.center().y() - icon.height() / 2), icon)
+            painter.end()
+            return
         # This button doubles as the folded state: a narrow, full-height strip
         # docked to the screen edge, not a compact pill -- so the radius is a
         # small fixed value, never proportional to the (tall) widget height.
@@ -699,6 +787,7 @@ class MyGeekyPanel(QWidget):
         self.avatar_loader = AvatarLoader()
         self._last_activity_events: list[dict[str, Any]] = []
         self._last_suggestions: list[dict[str, Any]] = []
+        self._contrib_running = False
 
         self.setWindowTitle("myGeeKy")
         if ICON_WINDOW.exists():
@@ -721,6 +810,7 @@ class MyGeekyPanel(QWidget):
         self._load_status()
         self._load_live_stats()
         self._load_suggestions()
+        self._load_contributions()
         self._refresh_activity(force=False)
         self._load_model_history()
         self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
@@ -734,13 +824,18 @@ class MyGeekyPanel(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
 
-        self.stack = QStackedWidget()
-        outer.addWidget(self.stack)
-
-        self.folded_widget = RoundedButton("myGeeKy")
+        # Folded tab and full panel are siblings shown one at a time (not a
+        # QStackedWidget: a stack is never smaller than its LARGEST page, so the
+        # "folded" window could never actually get narrow).
+        self.folded_widget = RoundedButton("")
+        if ICON_FOLDED.exists():
+            self.folded_widget.set_icon(QPixmap(str(ICON_FOLDED)))
+        self.folded_widget.setToolTip("myGeeKy — click to open")
         self.folded_widget.setCursor(Qt.PointingHandCursor)
+        self.folded_widget.setMinimumSize(1, 1)
         self.folded_widget.clicked.connect(self.unfold)
-        self.stack.addWidget(self.folded_widget)
+        self.folded_widget.installEventFilter(self)  # hover -> fully opaque
+        outer.addWidget(self.folded_widget)
 
         self.panel_frame = RoundedPanel()
         self.panel_frame.setObjectName("panel")
@@ -786,8 +881,11 @@ class MyGeekyPanel(QWidget):
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
         for name, label in (("live", "Live"), ("suggestions", "Suggestions"),
-                             ("activity", "Activity"), ("model", "Model")):
+                             ("repos", "Repos"), ("activity", "Activity"), ("model", "Model")):
             btn = QPushButton(label)
+            # Qt's Windows style gives every push button a ~75px minimum width;
+            # five of those made the panel wider than gui_expanded_width.
+            btn.setMinimumWidth(1)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
@@ -797,14 +895,15 @@ class MyGeekyPanel(QWidget):
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
 
-        self._tab_order = ["live", "suggestions", "activity", "model"]
+        self._tab_order = ["live", "suggestions", "repos", "activity", "model"]
         self.content_stack.addWidget(self._build_live_tab())
         self.content_stack.addWidget(self._build_suggestions_tab())
+        self.content_stack.addWidget(self._build_repos_tab())
         self.content_stack.addWidget(self._build_activity_tab())
         self.content_stack.addWidget(self._build_model_tab())
 
-        self.stack.addWidget(self.panel_frame)
-        self.stack.setCurrentWidget(self.panel_frame)
+        outer.addWidget(self.panel_frame)
+        self.folded_widget.hide()
 
     def _build_live_tab(self) -> QWidget:
         page = QWidget()
@@ -823,7 +922,7 @@ class MyGeekyPanel(QWidget):
         stats_row.addStretch(1)
         layout.addLayout(stats_row)
 
-        self.ticker = SpotlightTicker(logic.open_profile, self.avatar_loader)
+        self.ticker = SpotlightTicker(self._on_ticker_clicked, self.avatar_loader)
         layout.addWidget(self.ticker, 1)
 
         hint = QLabel("Recent activity and top suggestions, scrolling live — click a card to open the profile.")
@@ -838,7 +937,7 @@ class MyGeekyPanel(QWidget):
         layout.setContentsMargins(0, 4, 0, 0)
 
         actions_row = QHBoxLayout()
-        hint = QLabel("Click Open to view a profile — you follow manually.")
+        hint = QLabel("Click someone to open their profile — they then leave this list. You follow manually.")
         hint.setWordWrap(True)
         self.refresh_sugg_btn = QPushButton("Refresh")
         self.refresh_sugg_btn.setCursor(Qt.PointingHandCursor)
@@ -868,6 +967,7 @@ class MyGeekyPanel(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setWidget(page)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet("background:transparent; border:none;")
@@ -875,6 +975,39 @@ class MyGeekyPanel(QWidget):
         # Qt, independent of the top-level window's translucency or any
         # stylesheet on the QScrollArea widget itself -- this is what was
         # actually covering most of the panel.
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.viewport().setStyleSheet("background: transparent;")
+        page.setAutoFillBackground(False)
+        return scroll
+
+    def _build_repos_tab(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 0, 0)
+
+        actions_row = QHBoxLayout()
+        hint = QLabel("Repos you could improve — fork and send the PR yourself.")
+        hint.setWordWrap(True)
+        self.refresh_repos_btn = QPushButton("Refresh")
+        self.refresh_repos_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_repos_btn.clicked.connect(self._on_refresh_contributions)
+        actions_row.addWidget(hint, 1)
+        actions_row.addWidget(self.refresh_repos_btn)
+        layout.addLayout(actions_row)
+
+        repos_container = QWidget()
+        self.repos_area = QVBoxLayout(repos_container)
+        self.repos_area.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(repos_container)
+        layout.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        # Same opaque-viewport workaround as the Suggestions tab.
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
         page.setAutoFillBackground(False)
@@ -902,6 +1035,7 @@ class MyGeekyPanel(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setWidget(page)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setStyleSheet("background:transparent; border:none;")
@@ -1040,7 +1174,7 @@ class MyGeekyPanel(QWidget):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{SWATCH_GRADIENTS[name]}; border-radius:7px; border:{border}; }}"
             )
-        for btn in (self.refresh_sugg_btn, self.refresh_act_btn):
+        for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_act_btn):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
                 f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
@@ -1066,15 +1200,32 @@ class MyGeekyPanel(QWidget):
     def _render_suggestions_from_cache(self) -> None:
         # Re-render already-loaded cards so their theme-dependent styling updates too.
         self._load_suggestions()
+        if not self._contrib_running:  # don't wipe the "Searching…" placeholder mid-search
+            self._load_contributions()
         self._refresh_activity(force=False)
 
     # ------------------------------------------------------------------ fold/unfold/dock
     def _dock(self, folded: bool) -> None:
+        # the screen the panel is on now (it stays there when folded/unfolded)
         screen = self.screen() or QGuiApplication.primaryScreen()
-        rect = screen.geometry()
-        x, y, w, h = logic._panel_geometry(self.cfg, folded, rect)
+        rect = screen.availableGeometry()  # excludes the taskbar
+        self.panel_frame.setVisible(not folded)
+        self.folded_widget.setVisible(folded)
+        # the folded tab is sized purely by config; the full panel can't go
+        # below what its content needs, so position it by that real size
+        need = QSize(0, 0) if folded else self.panel_frame.minimumSizeHint()
+        x, y, w, h = logic._panel_geometry(self.cfg, folded, rect, need.width(), need.height())
+        self.setMinimumSize(0, 0)
         self.setGeometry(x, y, w, h)
-        self.stack.setCurrentWidget(self.folded_widget if folded else self.panel_frame)
+        self.setWindowOpacity(self.cfg.gui_folded_opacity if folded else self.cfg.gui_opacity)
+
+    def eventFilter(self, obj, event) -> bool:  # noqa: N802 -- Qt's own naming convention
+        if obj is self.folded_widget and self.folded_widget.isVisible():
+            if event.type() == QEvent.Enter:
+                self.setWindowOpacity(1.0)
+            elif event.type() == QEvent.Leave:
+                self.setWindowOpacity(self.cfg.gui_folded_opacity)
+        return super().eventFilter(obj, event)
 
     def fold(self) -> None:
         self._dock(folded=True)
@@ -1161,7 +1312,64 @@ class MyGeekyPanel(QWidget):
             layout.addWidget(empty)
             return
         for item in items:
-            layout.addWidget(SuggestionCard(item, score_key, theme, logic.open_profile, self.avatar_loader))
+            layout.addWidget(SuggestionCard(item, score_key, theme, self._on_suggestion_clicked, self.avatar_loader))
+
+    def _on_suggestion_clicked(self, item: dict[str, Any]) -> None:
+        logic.open_profile(item.get("profile_url", ""))
+        logic.mark_suggestion_seen(item.get("username", ""))
+        # re-render on the next event-loop turn: the clicked card is still
+        # inside its own mousePressEvent right now
+        QTimer.singleShot(0, self._load_suggestions)
+
+    def _on_ticker_clicked(self, url: str) -> bool:
+        opened = logic.open_profile(url)
+        suggestion = next((s for s in self._last_suggestions if s.get("profile_url") == url), None)
+        if suggestion:  # activity cards are people you already follow -- only suggestions get dropped
+            logic.mark_suggestion_seen(suggestion.get("username", ""))
+            QTimer.singleShot(0, self._load_suggestions)
+        return opened
+
+    # ------------------------------------------------------------------ repos (contribute)
+    def _load_contributions(self) -> None:
+        self._render_contributions(logic.get_contributions(self.cfg))
+
+    def _on_refresh_contributions(self) -> None:
+        if self._contrib_running:
+            return  # a repo search is already in flight; don't stack another
+        self._contrib_running = True
+        self.refresh_repos_btn.setEnabled(False)
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.repos_area)
+        loading = QLabel("Searching GitHub for repos… this can take a few minutes (rate-limited search API).")
+        loading.setWordWrap(True)
+        loading.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+        self.repos_area.addWidget(loading)
+        self._run_async(lambda: logic.refresh_contributions(self.cfg), self._on_contributions_ready)
+
+    def _on_contributions_ready(self, data: Any) -> None:
+        self._contrib_running = False
+        self.refresh_repos_btn.setEnabled(True)
+        if isinstance(data, dict) and data.get("error"):
+            theme = THEMES[self._theme_name()]
+            _clear_layout(self.repos_area)
+            err = QLabel(str(data["error"]))
+            err.setWordWrap(True)
+            err.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            self.repos_area.addWidget(err)
+            return
+        self._render_contributions(data)
+
+    def _render_contributions(self, items: list[dict[str, Any]] | None) -> None:
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.repos_area)
+        if not items:
+            empty = QLabel("No repo suggestions yet — click Refresh, or run `mygeeky contribute`.")
+            empty.setWordWrap(True)
+            empty.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            self.repos_area.addWidget(empty)
+            return
+        for item in items:
+            self.repos_area.addWidget(RepoCard(item, theme, logic.open_profile, self.avatar_loader))
 
     # ------------------------------------------------------------------ activity
     def _refresh_activity(self, force: bool) -> None:
@@ -1183,6 +1391,8 @@ class MyGeekyPanel(QWidget):
         if fetched_at:
             self.activity_updated_label.setText("updated " + _time_ago(fetched_at))
         self._last_activity_events = events
+        if not (data or {}).get("cached"):
+            self._load_suggestions()  # the refresh also re-read who you follow
         self._update_live_ticker()
 
     # ------------------------------------------------------------------ live spotlight ticker

@@ -20,11 +20,14 @@ Design constraints, deliberately unchanged from the previous version:
 - The only automatic network call is a cheap, cached activity-feed refresh
   (one GitHub Events API call), rate-limited by `gui_activity_refresh_minutes`
   so the panel can't hammer the API just by being left open.
-- A full candidate search (`refresh_suggestions`) only ever runs when the
-  user clicks the in-panel "Refresh" button -- never on a timer.
+- A full candidate search (`refresh_suggestions`) or repo search
+  (`refresh_contributions`) only ever runs when the user clicks the
+  in-panel "Refresh" button -- never on a timer.
 - Opening a profile is the ONLY thing a click ever reaches out to do, and
   all it does is open the URL in the system browser. There is no
   follow/unfollow call anywhere in this file, same as the rest of myGeeKy.
+  Likewise the Repos tab only opens repo/issue/fork pages -- nothing here
+  forks a repo or opens a PR.
 """
 
 from __future__ import annotations
@@ -34,14 +37,17 @@ from typing import Any
 
 from .. import auth
 from ..activity import get_recent_activity
-from ..cli import _run_suggestions
+from ..cli import _run_contribute, _run_suggestions
 from ..config import MyGeekyConfig, load_config, save_config
 from ..github_client import GitHubClient
 from ..storage import (
+    add_excluded,
     load_activity_cache,
+    load_excluded,
     load_following_snapshot,
     load_model_history,
     load_training_examples,
+    last_contributions,
     last_suggestions,
     save_activity_cache,
 )
@@ -128,11 +134,33 @@ def set_opacity(cfg: MyGeekyConfig, opacity: float) -> bool:
     return True
 
 
+def _hidden_usernames() -> set[str]:
+    """People not to show any more: anyone you clicked (added to the
+    excluded list, which future runs skip too) plus anyone you now follow,
+    per the following list cached by the last activity refresh. That list is
+    deliberately NOT the `learn` snapshot -- `learn` detects new follows by
+    diffing against that snapshot, so the panel must never update it."""
+    hidden = {u.lower() for u in load_excluded()}
+    hidden |= {u.lower() for u in (load_activity_cache() or {}).get("following") or []}
+    return hidden
+
+
 def get_suggestions(cfg: MyGeekyConfig) -> dict[str, Any]:
+    hidden = _hidden_usernames()
+
+    def visible(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [r for r in records if (r.get("username") or "").lower() not in hidden]
+
     return {
-        "followback": last_suggestions(cfg.max_suggestions_returned, list_type="followback"),
-        "domain_highlights": last_suggestions(cfg.domain_highlight_count, list_type="domain"),
+        "followback": visible(last_suggestions(cfg.max_suggestions_returned, list_type="followback")),
+        "domain_highlights": visible(last_suggestions(cfg.domain_highlight_count, list_type="domain")),
     }
+
+
+def mark_suggestion_seen(username: str) -> None:
+    """Clicking a suggestion means you've looked at them: never suggest them again."""
+    if username:
+        add_excluded([username.lower()])
 
 
 def refresh_suggestions(cfg: MyGeekyConfig) -> dict[str, Any]:
@@ -141,6 +169,20 @@ def refresh_suggestions(cfg: MyGeekyConfig) -> dict[str, Any]:
         return {"error": "Run `mygeeky init` in a terminal first."}
     try:
         return _run_suggestions(cfg)
+    except Exception as exc:  # surfaced to the panel, not a crash
+        return {"error": str(exc)}
+
+
+def get_contributions(cfg: MyGeekyConfig) -> list[dict[str, Any]]:
+    return last_contributions(cfg.contribute_max_returned)
+
+
+def refresh_contributions(cfg: MyGeekyConfig) -> list[dict[str, Any]] | dict[str, Any]:
+    """Runs a real `mygeeky contribute` -- only ever called from an explicit button click."""
+    if not cfg.github_username:
+        return {"error": "Run `mygeeky init` in a terminal first."}
+    try:
+        return _run_contribute(cfg)
     except Exception as exc:  # surfaced to the panel, not a crash
         return {"error": str(exc)}
 
@@ -163,13 +205,16 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
     try:
         client = _build_client(cfg)
         events = get_recent_activity(client, cfg.github_username, limit=cfg.gui_activity_limit)
+        # piggybacks on the same rate-limited refresh, so people you follow
+        # from the browser drop out of the suggestions within a few minutes
+        following = client.list_following(cfg.github_username)
     except Exception as exc:
         if cache:
             return {"events": cache["events"], "fetched_at": cache["fetched_at"], "cached": True, "error": str(exc)}
         return {"events": [], "error": str(exc)}
 
     fetched_at_iso = now.isoformat()
-    save_activity_cache(events, fetched_at_iso)
+    save_activity_cache(events, fetched_at_iso, following)
     return {"events": events, "fetched_at": fetched_at_iso, "cached": False}
 
 
@@ -216,12 +261,24 @@ def open_profile(url: str) -> bool:
     return True
 
 
-def _panel_geometry(cfg: MyGeekyConfig, folded: bool, screen_rect) -> tuple[int, int, int, int]:
-    """Returns (x, y, width, height) docked to the configured screen edge."""
-    height = int(screen_rect.height() * cfg.gui_panel_height_fraction)
+def _panel_geometry(cfg: MyGeekyConfig, folded: bool, screen_rect,
+                    min_width: int = 0, min_height: int = 0) -> tuple[int, int, int, int]:
+    """Returns (x, y, width, height) docked to the configured edge of
+    `screen_rect` (the screen's available area, i.e. minus the taskbar).
+
+    `min_width`/`min_height` are what the content actually needs: Qt won't
+    shrink a window below that, so the position is computed from the real
+    size -- otherwise a right-docked panel wider than configured hangs off
+    the right edge onto the neighbouring monitor. The result always stays
+    inside `screen_rect`, whatever its (possibly negative) origin."""
+    if folded:
+        width, height = cfg.gui_folded_width, cfg.gui_folded_height
+    else:
+        width, height = cfg.gui_expanded_width, int(screen_rect.height() * cfg.gui_panel_height_fraction)
+    width = min(max(width, min_width), screen_rect.width())
+    height = min(max(height, min_height), screen_rect.height())
     y = screen_rect.y() + (screen_rect.height() - height) // 2
-    width = cfg.gui_folded_width if folded else cfg.gui_expanded_width
-    x = screen_rect.x() if cfg.gui_dock_side == "left" else max(screen_rect.x() + screen_rect.width() - width, 0)
+    x = screen_rect.x() if cfg.gui_dock_side == "left" else screen_rect.x() + screen_rect.width() - width
     return x, y, width, height
 
 

@@ -102,9 +102,13 @@ def load_activity_cache() -> dict[str, Any] | None:
         return None
 
 
-def save_activity_cache(events: list[dict[str, Any]], fetched_at: str) -> None:
+def save_activity_cache(events: list[dict[str, Any]], fetched_at: str,
+                        following: Iterable[str] | None = None) -> None:
     ensure_dirs()
-    ACTIVITY_CACHE_FILE.write_text(json.dumps({"fetched_at": fetched_at, "events": events}), encoding="utf-8")
+    payload: dict[str, Any] = {"fetched_at": fetched_at, "events": events}
+    if following is not None:
+        payload["following"] = sorted(following)
+    ACTIVITY_CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def log_contributions(records: Iterable[dict[str, Any]]) -> None:

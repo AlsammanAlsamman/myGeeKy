@@ -42,9 +42,10 @@ class MyGeekyConfig:
     github_username: str = ""
 
     # Where your profile comes from beyond your GitHub repos -- all optional.
-    # `mygeeky profile refresh` re-reads these (CV pdf -> text, ORCID + OpenAlex).
+    # `mygeeky profile refresh` re-reads these (CV pdf -> text, ORCID + OpenAlex, Google Scholar).
     cv_path: str = ""                     # remembered so the CV can be re-extracted when it changes
     orcid_id: str = ""                    # e.g. "0000-0002-1825-0097"; enables ORCID + OpenAlex enrichment
+    scholar_id: str = ""                  # Google Scholar user id, the `user=` part of your profile URL
 
     # What "geeks like him/her" means -- all optional, all adjustable.
     languages: list[str] = field(default_factory=list)      # e.g. ["Python", "Rust"]
@@ -70,6 +71,11 @@ class MyGeekyConfig:
     seed_repos: list[str] = field(default_factory=list)      # "owner/repo" -- candidates = stargazers of these
     include_own_stargazers: bool = True                       # candidates = people who starred your own repos
     include_second_degree: bool = False                        # candidates = who your followees follow (expensive)
+    # candidates = owners/contributors of active repos matching your CV/publication terms;
+    # these are ranked ahead of the plain language search, which mostly returns famous accounts
+    include_domain_repo_people: bool = True
+    domain_repo_terms: int = 6                 # how many profile terms to search repos for
+    domain_repo_count: int = 20                # how many matching repos to take people from
     second_degree_sample: int = 15            # cap on how many of your followees to expand for second_degree
     source_max_pages: int = 3                  # pages fetched per source (stargazers/followers/etc.)
 
@@ -90,6 +96,11 @@ class MyGeekyConfig:
     # Search / scoring knobs
     search_pages: int = 3                 # GitHub search pages to scan per run (30 users/page)
     max_candidates_per_run: int = 60
+    # "Likely to follow back" list only: skip accounts that follow almost nobody
+    # relative to their audience (following/followers below this), or that are
+    # simply too famous to notice a follow. The domain-highlights list ignores these.
+    followback_min_ratio: float = 0.05
+    followback_max_followers: int = 3000
     max_suggestions_returned: int = 15
     similarity_threshold: float = 0.08
     content_similarity_weight: float = 0.5
@@ -128,7 +139,9 @@ class MyGeekyConfig:
     # every profile link is opened in your browser only when you click it.
     gui_dock_side: str = "right"          # "right" or "left"
     gui_expanded_width: int = 380
-    gui_folded_width: int = 48
+    gui_folded_width: int = 58                # folded, the panel is just the app icon on the screen edge
+    gui_folded_height: int = 58
+    gui_folded_opacity: float = 0.5           # folded icon's opacity; it turns fully opaque while hovered
     gui_panel_height_fraction: float = 0.25   # fraction of screen height the panel occupies -- a short
                                                # docked strip rather than a full sidebar; the Live tab's
                                                # rotating spotlight is designed to fit this compact height

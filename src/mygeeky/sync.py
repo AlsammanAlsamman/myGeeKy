@@ -24,7 +24,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .config import CONFIG_FILE, DATA_DIR, SYNCED_CONFIG_FILE, ensure_dirs
+from .config import CONFIG_FILE, DATA_DIR, MODEL_FILE, SYNCED_CONFIG_FILE, ensure_dirs
 
 GITIGNORE = """\
 # myGeeKy sync: never commit these
@@ -187,6 +187,10 @@ def init(repo: str) -> str:
             shutil.copytree(DATA_DIR, backup, ignore=shutil.ignore_patterns(".git"))
             messages.append(f"Backed up this machine's existing data to {backup}")
         _git("checkout", "-q", "-f", "-B", "main", "origin/main")
+        # The model is never synced, so a leftover local one was trained on
+        # this machine's old data, not the synced data just checked out.
+        # Drop it (it's in the backup) so the caller retrains from the synced data.
+        MODEL_FILE.unlink(missing_ok=True)
         import_config()
         messages.append("Pulled your synced data from GitHub.")
     else:
