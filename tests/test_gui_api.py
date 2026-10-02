@@ -253,3 +253,31 @@ def test_folded_tab_is_small():
     cfg = MyGeekyConfig(gui_folded_width=48, gui_folded_height=120)
     x, y, w, h = logic._panel_geometry(cfg, folded=True, screen_rect=QRect(0, 0, 2560, 1392))
     assert (w, h) == (48, 120) and x == 2560 - 48
+
+
+def test_get_suggestions_backfills_from_older_runs_when_newest_are_hidden(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    from mygeeky.storage import add_excluded, log_suggestions
+    log_suggestions([{"username": u, "score": 0.5, "list": "followback"} for u in ("old1", "old2", "Bob")])
+    log_suggestions([{"username": u, "score": 0.5, "list": "followback"} for u in ("new1", "new2", "Bob")])
+    add_excluded(["new1", "new2"])
+
+    cfg = MyGeekyConfig(github_username="me", max_suggestions_returned=2)
+    names = [r["username"] for r in logic.get_suggestions(cfg)["followback"]]
+    assert names == ["old2", "Bob"]  # newest-first fill, Bob only once
+
+
+def test_suggestions_auto_refresh_due(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    from mygeeky.storage import add_excluded, log_suggestions
+    t0 = datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
+    log_suggestions([{"username": "a", "score": 0.5, "list": "followback", "timestamp": t0.isoformat()}])
+    cfg = MyGeekyConfig(github_username="me", gui_suggestions_auto_refresh_hours=6)
+    later = datetime(2026, 10, 1, 20, tzinfo=timezone.utc)
+
+    assert logic.suggestions_auto_refresh_due(cfg, now=later) is False  # list not empty
+    add_excluded(["a"])
+    assert logic.suggestions_auto_refresh_due(cfg, now=datetime(2026, 10, 1, 15, tzinfo=timezone.utc)) is False
+    assert logic.suggestions_auto_refresh_due(cfg, now=later) is True
+    cfg.gui_suggestions_auto_refresh_hours = 0
+    assert logic.suggestions_auto_refresh_due(cfg, now=later) is False

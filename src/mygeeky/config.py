@@ -147,6 +147,8 @@ class MyGeekyConfig:
                                                # rotating spotlight is designed to fit this compact height
     gui_activity_refresh_minutes: int = 5     # min minutes between automatic activity-feed refreshes
     gui_activity_limit: int = 30              # how many recent activity events to show
+    gui_suggestions_auto_refresh_hours: float = 6.0  # panel searches again by itself once the follow-back list is
+                                               # empty and the last search is this old; 0 = only on Refresh click
     gui_theme: str = "midnight"               # "frosted" | "midnight" | "aurora" -- switchable live via the panel's swatch buttons
     gui_live_rotate_seconds: float = 4.5      # how often the Live tab's spotlight card auto-advances
     gui_opacity: float = 1.0                  # whole-window opacity (0.0-1.0); the settings panel exposes this

@@ -811,6 +811,7 @@ class MyGeekyPanel(QWidget):
         self._last_activity_events: list[dict[str, Any]] = []
         self._last_suggestions: list[dict[str, Any]] = []
         self._contrib_running = False
+        self._sugg_running = False
 
         self.setWindowTitle("myGeeKy")
         if ICON_WINDOW.exists():
@@ -841,6 +842,13 @@ class MyGeekyPanel(QWidget):
         self._activity_timer = QTimer(self)
         self._activity_timer.timeout.connect(lambda: self._refresh_activity(force=False))
         self._activity_timer.start(60_000)
+
+        # every 10 minutes (and once now): search again if the list ran empty
+        # and the last search is old enough -- see suggestions_auto_refresh_due
+        self._sugg_timer = QTimer(self)
+        self._sugg_timer.timeout.connect(self._maybe_auto_refresh_suggestions)
+        self._sugg_timer.start(10 * 60_000)
+        QTimer.singleShot(5_000, self._maybe_auto_refresh_suggestions)
 
     # ------------------------------------------------------------------ UI construction
     def _build_ui(self) -> None:
@@ -1306,7 +1314,15 @@ class MyGeekyPanel(QWidget):
     def _load_suggestions(self) -> None:
         self._render_suggestions(logic.get_suggestions(self.cfg))
 
+    def _maybe_auto_refresh_suggestions(self) -> None:
+        if not self._sugg_running and logic.suggestions_auto_refresh_due(self.cfg):
+            self._on_refresh_suggestions()
+
     def _on_refresh_suggestions(self) -> None:
+        if self._sugg_running:
+            return  # a search is already in flight; don't stack another
+        self._sugg_running = True
+        self.refresh_sugg_btn.setEnabled(False)
         theme = THEMES[self._theme_name()]
         _clear_layout(self.followback_area)
         loading = QLabel("Searching GitHub… this can take a minute.")
@@ -1315,6 +1331,8 @@ class MyGeekyPanel(QWidget):
         self._run_async(lambda: logic.refresh_suggestions(self.cfg), self._on_suggestions_ready)
 
     def _on_suggestions_ready(self, data: Any) -> None:
+        self._sugg_running = False
+        self.refresh_sugg_btn.setEnabled(True)
         if isinstance(data, dict) and data.get("error") and "followback" not in data:
             theme = THEMES[self._theme_name()]
             _clear_layout(self.followback_area)

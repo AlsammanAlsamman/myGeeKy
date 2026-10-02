@@ -20,9 +20,11 @@ Design constraints, deliberately unchanged from the previous version:
 - The only automatic network call is a cheap, cached activity-feed refresh
   (one GitHub Events API call), rate-limited by `gui_activity_refresh_minutes`
   so the panel can't hammer the API just by being left open.
-- A full candidate search (`refresh_suggestions`) or repo search
-  (`refresh_contributions`) only ever runs when the user clicks the
-  in-panel "Refresh" button -- never on a timer.
+- A full candidate search (`refresh_suggestions`) runs when the user clicks
+  "Refresh", or by itself only once the follow-back list has run empty AND
+  the last search is older than `gui_suggestions_auto_refresh_hours`
+  (default 6; 0 disables). A repo search (`refresh_contributions`) only ever
+  runs on a click.
 - Opening a profile is the ONLY thing a click ever reaches out to do, and
   all it does is open the URL in the system browser. There is no
   follow/unfollow call anywhere in this file, same as the rest of myGeeKy.
@@ -48,6 +50,7 @@ from ..storage import (
     load_model_history,
     load_training_examples,
     last_contributions,
+    last_suggestion_time,
     last_suggestions,
     save_activity_cache,
 )
@@ -147,14 +150,26 @@ def _hidden_usernames() -> set[str]:
 
 def get_suggestions(cfg: MyGeekyConfig) -> dict[str, Any]:
     hidden = _hidden_usernames()
-
-    def visible(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return [r for r in records if (r.get("username") or "").lower() not in hidden]
-
     return {
-        "followback": visible(last_suggestions(cfg.max_suggestions_returned, list_type="followback")),
-        "domain_highlights": visible(last_suggestions(cfg.domain_highlight_count, list_type="domain")),
+        "followback": last_suggestions(cfg.max_suggestions_returned, list_type="followback", exclude=hidden),
+        "domain_highlights": last_suggestions(cfg.domain_highlight_count, list_type="domain", exclude=hidden),
     }
+
+
+def suggestions_auto_refresh_due(cfg: MyGeekyConfig, now: datetime | None = None) -> bool:
+    """True when the panel should start a suggestion search by itself: the
+    follow-back list is empty and the last search is older than
+    `gui_suggestions_auto_refresh_hours` (0 turns this off)."""
+    hours = cfg.gui_suggestions_auto_refresh_hours
+    if not cfg.github_username or hours <= 0:
+        return False
+    if get_suggestions(cfg)["followback"]:
+        return False
+    last = last_suggestion_time()
+    if last is None:
+        return True
+    now = now or datetime.now(timezone.utc)
+    return (now - last).total_seconds() >= hours * 3600
 
 
 def mark_suggestion_seen(username: str) -> None:

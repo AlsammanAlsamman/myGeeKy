@@ -341,8 +341,11 @@ folded tab to expand it; click the arrow to fold it back to a slim strip.
 - **Suggestions tab** — both lists from `mygeeky run` (avatar, bio, score),
   each with an **Open →** button that opens their GitHub profile in your
   browser. That's the *only* thing a click ever does — myGeeKy still never
-  follows anyone; a "Refresh" button re-runs a real search on demand (it
-  never does this on a timer, to avoid hammering GitHub's rate limits).
+  follows anyone; a "Refresh" button re-runs a real search on demand.
+  People you open or already follow drop off, and older unseen suggestions
+  move up to fill their place. Once the list is empty, the panel searches
+  again by itself, but no more often than `gui_suggestions_auto_refresh_hours`
+  (default 6; `0` turns it off), to stay well inside GitHub's rate limits.
 - **Repos tab** — the results of `mygeeky contribute`: repos you could
   improve, each with why it fits you, its top starter issues, and
   **Fork →** / **Open →** buttons. Those buttons only open the GitHub page;
@@ -379,7 +382,7 @@ half-transparent until you hover it. It always stays inside the screen it's
 on, including on multi-monitor setups.
 
 Config: `gui_dock_side` (`"right"`/`"left"`), `gui_expanded_width`,
-`gui_folded_width`, `gui_folded_height`, `gui_folded_opacity`, `gui_panel_height_fraction`, `gui_activity_refresh_minutes`,
+`gui_folded_width`, `gui_folded_height`, `gui_folded_opacity`, `gui_panel_height_fraction`, `gui_activity_refresh_minutes`, `gui_suggestions_auto_refresh_hours`,
 `gui_activity_limit`, `gui_theme` (`"midnight"`/`"frosted"`/`"aurora"`),
 `gui_opacity` (`0.0`-`1.0`, note the settings panel's slider shows this
 inverted, as "Transparency") — same `mygeeky config set` mechanism as
@@ -458,6 +461,7 @@ mygeeky config reset
 | `gui_panel_height_fraction` | panel height as a fraction of the screen height | `0.25` |
 | `gui_activity_refresh_minutes` | minimum minutes between automatic activity-feed refreshes | `5` |
 | `gui_activity_limit` | how many recent activity events to show | `30` |
+| `gui_suggestions_auto_refresh_hours` | once the follow-back list is empty, search again by itself if the last search is at least this old (`0` = only on Refresh) | `6` |
 | `gui_theme` | glass style (`"midnight"`/`"frosted"`/`"aurora"`) | `"midnight"` |
 | `gui_opacity` | whole-window transparency, adjustable via the ⚙ settings panel | `1.0` |
 

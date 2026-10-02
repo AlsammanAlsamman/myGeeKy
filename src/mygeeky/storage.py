@@ -8,6 +8,7 @@ derived scores -- but none of it lives inside the project/repo either.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -78,11 +79,44 @@ def add_excluded(usernames: Iterable[str]) -> None:
     EXCLUDED_FILE.write_text(json.dumps(sorted(current)), encoding="utf-8")
 
 
-def last_suggestions(limit: int = 15, list_type: str | None = None) -> list[dict[str, Any]]:
+def last_suggestions(limit: int = 15, list_type: str | None = None,
+                     exclude: Iterable[str] | None = None) -> list[dict[str, Any]]:
+    """The newest `limit` logged suggestions, oldest first.
+
+    `exclude` (lowercase usernames) is applied BEFORE the cut, and each person
+    appears once (their newest record) -- otherwise, once everyone in the
+    latest run has been clicked or followed, the result is empty even though
+    older runs still hold people you haven't seen."""
     records = read_jsonl(SUGGESTIONS_LOG)
     if list_type:
         records = [r for r in records if r.get("list") == list_type]
-    return records[-limit:]
+    if exclude is None:
+        return records[-limit:]
+    skip = set(exclude)
+    picked: list[dict[str, Any]] = []
+    for r in reversed(records):
+        name = (r.get("username") or "").lower()
+        if name in skip:
+            continue
+        skip.add(name)
+        picked.append(r)
+        if len(picked) >= limit:
+            break
+    return picked[::-1]
+
+
+def last_suggestion_time(list_type: str | None = None) -> datetime | None:
+    """When the newest logged suggestion was produced, or None if there are none."""
+    records = read_jsonl(SUGGESTIONS_LOG)
+    if list_type:
+        records = [r for r in records if r.get("list") == list_type]
+    for r in reversed(records):
+        try:
+            ts = datetime.fromisoformat(r["timestamp"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+    return None
 
 
 def log_model_history(record: dict[str, Any]) -> None:
