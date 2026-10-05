@@ -44,8 +44,8 @@ class FakeClient:
     def __init__(self, events):
         self.events = events
 
-    def list_received_events(self, username, per_page=30):
-        return self.events
+    def list_received_events(self, username, per_page=30, page=1):
+        return self.events if page == 1 else []
 
 
 def test_get_recent_activity_filters_and_limits():
@@ -58,3 +58,13 @@ def test_get_recent_activity_filters_and_limits():
     result = get_recent_activity(client, "me", limit=1)
     assert len(result) == 1
     assert result[0]["actor"] == "a"
+
+
+def test_get_recent_activity_drops_actors_you_do_not_follow():
+    # received_events also carries strangers acting on repos of orgs you follow
+    events = [
+        {"type": "WatchEvent", "actor": {"login": "stranger"}, "repo": {"name": "org/x"}, "payload": {}, "created_at": "t"},
+        {"type": "PushEvent", "actor": {"login": "Friend"}, "repo": {"name": "friend/x"}, "payload": {"size": 2}, "created_at": "t"},
+    ]
+    result = get_recent_activity(FakeClient(events), "me", following=["friend"])
+    assert [r["actor"] for r in result] == ["Friend"]

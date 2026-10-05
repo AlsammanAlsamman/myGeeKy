@@ -110,11 +110,12 @@ class GitHubClient:
             return []
         return resp.json()
 
-    def list_received_events(self, username: str, per_page: int = 30) -> list[dict[str, Any]]:
-        """Public activity from the accounts `username` follows (GitHub's own
-        news-feed data source) -- one cheap call covers everyone you follow,
-        rather than polling each friend's own event stream individually."""
-        resp = self._get(f"/users/{username}/received_events", params={"per_page": per_page})
+    def list_received_events(self, username: str, per_page: int = 30, page: int = 1) -> list[dict[str, Any]]:
+        """GitHub's own news-feed data source. Note it is NOT only the accounts
+        `username` follows: it also carries every event on repos owned by
+        orgs you follow (strangers starring/forking/opening issues there), so
+        callers should filter by actor."""
+        resp = self._get(f"/users/{username}/received_events", params={"per_page": per_page, "page": page})
         if resp.status_code != 200:
             return []
         return resp.json()

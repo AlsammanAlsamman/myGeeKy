@@ -9,7 +9,7 @@ polling every friend's own event stream individually.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterable
 
 from .github_client import GitHubClient
 
@@ -96,13 +96,24 @@ def format_event(event: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def get_recent_activity(client: GitHubClient, username: str, limit: int = 30) -> list[dict[str, Any]]:
-    raw = client.list_received_events(username, per_page=min(max(limit * 2, 30), 100))
+def get_recent_activity(client: GitHubClient, username: str, limit: int = 30,
+                        following: Iterable[str] | None = None,
+                        max_pages: int = 3) -> list[dict[str, Any]]:
+    """`following`, when given, restricts the feed to those actors.
+    received_events also includes strangers' activity on repos of orgs you
+    follow, which is what made random low-follower accounts show up."""
+    allowed = {u.lower() for u in following} if following is not None else None
     formatted: list[dict[str, Any]] = []
-    for event in raw:
-        record = format_event(event)
-        if record:
-            formatted.append(record)
-        if len(formatted) >= limit:
+    for page in range(1, max_pages + 1):
+        raw = client.list_received_events(username, per_page=100, page=page)
+        for event in raw:
+            if allowed is not None and ((event.get("actor") or {}).get("login") or "").lower() not in allowed:
+                continue
+            record = format_event(event)
+            if record:
+                formatted.append(record)
+            if len(formatted) >= limit:
+                return formatted
+        if len(raw) < 100:
             break
     return formatted

@@ -202,6 +202,15 @@ def refresh_contributions(cfg: MyGeekyConfig) -> list[dict[str, Any]] | dict[str
         return {"error": str(exc)}
 
 
+def _followed_only(cache: dict[str, Any]) -> list[dict[str, Any]]:
+    """Caches written before 0.2.3 hold strangers' events too; drop them on read."""
+    following = cache.get("following")
+    if following is None:
+        return cache["events"]
+    allowed = {u.lower() for u in following}
+    return [e for e in cache["events"] if (e.get("actor") or "").lower() in allowed]
+
+
 def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
     if not cfg.github_username:
         return {"events": [], "error": "not configured"}
@@ -215,17 +224,19 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
         except (KeyError, ValueError):
             age_minutes = float("inf")
         if age_minutes < cfg.gui_activity_refresh_minutes:
-            return {"events": cache["events"], "fetched_at": cache["fetched_at"], "cached": True}
+            return {"events": _followed_only(cache), "fetched_at": cache["fetched_at"], "cached": True}
 
     try:
         client = _build_client(cfg)
-        events = get_recent_activity(client, cfg.github_username, limit=cfg.gui_activity_limit)
         # piggybacks on the same rate-limited refresh, so people you follow
-        # from the browser drop out of the suggestions within a few minutes
+        # from the browser drop out of the suggestions within a few minutes;
+        # also restricts the feed to people you actually follow
         following = client.list_following(cfg.github_username)
+        events = get_recent_activity(client, cfg.github_username, limit=cfg.gui_activity_limit,
+                                     following=following)
     except Exception as exc:
         if cache:
-            return {"events": cache["events"], "fetched_at": cache["fetched_at"], "cached": True, "error": str(exc)}
+            return {"events": _followed_only(cache), "fetched_at": cache["fetched_at"], "cached": True, "error": str(exc)}
         return {"events": [], "error": str(exc)}
 
     fetched_at_iso = now.isoformat()

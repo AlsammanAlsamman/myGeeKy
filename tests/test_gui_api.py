@@ -163,7 +163,7 @@ def test_get_activity_uses_cache_within_refresh_window(monkeypatch, tmp_path):
     save_activity_cache([{"actor": "cached-friend"}], datetime.now(timezone.utc).isoformat())
 
     calls = []
-    monkeypatch.setattr(logic, "get_recent_activity", lambda client, username, limit: calls.append(1) or [])
+    monkeypatch.setattr(logic, "get_recent_activity", lambda client, username, limit, following=None: calls.append(1) or [])
 
     result = logic.get_activity(cfg, force=False)
     assert result["cached"] is True
@@ -183,7 +183,7 @@ def test_get_activity_force_bypasses_cache(monkeypatch, tmp_path):
             return ["NewFollow"]
 
     monkeypatch.setattr(logic, "_build_client", lambda cfg: FakeClient())
-    monkeypatch.setattr(logic, "get_recent_activity", lambda client, username, limit: [{"actor": "fresh-friend"}])
+    monkeypatch.setattr(logic, "get_recent_activity", lambda client, username, limit, following=None: [{"actor": "fresh-friend"}])
 
     result = logic.get_activity(cfg, force=True)
     assert result["cached"] is False
@@ -281,3 +281,15 @@ def test_suggestions_auto_refresh_due(monkeypatch, tmp_path):
     assert logic.suggestions_auto_refresh_due(cfg, now=later) is True
     cfg.gui_suggestions_auto_refresh_hours = 0
     assert logic.suggestions_auto_refresh_due(cfg, now=later) is False
+
+
+def test_get_activity_cache_drops_unfollowed_actors(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    cfg = MyGeekyConfig(github_username="me", gui_activity_refresh_minutes=60)
+
+    from mygeeky.storage import save_activity_cache
+    save_activity_cache([{"actor": "Friend"}, {"actor": "stranger"}],
+                        datetime.now(timezone.utc).isoformat(), ["friend"])
+
+    result = logic.get_activity(cfg, force=False)
+    assert result["events"] == [{"actor": "Friend"}]
