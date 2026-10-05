@@ -225,6 +225,8 @@ code anywhere. You open the repo, fork it, and send the PR yourself.
 
 ## Your field's repos as a market board (`mygeeky market`)
 
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="300" align="right" alt="Market tab">
+
 Not repos to contribute to — the projects your field actually runs on,
 ranked like a stock board by **momentum**:
 
@@ -264,6 +266,8 @@ mygeeky market --json       # for scripts / AI agents
 About 3 GitHub API calls per repo, once a day. In the panel it's the
 **Market** tab, refreshed in the background when it's older than
 `market_refresh_hours` (default 12).
+
+<br clear="right">
 
 ## Your profile: CV + GitHub + ORCID/OpenAlex + Google Scholar
 
