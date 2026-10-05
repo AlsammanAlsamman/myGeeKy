@@ -159,3 +159,34 @@ def test_panel_fits_its_screen_expanded_and_folds_to_a_small_tab(qapp, monkeypat
         for w in list(panel._workers):
             w.wait(2000)
         panel.deleteLater()
+
+
+def test_model_tab_renders_history_and_weights(qapp, monkeypatch):
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+
+    history = [{"timestamp": "2026-10-01T10:00:00+00:00", "n_train": 100, "n_pos": 10, "auc": 0.70},
+               {"timestamp": "2026-10-02T10:00:00+00:00", "n_train": 120, "n_pos": 15, "auc": 0.81}]
+    monkeypatch.setattr(logic, "get_contributions", lambda cfg: [])
+    monkeypatch.setattr(logic, "get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []})
+    monkeypatch.setattr(logic, "get_activity", lambda cfg, force=False: {"events": []})
+    monkeypatch.setattr(logic, "get_model_history", lambda: history)
+    monkeypatch.setattr(logic, "get_model_weights", lambda: [
+        {"feature": "follow_back_ratio", "label": "Follows people back", "weight": 1.2}])
+    monkeypatch.setattr(logic, "get_friend_stats", lambda cfg: {
+        "total_friends": 0, "new_this_week": 0, "follow_back_rate": None, "total_labeled": 0})
+
+    panel = MyGeekyPanel(MyGeekyConfig())
+    try:
+        panel._switch_tab("model")
+        assert panel.model_grade_label.text() == "Sharp"
+        assert "+0.110" in panel.model_delta_label.text()
+        panel.model_tiles["rate"].set_value(12.5, lambda v: f"{v:.0f}%")
+        assert panel.model_tiles["rate"].value_label.text() == "12%"
+        panel.chart.resize(300, 150)
+        panel.chart.grab()  # paints without raising, hover tooltip included
+        panel.chart._hover = 1
+        panel.chart.grab()
+    finally:
+        panel.ticker.stop()

@@ -273,6 +273,46 @@ def get_model_history() -> list[dict[str, Any]]:
     return load_model_history()
 
 
+FEATURE_LABELS = {
+    "content_similarity": "Content match",
+    "follow_back_ratio": "Follows people back",
+    "activity_recency": "Recently active",
+    "shared_languages": "Shared languages",
+    "shared_topics": "Shared topics",
+}
+
+
+def get_model_weights() -> list[dict[str, Any]]:
+    """What the trained model rewards (+) and penalizes (-): the logistic
+    regression's coefficients on standardized features, so their sizes are
+    comparable. Empty when no model has been trained yet."""
+    from ..matcher import FEATURE_NAMES, LearnedModel
+
+    model = LearnedModel.load()
+    if not model.is_trained:
+        return []
+    try:
+        coef = model.pipeline[1].coef_[0]
+    except (AttributeError, IndexError, TypeError):
+        return []
+    weights = [{"feature": name, "label": FEATURE_LABELS.get(name, name), "weight": float(c)}
+               for name, c in zip(FEATURE_NAMES, coef)]
+    return sorted(weights, key=lambda w: abs(w["weight"]), reverse=True)
+
+
+def auc_verdict(auc: float | None) -> tuple[str, str]:
+    """(short grade, one-line explanation) for a cross-validated AUC."""
+    if auc is None:
+        return "Untrained", "Run mygeeky bootstrap to teach it who follows back."
+    if auc >= 0.8:
+        return "Sharp", "Reliably tells who will follow you back."
+    if auc >= 0.7:
+        return "Good", "Clearly better than chance at spotting follow-backs."
+    if auc >= 0.6:
+        return "Learning", "Some signal -- more follow-backs will sharpen it."
+    return "Early", "Barely above a coin flip; keep running mygeeky learn."
+
+
 def get_friend_stats(cfg: MyGeekyConfig) -> dict[str, Any]:
     """Friend-count and follow-back stats for the Live tab -- built entirely
     from local data already on disk (the last following snapshot and the

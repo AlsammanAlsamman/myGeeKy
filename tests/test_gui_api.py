@@ -317,3 +317,30 @@ def test_get_activity_merges_profile_matches(monkeypatch, tmp_path):
     result = logic.get_activity(cfg, force=True)
     assert asked == [["geek"]]  # people you already follow aren't fetched twice
     assert [(e["actor"], e["source"]) for e in result["events"]] == [("geek", "match"), ("friend", "following")]
+
+
+def test_get_model_weights_reads_trained_coefficients(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    from mygeeky.matcher import FEATURE_NAMES, LearnedModel
+    import mygeeky.matcher as matcher
+
+    monkeypatch.setattr(matcher, "MODEL_FILE", tmp_path / "model.pkl")
+    assert logic.get_model_weights() == []
+
+    model = LearnedModel()
+    X = [[i / 10, 1 - i / 10, 0.5, 0.2, 0.1] for i in range(10)]
+    y = [0] * 5 + [1] * 5
+    assert model.train(X, y)
+    model.save()
+
+    weights = logic.get_model_weights()
+    assert {w["feature"] for w in weights} == set(FEATURE_NAMES)
+    assert weights[0]["feature"] in {"content_similarity", "follow_back_ratio"}  # the informative ones lead
+
+
+def test_auc_verdict_grades():
+    assert logic.auc_verdict(0.85)[0] == "Sharp"
+    assert logic.auc_verdict(0.767)[0] == "Good"
+    assert logic.auc_verdict(0.65)[0] == "Learning"
+    assert logic.auc_verdict(0.52)[0] == "Early"
+    assert logic.auc_verdict(None)[0] == "Untrained"

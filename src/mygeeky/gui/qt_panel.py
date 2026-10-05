@@ -5,6 +5,7 @@ requiring PySide6 to be importable."""
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ from PySide6.QtCore import (
     QSize,
     QThread,
     QTimer,
+    QVariantAnimation,
     Signal,
 )
 from PySide6.QtGui import (
@@ -264,15 +266,282 @@ class AvatarLoader:
         worker.start()
 
 
-class TrendChart(QWidget):
-    """Hand-drawn AUC-over-time line chart -- no charting dependency needed."""
+def _auc_color(auc: float | None) -> QColor:
+    """Grade colour shared by the gauge and the verdict chip."""
+    if auc is None:
+        return QColor("#9ca3af")
+    if auc >= 0.8:
+        return QColor("#34d399")
+    if auc >= 0.7:
+        return QColor("#60a5fa")
+    if auc >= 0.6:
+        return QColor("#fbbf24")
+    return QColor("#f87171")
+
+
+class _Pulse:
+    """A slow 0..1..0 breathing phase that only ticks while the widget is
+    visible, so the idle panel costs no CPU."""
+
+    def __init__(self, widget: QWidget, period_ms: int = 2400) -> None:
+        self._widget = widget
+        self._period = period_ms
+        self._t = 0
+        self._timer = QTimer(widget)
+        self._timer.setInterval(40)
+        self._timer.timeout.connect(self._tick)
+
+    def _tick(self) -> None:
+        self._t = (self._t + 40) % self._period
+        self._widget.update()
+
+    @property
+    def phase(self) -> float:
+        return 0.5 - 0.5 * math.cos(2 * math.pi * self._t / self._period)
+
+    def start(self) -> None:
+        self._timer.start()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+
+def _grow_animation(owner: QWidget, setter: Callable[[float], None], ms: int = 900) -> QVariantAnimation:
+    anim = QVariantAnimation(owner)
+    anim.setStartValue(0.0)
+    anim.setEndValue(1.0)
+    anim.setDuration(ms)
+    anim.setEasingCurve(QEasingCurve.OutCubic)
+    anim.valueChanged.connect(lambda v: setter(float(v)))
+    return anim
+
+
+def _short_date(entry: dict[str, Any]) -> str:
+    try:
+        return datetime.fromisoformat(entry.get("timestamp", "")).strftime("%b %d")
+    except (TypeError, ValueError):
+        return ""
+
+
+class AucGauge(QWidget):
+    """Ring gauge for the cross-validated AUC: sweeps in when played and
+    softly glows, coloured by grade."""
+
+    def __init__(self, size: int = 112) -> None:
+        super().__init__()
+        self.setFixedSize(size, size)
+        self._auc: float | None = None
+        self._progress = 1.0
+        self._text_color = QColor("#f0f0f5")
+        self._pulse = _Pulse(self)
+        self._anim = _grow_animation(self, self._set_progress, 1100)
+
+    def _set_progress(self, v: float) -> None:
+        self._progress = v
+        self.update()
+
+    def set_theme_colors(self, text_color: str) -> None:
+        self._text_color = QColor(text_color)
+        self.update()
+
+    def set_auc(self, auc: float | None) -> None:
+        self._auc = auc
+        self.update()
+
+    def play(self) -> None:
+        self._anim.stop()
+        self._anim.start()
+
+    def showEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        self._pulse.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        self._pulse.stop()
+        super().hideEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        side = min(self.width(), self.height())
+        ring = QRectF(12, 12, side - 24, side - 24)
+        color = _auc_color(self._auc)
+
+        track = QColor(self._text_color)
+        track.setAlpha(28)
+        painter.setPen(QPen(track, 9, Qt.SolidLine, Qt.RoundCap))
+        painter.drawArc(ring, 0, 360 * 16)
+
+        if self._auc is not None:
+            span = -int(360 * 16 * max(0.0, min(1.0, self._auc)) * self._progress)
+            glow = QColor(color)
+            glow.setAlpha(int(35 + 55 * self._pulse.phase))
+            painter.setPen(QPen(glow, 17, Qt.SolidLine, Qt.RoundCap))
+            painter.drawArc(ring, 90 * 16, span)
+            painter.setPen(QPen(color, 9, Qt.SolidLine, Qt.RoundCap))
+            painter.drawArc(ring, 90 * 16, span)
+
+        value = "–" if self._auc is None else f"{self._auc * self._progress:.3f}"
+        font = painter.font()
+        font.setPixelSize(22)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(self._text_color)
+        painter.drawText(QRectF(0, side / 2 - 18, side, 26), Qt.AlignCenter, value)
+        font.setPixelSize(10)
+        font.setBold(False)
+        painter.setFont(font)
+        muted = QColor(self._text_color)
+        muted.setAlpha(150)
+        painter.setPen(muted)
+        painter.drawText(QRectF(0, side / 2 + 8, side, 14), Qt.AlignCenter, "AUC")
+        painter.end()
+
+
+class StatTile(QFrame):
+    """A small number + caption tile whose number counts up when played."""
+
+    def __init__(self, caption: str) -> None:
+        super().__init__()
+        self.setObjectName("statTile")
+        box = QVBoxLayout(self)
+        box.setContentsMargins(8, 6, 8, 6)
+        box.setSpacing(0)
+        self.value_label = QLabel("–")
+        self.caption_label = QLabel(caption)
+        box.addWidget(self.value_label)
+        box.addWidget(self.caption_label)
+        self._target = 0.0
+        self._fmt: Callable[[float], str] = lambda v: f"{v:.0f}"
+        self._anim = _grow_animation(self, self._render, 1000)
+
+    def set_value(self, value: float, fmt: Callable[[float], str] | None = None) -> None:
+        self._target = value
+        if fmt:
+            self._fmt = fmt
+        self._render(1.0)
+
+    def _render(self, progress: float) -> None:
+        self.value_label.setText(self._fmt(self._target * progress))
+
+    def play(self) -> None:
+        self._anim.stop()
+        self._anim.start()
+
+    def apply_theme(self, theme: dict[str, Any]) -> None:
+        self.setStyleSheet(f"QFrame#statTile {{ background:{theme['card_bg']}; border-radius:10px; }}")
+        self.value_label.setStyleSheet(
+            f"color:{theme['text']}; font-size:16px; font-weight:600; background:transparent;")
+        self.caption_label.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+
+
+class WeightBars(QWidget):
+    """Diverging bars of what the model rewards (right) and penalizes
+    (left), growing out from a centre line when played."""
+
+    ROW = 24
 
     def __init__(self) -> None:
         super().__init__()
-        self.setMinimumHeight(120)
+        self._weights: list[dict[str, Any]] = []
+        self._progress = 1.0
+        self._text_color = QColor("#f0f0f5")
+        self._accent = QColor("#7fd8ff")
+        self._anim = _grow_animation(self, self._set_progress, 1000)
+        self.setFixedHeight(self.ROW + 4)
+
+    def _set_progress(self, v: float) -> None:
+        self._progress = v
+        self.update()
+
+    def set_theme_colors(self, text_color: str, accent_color: str) -> None:
+        self._text_color = QColor(text_color)
+        self._accent = QColor(accent_color)
+        self.update()
+
+    def set_weights(self, weights: list[dict[str, Any]]) -> None:
+        self._weights = weights
+        self.setFixedHeight(max(1, len(weights)) * self.ROW + 4)
+        self.update()
+
+    def play(self) -> None:
+        self._anim.stop()
+        self._anim.start()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        muted = QColor(self._text_color)
+        muted.setAlpha(150)
+        font = painter.font()
+        font.setPixelSize(11)
+        painter.setFont(font)
+        if not self._weights:
+            painter.setPen(muted)
+            painter.drawText(QRectF(self.rect()), Qt.AlignLeft | Qt.AlignVCenter, "No trained model yet.")
+            painter.end()
+            return
+
+        w = self.width()
+        label_w = w * 0.42
+        mid = label_w + (w - label_w) / 2
+        half = (w - label_w) / 2 - 34
+        biggest = max(abs(x["weight"]) for x in self._weights) or 1.0
+        negative = QColor("#f87171")
+
+        for i, item in enumerate(self._weights):
+            y = i * self.ROW + 2
+            positive = item["weight"] >= 0
+            painter.setPen(self._text_color)
+            painter.drawText(QRectF(0, y, label_w - 6, self.ROW), Qt.AlignLeft | Qt.AlignVCenter, item["label"])
+            length = half * abs(item["weight"]) / biggest * self._progress
+            color = QColor(self._accent if positive else negative)
+            faded = QColor(color)
+            faded.setAlpha(110)
+            grad = QLinearGradient(mid, 0, mid + length if positive else mid - length, 0)
+            grad.setColorAt(0, faded)
+            grad.setColorAt(1, color)
+            bar = QRectF(mid, y + 6, length, self.ROW - 12) if positive \
+                else QRectF(mid - length, y + 6, length, self.ROW - 12)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(grad))
+            painter.drawRoundedRect(bar, 4, 4)
+            painter.setPen(muted)
+            text = f"{item['weight']:+.2f}"
+            if positive:
+                painter.drawText(QRectF(bar.right() + 4, y, 40, self.ROW), Qt.AlignLeft | Qt.AlignVCenter, text)
+            else:
+                painter.drawText(QRectF(bar.left() - 44, y, 40, self.ROW), Qt.AlignRight | Qt.AlignVCenter, text)
+
+        axis = QColor(self._text_color)
+        axis.setAlpha(60)
+        painter.setPen(QPen(axis, 1))
+        painter.drawLine(QPointF(mid, 0), QPointF(mid, self.height()))
+        painter.end()
+
+
+class TrendChart(QWidget):
+    """Hand-drawn AUC-over-time chart -- no charting dependency needed. A
+    smooth line over faint training-set-size bars, a zoomed y-axis with the
+    coin-flip line, a pulsing newest point, a draw-in animation and a hover
+    tooltip."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setMinimumHeight(150)
+        self.setMouseTracking(True)
+        self._history: list[dict[str, Any]] = []
         self._points: list[float] = []
         self._text_color = QColor("#f0f0f5")
         self._accent_color = QColor("#7fd8ff")
+        self._progress = 1.0
+        self._hover: int | None = None
+        self._pulse = _Pulse(self, 1600)
+        self._anim = _grow_animation(self, self._set_progress, 1200)
+
+    def _set_progress(self, v: float) -> None:
+        self._progress = v
+        self.update()
 
     def set_theme_colors(self, text_color: str, accent_color: str) -> None:
         self._text_color = QColor(text_color)
@@ -280,42 +549,162 @@ class TrendChart(QWidget):
         self.update()
 
     def set_history(self, history: list[dict[str, Any]]) -> None:
-        self._points = [h["auc"] for h in history if h.get("auc") is not None]
+        self._history = [h for h in history if h.get("auc") is not None]
+        self._points = [h["auc"] for h in self._history]
+        self._hover = None
         self.update()
 
-    def paintEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+    def play(self) -> None:
+        self._anim.stop()
+        self._anim.start()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        self._pulse.start()
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        self._pulse.stop()
+        super().hideEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = None
+        self.update()
+
+    def _bounds(self) -> tuple[float, float, float, float, float, float]:
+        left, right, top, bottom = 34.0, 10.0, 12.0, 18.0
+        lo = min(self._points + [0.5]) - 0.03
+        hi = max(self._points) + 0.03
+        if hi - lo < 0.1:
+            hi = lo + 0.1
+        return left, right, top, bottom, max(0.0, lo), min(1.0, hi)
+
+    def _xy(self) -> tuple[list[float], list[float]]:
+        left, right, top, bottom, lo, hi = self._bounds()
+        w, h = self.width(), self.height()
+        n = len(self._points)
+        if n == 1:
+            xs = [left + (w - left - right) / 2]
+        else:
+            xs = [left + (i / (n - 1)) * (w - left - right) for i in range(n)]
+        ys = [top + (1 - (p - lo) / (hi - lo)) * (h - top - bottom) for p in self._points]
+        return xs, ys
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if not self._points:
+            return
+        xs, _ = self._xy()
+        x = event.position().x()
+        self._hover = min(range(len(xs)), key=lambda i: abs(xs[i] - x))
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
+        muted = QColor(self._text_color)
+        muted.setAlpha(140)
+        font = painter.font()
+        font.setPixelSize(10)
+        painter.setFont(font)
 
-        grid_color = QColor(self._text_color)
-        grid_color.setAlpha(30)
-        painter.setPen(QPen(grid_color, 1))
-        for i in range(5):
-            y = h / 4 * i
-            painter.drawLine(0, int(y), w, int(y))
-
-        if len(self._points) < 2:
-            muted = QColor(self._text_color)
-            muted.setAlpha(140)
-            painter.setPen(QPen(muted))
-            painter.drawText(10, h // 2, "Not enough retrains yet to chart a trend")
+        if not self._points:
+            painter.setPen(muted)
+            painter.drawText(QRectF(self.rect()), Qt.AlignCenter, "No retrains yet to chart")
             painter.end()
             return
 
-        pad = 10
-        n = len(self._points)
-        xs = [pad + (i / (n - 1)) * (w - 2 * pad) for i in range(n)]
-        ys = [h - pad - max(0.0, min(1.0, p)) * (h - 2 * pad) for p in self._points]
+        left, right, top, bottom, lo, hi = self._bounds()
+        plot_h = h - top - bottom
+        grid = QColor(self._text_color)
+        grid.setAlpha(26)
+        for k in range(3):
+            v = lo + (hi - lo) * k / 2
+            y = top + (1 - k / 2) * plot_h
+            painter.setPen(QPen(grid, 1))
+            painter.drawLine(QPointF(left, y), QPointF(w - right, y))
+            painter.setPen(muted)
+            painter.drawText(QRectF(0, y - 7, left - 6, 14), Qt.AlignRight | Qt.AlignVCenter, f"{v:.2f}")
 
-        painter.setPen(QPen(self._accent_color, 2))
-        for i in range(n - 1):
-            painter.drawLine(int(xs[i]), int(ys[i]), int(xs[i + 1]), int(ys[i + 1]))
+        if lo <= 0.5 <= hi:  # the coin-flip line the model has to beat
+            y = top + (1 - (0.5 - lo) / (hi - lo)) * plot_h
+            painter.setPen(QPen(muted, 1, Qt.DashLine))
+            painter.drawLine(QPointF(left, y), QPointF(w - right, y))
+            painter.drawText(QRectF(left + 4, y - 14, 80, 12), Qt.AlignLeft, "chance")
 
-        painter.setBrush(self._accent_color)
+        xs, ys = self._xy()
+        n = len(xs)
+
+        # faint bars: how many labelled examples each retrain learned from
+        sizes = [entry.get("n_train") or 0 for entry in self._history]
+        biggest = max(sizes) or 1
+        bar_w = max(4.0, min(18.0, (w - left - right) / n * 0.35))
+        bar_color = QColor(self._accent_color)
+        bar_color.setAlpha(24)
         painter.setPen(Qt.NoPen)
+        painter.setBrush(bar_color)
+        for x, size in zip(xs, sizes):
+            bh = plot_h * 0.45 * size / biggest * self._progress
+            painter.drawRoundedRect(QRectF(x - bar_w / 2, top + plot_h - bh, bar_w, bh), 2, 2)
+
+        painter.save()
+        painter.setClipRect(QRectF(0, 0, left + (w - left - right) * self._progress + 4, h))
+        if n > 1:
+            line = QPainterPath(QPointF(xs[0], ys[0]))
+            for i in range(1, n):
+                cx = (xs[i - 1] + xs[i]) / 2
+                line.cubicTo(QPointF(cx, ys[i - 1]), QPointF(cx, ys[i]), QPointF(xs[i], ys[i]))
+            area = QPainterPath(line)
+            area.lineTo(xs[-1], top + plot_h)
+            area.lineTo(xs[0], top + plot_h)
+            area.closeSubpath()
+            fill = QLinearGradient(0, top, 0, top + plot_h)
+            strong = QColor(self._accent_color)
+            strong.setAlpha(110)
+            clear = QColor(self._accent_color)
+            clear.setAlpha(0)
+            fill.setColorAt(0, strong)
+            fill.setColorAt(1, clear)
+            painter.fillPath(area, QBrush(fill))
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(self._accent_color, 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            painter.drawPath(line)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(self._accent_color)
         for x, y in zip(xs, ys):
             painter.drawEllipse(QPointF(x, y), 3, 3)
+        painter.restore()
+
+        if self._progress >= 0.999:  # the newest retrain breathes
+            phase = self._pulse.phase
+            halo = QColor(self._accent_color)
+            halo.setAlpha(int(150 * (1 - phase)))
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(halo)
+            painter.drawEllipse(QPointF(xs[-1], ys[-1]), 4 + 7 * phase, 4 + 7 * phase)
+            painter.setBrush(self._accent_color)
+            painter.drawEllipse(QPointF(xs[-1], ys[-1]), 4.5, 4.5)
+
+        painter.setPen(muted)
+        painter.drawText(QRectF(left, h - 14, 90, 14), Qt.AlignLeft, _short_date(self._history[0]))
+        if n > 1:
+            painter.drawText(QRectF(w - right - 90, h - 14, 90, 14), Qt.AlignRight, _short_date(self._history[-1]))
+
+        if self._hover is not None and self._hover < n:
+            i = self._hover
+            guide = QColor(self._text_color)
+            guide.setAlpha(70)
+            painter.setPen(QPen(guide, 1, Qt.DotLine))
+            painter.drawLine(QPointF(xs[i], top), QPointF(xs[i], top + plot_h))
+            entry = self._history[i]
+            text = f"AUC {entry['auc']:.3f} · {entry.get('n_train', '?')} examples · {_short_date(entry)}"
+            tw = painter.fontMetrics().horizontalAdvance(text) + 14
+            tx = min(max(xs[i] - tw / 2, 0), w - tw)
+            ty = max(ys[i] - 30, 0)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor(20, 20, 30, 225))
+            painter.drawRoundedRect(QRectF(tx, ty, tw, 20), 6, 6)
+            painter.setPen(QColor("#ffffff"))
+            painter.drawText(QRectF(tx, ty, tw, 20), Qt.AlignCenter, text)
         painter.end()
 
 
@@ -1150,20 +1539,63 @@ class MyGeekyPanel(QWidget):
     def _on_opacity_committed(self) -> None:
         logic.set_opacity(self.cfg, self._slider_to_opacity(self.opacity_slider.value()))
 
-    def _build_model_tab(self) -> QWidget:
+    def _build_model_tab(self) -> QScrollArea:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 4, 0, 0)
+        layout.setContentsMargins(0, 4, 4, 4)
+        layout.setSpacing(10)
+
+        hero = QHBoxLayout()
+        hero.setSpacing(12)
+        self.auc_gauge = AucGauge()
+        hero.addWidget(self.auc_gauge)
+        verdict_box = QVBoxLayout()
+        verdict_box.setSpacing(4)
+        verdict_box.addStretch(1)
+        self.model_grade_label = QLabel("")
         self.model_summary_label = QLabel("Loading…")
         self.model_summary_label.setWordWrap(True)
-        layout.addWidget(self.model_summary_label)
+        self.model_delta_label = QLabel("")
+        for label in (self.model_grade_label, self.model_summary_label, self.model_delta_label):
+            verdict_box.addWidget(label)
+        verdict_box.addStretch(1)
+        hero.addLayout(verdict_box, 1)
+        layout.addLayout(hero)
+
+        tiles = QHBoxLayout()
+        tiles.setSpacing(6)
+        self.model_tiles = {key: StatTile(caption) for key, caption in (
+            ("examples", "examples"), ("positives", "follow-backs"),
+            ("rate", "follow-back rate"), ("retrains", "retrains"))}
+        for tile in self.model_tiles.values():
+            tiles.addWidget(tile, 1)
+        layout.addLayout(tiles)
+
+        self.model_section_labels = [QLabel("WHAT IT HAS LEARNED"), QLabel("GETTING SHARPER?")]
+        layout.addWidget(self.model_section_labels[0])
+        self.weight_bars = WeightBars()
+        layout.addWidget(self.weight_bars)
+        self.weights_hint = QLabel("Right = makes a follow-back more likely; left = less likely.")
+        self.weights_hint.setWordWrap(True)
+        layout.addWidget(self.weights_hint)
+
+        layout.addWidget(self.model_section_labels[1])
         self.chart = TrendChart()
         layout.addWidget(self.chart)
-        note = QLabel("AUC trend across retrains (mygeeky bootstrap / mygeeky learn).")
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        self.model_footer_label = QLabel("")
+        self.model_footer_label.setWordWrap(True)
+        layout.addWidget(self.model_footer_label)
         layout.addStretch(1)
-        return page
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        return scroll
 
     # ------------------------------------------------------------------ theme
     def _theme_name(self) -> str:
@@ -1221,6 +1653,17 @@ class MyGeekyPanel(QWidget):
                 f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
             )
         self.chart.set_theme_colors(theme["text"], theme["accent"])
+        self.auc_gauge.set_theme_colors(theme["text"])
+        self.weight_bars.set_theme_colors(theme["text"], theme["accent"])
+        for tile in self.model_tiles.values():
+            tile.apply_theme(theme)
+        for label in self.model_section_labels:
+            label.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; font-weight:600; "
+                                f"background:transparent;")
+        for label in (self.weights_hint, self.model_footer_label, self.model_delta_label):
+            label.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        self.model_summary_label.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
+        self._style_model_grade()
         self._update_tab_styles()
 
     def _update_tab_styles(self) -> None:
@@ -1459,27 +1902,52 @@ class MyGeekyPanel(QWidget):
         self._render_model(logic.get_model_history())
 
     def _render_model(self, history: list[dict[str, Any]]) -> None:
-        if not history:
-            self.model_summary_label.setText(
-                "No model retrains yet — run mygeeky bootstrap or mygeeky learn."
-            )
-            self.chart.set_history([])
-            return
-        latest = history[-1]
-        prev = history[-2] if len(history) > 1 else None
-        trend = ""
-        if prev and latest.get("auc") is not None and prev.get("auc") is not None:
-            diff = latest["auc"] - prev["auc"]
-            trend = " ▲" if diff > 0.001 else " ▼" if diff < -0.001 else " ●"
-        auc_text = f"{latest['auc']:.3f}" if latest.get("auc") is not None else "n/a"
-        self.model_summary_label.setText(
-            f"Training examples: {latest.get('n_train')} ({latest.get('n_pos')} positive)\n"
-            f"Cross-validated AUC: {auc_text}{trend}"
-        )
+        latest = history[-1] if history else {}
+        prev = history[-2] if len(history) > 1 else {}
+        auc = latest.get("auc")
+        grade, explanation = logic.auc_verdict(auc)
+        self._model_auc = auc
+        self.auc_gauge.set_auc(auc)
+        self.model_grade_label.setText(grade)
+        self.model_summary_label.setText(explanation)
+        self._style_model_grade()
+
+        if auc is not None and prev.get("auc") is not None:
+            diff = auc - prev["auc"]
+            arrow = "▲" if diff > 0.001 else "▼" if diff < -0.001 else "●"
+            self.model_delta_label.setText(f"{arrow} {diff:+.3f} since the previous retrain")
+        else:
+            self.model_delta_label.setText("")
+
+        n_train, n_pos = latest.get("n_train") or 0, latest.get("n_pos") or 0
+        self.model_tiles["examples"].set_value(n_train)
+        self.model_tiles["positives"].set_value(n_pos)
+        self.model_tiles["rate"].set_value(100 * n_pos / n_train if n_train else 0, lambda v: f"{v:.0f}%")
+        self.model_tiles["retrains"].set_value(len(history))
+
+        self.weight_bars.set_weights(logic.get_model_weights())
         self.chart.set_history(history)
+        if latest.get("timestamp"):
+            self.model_footer_label.setText(
+                f"Last retrained {_time_ago(latest['timestamp'])}. Follow people you like, then run "
+                f"mygeeky learn -- every follow-back you get teaches it more. Hover the chart for details.")
+        else:
+            self.model_footer_label.setText("No retrains yet -- run mygeeky bootstrap, then mygeeky learn.")
+
+    def _style_model_grade(self) -> None:
+        color = _auc_color(getattr(self, "_model_auc", None)).name()
+        self.model_grade_label.setStyleSheet(
+            f"color:{color}; font-size:20px; font-weight:700; background:transparent;")
+
+    def _play_model_animations(self) -> None:
+        for widget in (self.auc_gauge, self.weight_bars, self.chart, *self.model_tiles.values()):
+            widget.play()
 
     # ------------------------------------------------------------------ tabs
     def _switch_tab(self, name: str) -> None:
         self.active_tab = name
         self.content_stack.setCurrentIndex(self._tab_order.index(name))
         self._update_tab_styles()
+        if name == "model":  # re-read (it's a local file) and replay the entrance
+            self._load_model_history()
+            self._play_model_animations()
