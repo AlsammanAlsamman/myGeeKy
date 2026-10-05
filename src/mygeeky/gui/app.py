@@ -291,6 +291,36 @@ def group_activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(groups.values())
 
 
+def get_market(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """The saved board -- local only, no network."""
+    from ..market import compute_board, load_state
+    state = load_state()
+    return {"rows": compute_board(state), "updated_at": state.get("updated_at")}
+
+
+def market_refresh_due(cfg: MyGeekyConfig, now: datetime | None = None) -> bool:
+    from ..market import load_state
+    updated = load_state().get("updated_at")
+    if not updated:
+        return True
+    try:
+        age = (now or datetime.now(timezone.utc)) - datetime.fromisoformat(updated)
+    except ValueError:
+        return True
+    return age.total_seconds() >= cfg.market_refresh_hours * 3600
+
+
+def refresh_market(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    if not cfg.github_username:
+        return {"rows": [], "error": "Run `mygeeky init` in a terminal first."}
+    try:
+        from ..cli import _run_market
+        _run_market(cfg, force=force)
+    except Exception as exc:  # surfaced to the panel, not a crash
+        return {**get_market(cfg), "error": str(exc)}
+    return get_market(cfg)
+
+
 def get_model_history() -> list[dict[str, Any]]:
     return load_model_history()
 

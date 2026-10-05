@@ -98,6 +98,7 @@ pip install "mygeeky[gui,pdf]"
 mygeeky init          # GitHub username (required); CV, ORCID, Google Scholar (optional)
 mygeeky run           # who to follow
 mygeeky contribute    # which repos to improve
+mygeeky market        # the "stock race" of your field's repos
 mygeeky gui           # the live panel
 ```
 
@@ -117,6 +118,9 @@ other answer can be skipped and changed later. Details in
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="240" alt="Activity tab"><br><sub><b>Activity</b> — one card per person; click to expand</sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — how good it is, what it learned, and the trend</sub></td>
 <td align="center" valign="middle"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_128.png" width="58" alt="Folded icon"><br><sub><b>Folded</b> — just the icon on the screen edge, half-transparent until you hover it</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="240" alt="Market tab"><br><sub><b>Market</b> — your field's repos as a stock race</sub></td>
 </tr>
 </table>
 
@@ -219,6 +223,48 @@ mygeeky contribute --json   # for scripts / AI agents
 As with people, this only ever *suggests*: there is no fork, PR, or comment
 code anywhere. You open the repo, fork it, and send the PR yourself.
 
+## Your field's repos as a market board (`mygeeky market`)
+
+Not repos to contribute to — the projects your field actually runs on,
+ranked like a stock board by **momentum**:
+
+```bash
+mygeeky market              # snapshot (once a day) + print the board
+mygeeky market --refresh    # snapshot again now
+mygeeky market --last       # print the saved board, no network
+mygeeky market --json       # for scripts / AI agents
+```
+
+```
+#1    +2  bioconda/bioconda-recipes   *1.9k (+31)  752 commits/4wk
+#2   NEW  biotite-dev/biotite         * 976 (+9)   pypi 391.1k/wk +117%  6 commits/4wk
+#3    -1  rgcgithub/regenie           * 270 (+3)   1 commits/4wk
+```
+
+1. **The watchlist** (`market_size`, default 25) is picked weekly by
+   searching GitHub for your profile terms, as text and as topics, among
+   repos with `market_min_stars`+ stars pushed in the last
+   `market_pushed_within_days`. Your terms take turns filling it, so broad
+   ones like "genome" can't crowd out "gwas". Repos only get in when they
+   clearly belong to the field: your terms in their own name/description,
+   or a real share of their topics — not "bioinformatics" as one tag among
+   twenty, not AMD's "SEV-SNP", not awesome-lists, courses or AI-agent
+   tooling borrowing the words. `market_pinned` repos always stay on.
+2. **Signals:** stars (GitHub has no star history for normal tokens, so
+   star momentum builds from myGeeKy's own daily snapshots — "collecting"
+   for the first days), commits over the last 4 weeks (52 weeks of history
+   come at once), and — when the repo publishes a PyPI package whose page
+   links back to it — real PyPI downloads per week and their change, from
+   pypistats.org with mirrors excluded.
+3. **Ranking:** a weighted average of each repo's percentile on the signals
+   it actually has, so tools that aren't on PyPI (PLINK, GATK, …) aren't
+   pushed down for lacking downloads. ▲▼ shows places moved since the last
+   day ranked.
+
+About 3 GitHub API calls per repo, once a day. In the panel it's the
+**Market** tab, refreshed in the background when it's older than
+`market_refresh_hours` (default 12).
+
 ## Your profile: CV + GitHub + ORCID/OpenAlex + Google Scholar
 
 ```bash
@@ -300,6 +346,7 @@ mygeeky suggestions         # re-print the last run's results without re-queryin
 mygeeky bootstrap           # seed the model from accounts you already follow (run once, early)
 mygeeky learn               # check who you followed since last time, learn from who followed back
 mygeeky contribute          # repos you could fork, improve, and get merged
+mygeeky market              # momentum board of the popular, active repos in your field
 mygeeky profile refresh     # re-read your CV + publications (ORCID/OpenAlex)
 mygeeky sync push|pull      # keep your data in your private GitHub repo
 mygeeky pipeline            # sync pull, learn, run, contribute, sync push — the weekly job
@@ -346,6 +393,10 @@ folded tab to expand it; click the arrow to fold it back to a slim strip.
   move up to fill their place. Once the list is empty, the panel searches
   again by itself, but no more often than `gui_suggestions_auto_refresh_hours`
   (default 6; `0` turns it off), to stay well inside GitHub's rate limits.
+- **Market tab** — the `mygeeky market` board: rank, ▲▼ places moved,
+  stars (+ this week), PyPI downloads/week (± change), commits, and a
+  green/red sparkline of weekly downloads (or commits for non-PyPI tools).
+  Click a row to open the repo. It refreshes itself in the background.
 - **Repos tab** — the results of `mygeeky contribute`: repos you could
   improve, each with why it fits you, its top starter issues, and
   **Fork →** / **Open →** buttons. Those buttons only open the GitHub page;
@@ -458,6 +509,10 @@ mygeeky config reset
 | `contribute_min_stars` / `contribute_max_stars` | star range for repo suggestions | `10` / `20000` |
 | `contribute_pushed_within_days` | a suggested repo must have been pushed to this recently | `90` |
 | `contribute_queries` / `contribute_check_top_n` / `contribute_max_returned` | search terms used / repos given the maintainer check / results shown | `10` / `25` / `10` |
+| `market_size` / `market_terms` | repos on the market board / profile terms searched to pick them | `25` / `8` |
+| `market_min_stars` / `market_pushed_within_days` | a board repo needs this many stars and a push this recent | `50` / `180` |
+| `market_pinned` | `owner/repo` always on the board, e.g. `snakemake/snakemake, chrchang/plink-ng` | `[]` |
+| `market_refresh_hours` | the panel re-snapshots the board once it's this old | `12` |
 | `sync_repo` / `sync_auto` | private data repo (set by `sync init`) / whether `pipeline` pulls+pushes | `""` / `true` |
 | `min_training_samples` | labeled examples needed before the ML model kicks in | `8` |
 | `ml_blend_weight` | how much the learned model influences the final score once trained | `0.5` |

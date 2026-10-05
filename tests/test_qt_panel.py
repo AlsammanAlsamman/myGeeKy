@@ -222,3 +222,34 @@ def test_activity_tab_groups_by_person_and_expands(qapp, monkeypatch):
         assert [c for c in cards if c.actor == "geek"][-1].expanded
     finally:
         panel.ticker.stop()
+
+
+def test_market_tab_renders_board(qapp, monkeypatch):
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MarketRow, MyGeekyPanel
+
+    rows = [{"repo": "rgcgithub/regenie", "rank": 1, "movement": 2, "stars": 270, "stars_week": 5,
+             "downloads_week": None, "downloads_change": None, "commits_4w": 3, "spark": [1, 2, 3],
+             "spark_kind": "commits", "url": "u"},
+            {"repo": "scverse/scanpy", "rank": 2, "movement": "new", "stars": 2600, "stars_week": None,
+             "downloads_week": 207000, "downloads_change": -0.1, "commits_4w": 40, "spark": [5, 4, 3],
+             "spark_kind": "downloads", "url": "u2"}]
+    monkeypatch.setattr(logic, "get_contributions", lambda cfg: [])
+    monkeypatch.setattr(logic, "get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []})
+    monkeypatch.setattr(logic, "get_activity", lambda cfg, force=False: {"events": []})
+    monkeypatch.setattr(logic, "get_model_history", lambda: [])
+    monkeypatch.setattr(logic, "get_market", lambda cfg: {"rows": rows, "updated_at": "2026-10-05T00:00:00+00:00"})
+    monkeypatch.setattr(logic, "get_friend_stats", lambda cfg: {
+        "total_friends": 0, "new_this_week": 0, "follow_back_rate": None, "total_labeled": 0})
+
+    panel = MyGeekyPanel(MyGeekyConfig())
+    try:
+        assert panel._tab_order.index("market") == 3
+        panel._switch_tab("market")
+        cards = panel.market_area.parentWidget().findChildren(MarketRow)
+        assert [c.repo for c in cards] == ["rgcgithub/regenie", "scverse/scanpy"]
+        for c in cards:
+            c.grab()  # paints, sparkline included
+    finally:
+        panel.ticker.stop()

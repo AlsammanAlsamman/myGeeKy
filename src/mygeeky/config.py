@@ -31,6 +31,7 @@ ACTIVITY_CACHE_FILE = DATA_DIR / "activity_cache.json"
 CV_TEXT_FILE = DATA_DIR / "cv_text.txt"
 SCHOLAR_PROFILE_FILE = DATA_DIR / "scholar_profile.json"
 CONTRIBUTE_LOG = DATA_DIR / "contribute_history.jsonl"
+MARKET_FILE = DATA_DIR / "market.json"
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
@@ -120,6 +121,14 @@ class MyGeekyConfig:
     contribute_check_top_n: int = 25       # how many top repos get the (costlier) maintainer check
     contribute_max_returned: int = 10
     contribute_extra_terms: list[str] = field(default_factory=list)  # always searched, e.g. ["gwas", "snakemake"]
+
+    # Market: a momentum board of the popular, active repos in your field
+    market_size: int = 25                  # repos on the board
+    market_terms: int = 8                  # profile terms searched to pick them (weekly)
+    market_min_stars: int = 50
+    market_pushed_within_days: int = 180
+    market_pinned: list[str] = field(default_factory=list)  # "owner/repo" always on the board
+    market_refresh_hours: float = 12.0     # panel refreshes the board by itself once it's this old
 
     # Cross-machine sync: your data dir is a clone of a PRIVATE GitHub repo
     # (`mygeeky sync init`). Uses your normal git/gh credentials, never

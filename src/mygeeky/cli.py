@@ -883,6 +883,58 @@ def contribute(as_json: bool, last: bool) -> None:
     _print_contributions(_run_contribute(load_config()), as_json)
 
 
+# --------------------------------------------------------------------------- market
+def _market_terms(client: GitHubClient, cfg: MyGeekyConfig) -> list[str]:
+    from .contribute import search_terms
+    self_profile = _self_profile(client, cfg)
+    vocabulary = build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size)
+    return search_terms(cfg, self_profile, vocabulary,
+                        keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()))
+
+
+def _run_market(cfg: MyGeekyConfig, force: bool = False, log=lambda m: None) -> list[dict]:
+    from .market import compute_board, refresh_market
+    if not cfg.github_username:
+        raise click.ClickException("Run `mygeeky init` first.")
+    client = _client_for(cfg)
+    state = refresh_market(client, cfg, lambda: _market_terms(client, cfg), force=force, log=log)
+    return compute_board(state)
+
+
+def _fmt_count(n: float) -> str:
+    return f"{n / 1000:.1f}k" if n >= 1000 else f"{n:.0f}"
+
+
+@main.command()
+@click.option("--refresh", is_flag=True, help="Take a new snapshot now, even if today's exists.")
+@click.option("--last", is_flag=True, help="Show the saved board without querying GitHub/PyPI.")
+@click.option("--json", "as_json", is_flag=True, help="Print the board as JSON.")
+def market(refresh: bool, last: bool, as_json: bool) -> None:
+    """A momentum board ("stock race") of the popular, active repos in your
+    field: stars gained, commits, PyPI downloads and their trend."""
+    from .market import compute_board, load_state
+    cfg = load_config()
+    rows = compute_board(load_state()) if last else         _run_market(cfg, force=refresh, log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    if as_json:
+        click.echo(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("The board is empty -- run `mygeeky market` (without --last), or add repos with "
+                   "`mygeeky config set market_pinned \"owner/repo, owner/repo\"`.")
+        return
+    for r in rows:
+        move = r["movement"]
+        move_txt = "NEW" if move == "new" else "  -" if not move else f"{'+' if move > 0 else ''}{move}"
+        stars_week = "collecting" if r["stars_week"] is None else f"{r['stars_week']:+d}"
+        line = f"#{r['rank']:<3}{move_txt:>4}  {r['repo']:<40} *{_fmt_count(r['stars']):>6} ({stars_week})"
+        if r["downloads_week"] is not None:
+            change = "" if r["downloads_change"] is None else f" {r['downloads_change'] * 100:+.0f}%"
+            line += f"  pypi {_fmt_count(r['downloads_week'])}/wk{change}"
+        if r["commits_4w"] is not None:
+            line += f"  {r['commits_4w']} commits/4wk"
+        click.echo(line)
+
+
 # --------------------------------------------------------------------------- sync
 @main.group()
 def sync() -> None:

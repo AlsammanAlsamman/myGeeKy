@@ -871,6 +871,143 @@ class ActivityGroup(QFrame):
             self.toggled.emit(self.actor, expanded)
 
 
+UP_COLOR = "#34d399"
+DOWN_COLOR = "#f87171"
+
+
+def _fmt_count(n: float | None) -> str:
+    if n is None:
+        return "–"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1000:
+        return f"{n / 1000:.1f}k"
+    return f"{n:.0f}"
+
+
+class Sparkline(QWidget):
+    """A tiny trend line with a soft fill, green when rising, red when falling."""
+
+    def __init__(self, values: list[float], trend: str | None = None, width: int = 64, height: int = 22) -> None:
+        super().__init__()
+        self.setFixedSize(width, height)
+        self._values = [float(v) for v in values]
+        self._trend = trend
+
+    def paintEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        if len(self._values) < 2:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        lo, hi = min(self._values), max(self._values)
+        span = (hi - lo) or 1.0
+        n = len(self._values)
+        pts = [QPointF(2 + i * (w - 4) / (n - 1), h - 2 - (v - lo) / span * (h - 4))
+               for i, v in enumerate(self._values)]
+        if self._trend is None:
+            color = QColor(150, 150, 165)  # no comparable period: neutral
+        else:
+            color = QColor(UP_COLOR if self._trend == "up" else DOWN_COLOR)
+        line = QPainterPath(pts[0])
+        for p in pts[1:]:
+            line.lineTo(p)
+        area = QPainterPath(line)
+        area.lineTo(pts[-1].x(), h)
+        area.lineTo(pts[0].x(), h)
+        area.closeSubpath()
+        fill = QColor(color)
+        fill.setAlpha(45)
+        painter.fillPath(area, fill)
+        painter.setPen(QPen(color, 1.6, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawPath(line)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawEllipse(pts[-1], 2.2, 2.2)
+        painter.end()
+
+
+class MarketRow(QFrame):
+    """One repo on the board: rank, movement since the last ranked day,
+    name, stars (+ this week), PyPI downloads/week (+ change), commits and a
+    sparkline. Clicking opens the repo."""
+
+    def __init__(self, row: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 loader: "AvatarLoader | None" = None) -> None:
+        super().__init__()
+        self.setObjectName("marketRow")
+        self.repo = row.get("repo", "")
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(8, 6, 8, 6)
+        outer.setSpacing(8)
+
+        rank_box = QVBoxLayout()
+        rank_box.setSpacing(0)
+        rank = QLabel(f"#{row.get('rank', '?')}")
+        rank.setAlignment(Qt.AlignCenter)
+        rank.setStyleSheet(f"color:{theme['text']}; font-size:12px; font-weight:700; background:transparent;")
+        rank_box.addWidget(rank)
+        move = row.get("movement")
+        if move == "new":
+            move_text, move_color = "NEW", theme["accent"]
+        elif isinstance(move, int) and move > 0:
+            move_text, move_color = f"▲{move}", UP_COLOR
+        elif isinstance(move, int) and move < 0:
+            move_text, move_color = f"▼{-move}", DOWN_COLOR
+        else:
+            move_text, move_color = "–", theme["muted"]
+        move_label = QLabel(move_text)
+        move_label.setAlignment(Qt.AlignCenter)
+        move_label.setStyleSheet(f"color:{move_color}; font-size:9.5px; font-weight:600; background:transparent;")
+        rank_box.addWidget(move_label)
+        rank_holder = QWidget()
+        rank_holder.setLayout(rank_box)
+        rank_holder.setFixedWidth(30)
+        outer.addWidget(rank_holder)
+
+        owner, _, name = self.repo.partition("/")
+        outer.addWidget(_avatar_widget(owner or "?", row.get("avatar", ""), 26, loader))
+
+        body = QVBoxLayout()
+        body.setSpacing(1)
+        title = QLabel(f"<b>{name}</b> <span style='color:{theme['muted']}'>{owner}</span>")
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        title.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
+        title.setToolTip(row.get("description", ""))
+        body.addWidget(title)
+
+        bits = [f"★ {_fmt_count(row.get('stars'))}"]
+        stars_week = row.get("stars_week")
+        if stars_week:
+            color = UP_COLOR if stars_week > 0 else DOWN_COLOR
+            bits[0] += f" <span style='color:{color}'>{stars_week:+d}</span>"
+        if row.get("downloads_week") is not None:
+            dl = f"↓ {_fmt_count(row['downloads_week'])}/wk"
+            change = row.get("downloads_change")
+            if change is not None:
+                color = UP_COLOR if change >= 0 else DOWN_COLOR
+                dl += f" <span style='color:{color}'>{'▲' if change >= 0 else '▼'}{abs(change) * 100:.0f}%</span>"
+            bits.append(dl)
+        if row.get("commits_4w") is not None:
+            bits.append(f"{row['commits_4w']} commits/4wk")
+        stats = QLabel(" · ".join(bits))
+        stats.setWordWrap(True)
+        stats.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        stats.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        body.addWidget(stats)
+        outer.addLayout(body, 1)
+
+        spark = Sparkline(row.get("spark") or [], row.get("trend"))
+        spark.setToolTip("weekly PyPI downloads" if row.get("spark_kind") == "downloads" else "weekly commits")
+        outer.addWidget(spark, 0, Qt.AlignVCenter)
+
+        self.setStyleSheet(f"QFrame#marketRow {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"QFrame#marketRow:hover {{ background:{theme['btn_bg']}; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        url = row.get("url", "")
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
 class _ClickableLabel(QLabel):
     """A word-wrapping label that acts like a link button."""
 
@@ -1296,6 +1433,7 @@ class MyGeekyPanel(QWidget):
         self._expanded_actors: set[str] = set()  # kept across refreshes
         self._last_suggestions: list[dict[str, Any]] = []
         self._contrib_running = False
+        self._market_running = False
         self._sugg_running = False
 
         self.setWindowTitle("myGeeKy")
@@ -1322,6 +1460,7 @@ class MyGeekyPanel(QWidget):
         self._load_contributions()
         self._refresh_activity(force=False)
         self._load_model_history()
+        self._load_market()
         self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
 
         self._activity_timer = QTimer(self)
@@ -1330,6 +1469,12 @@ class MyGeekyPanel(QWidget):
 
         # every 10 minutes (and once now): search again if the list ran empty
         # and the last search is old enough -- see suggestions_auto_refresh_due
+        # the board snapshots once a day; check hourly (and once now) whether it's due
+        self._market_timer = QTimer(self)
+        self._market_timer.timeout.connect(self._maybe_refresh_market)
+        self._market_timer.start(60 * 60_000)
+        QTimer.singleShot(20_000, self._maybe_refresh_market)
+
         self._sugg_timer = QTimer(self)
         self._sugg_timer.timeout.connect(self._maybe_auto_refresh_suggestions)
         self._sugg_timer.start(10 * 60_000)
@@ -1396,8 +1541,8 @@ class MyGeekyPanel(QWidget):
 
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
-        for name, label in (("live", "Live"), ("suggestions", "Suggestions"),
-                             ("repos", "Repos"), ("activity", "Activity"), ("model", "Model")):
+        for name, label in (("live", "Live"), ("suggestions", "Suggestions"), ("repos", "Repos"),
+                             ("market", "Market"), ("activity", "Activity"), ("model", "Model")):
             btn = QPushButton(label)
             # Qt's Windows style gives every push button a ~75px minimum width;
             # five of those made the panel wider than gui_expanded_width.
@@ -1405,16 +1550,18 @@ class MyGeekyPanel(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
-            tabs_row.addWidget(btn)
+            # width follows the label, so six tabs still fit the narrow panel
+            tabs_row.addWidget(btn, len(label) + 3)
         panel_layout.addLayout(tabs_row)
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
 
-        self._tab_order = ["live", "suggestions", "repos", "activity", "model"]
+        self._tab_order = ["live", "suggestions", "repos", "market", "activity", "model"]
         self.content_stack.addWidget(self._build_live_tab())
         self.content_stack.addWidget(self._build_suggestions_tab())
         self.content_stack.addWidget(self._build_repos_tab())
+        self.content_stack.addWidget(self._build_market_tab())
         self.content_stack.addWidget(self._build_activity_tab())
         self.content_stack.addWidget(self._build_model_tab())
 
@@ -1526,6 +1673,41 @@ class MyGeekyPanel(QWidget):
         # Same opaque-viewport workaround as the Suggestions tab.
         scroll.viewport().setAutoFillBackground(False)
         scroll.viewport().setStyleSheet("background: transparent;")
+        page.setAutoFillBackground(False)
+        return scroll
+
+    def _build_market_tab(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 4, 0)
+
+        actions_row = QHBoxLayout()
+        self.market_updated_label = QLabel("")
+        self.refresh_market_btn = QPushButton("Refresh")
+        self.refresh_market_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_market_btn.clicked.connect(lambda: self._refresh_market(force=True))
+        actions_row.addWidget(self.market_updated_label, 1)
+        actions_row.addWidget(self.refresh_market_btn)
+        layout.addLayout(actions_row)
+        self.market_hint = QLabel("The popular, active repos in your field, ranked by momentum: stars gained, "
+                                  "commits and PyPI downloads. ▲▼ = places moved since the last day ranked.")
+        self.market_hint.setWordWrap(True)
+        layout.addWidget(self.market_hint)
+
+        market_container = QWidget()
+        self.market_area = QVBoxLayout(market_container)
+        self.market_area.setContentsMargins(0, 0, 0, 0)
+        self.market_area.setSpacing(6)
+        layout.addWidget(market_container)
+        layout.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
         page.setAutoFillBackground(False)
         return scroll
 
@@ -1741,7 +1923,7 @@ class MyGeekyPanel(QWidget):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{SWATCH_GRADIENTS[name]}; border-radius:7px; border:{border}; }}"
             )
-        for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_act_btn):
+        for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_market_btn, self.refresh_act_btn):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
                 f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
@@ -1767,13 +1949,14 @@ class MyGeekyPanel(QWidget):
             bg = theme["tab_active"] if active else theme["card_bg"]
             btn.setStyleSheet(
                 f"QPushButton {{ background:{bg}; color:{theme['text']}; border:none; "
-                f"border-radius:8px; padding:6px 0; font-size:11.5px; }}"
+                f"border-radius:8px; padding:6px 0; font-size:11px; }}"
             )
 
     def _on_theme_clicked(self, name: str) -> None:
         if logic.set_theme(self.cfg, name):
             self._apply_theme()
             self._render_suggestions_from_cache()
+            self._load_market()
 
     def _render_suggestions_from_cache(self) -> None:
         # Re-render already-loaded cards so their theme-dependent styling updates too.
@@ -1991,6 +2174,50 @@ class MyGeekyPanel(QWidget):
             self._expanded_actors.add(actor.lower())
         else:
             self._expanded_actors.discard(actor.lower())
+
+    # ------------------------------------------------------------------ market
+    def _load_market(self) -> None:
+        self._render_market(logic.get_market(self.cfg))
+
+    def _maybe_refresh_market(self) -> None:
+        if logic.market_refresh_due(self.cfg):
+            self._refresh_market(force=False)
+
+    def _refresh_market(self, force: bool) -> None:
+        if self._market_running:
+            return  # a snapshot is already running; it takes a few minutes
+        self._market_running = True
+        self.refresh_market_btn.setEnabled(False)
+        self.market_updated_label.setText("updating… (a few minutes)")
+        self._run_async(lambda: logic.refresh_market(self.cfg, force=force), self._on_market_ready)
+
+    def _on_market_ready(self, data: Any) -> None:
+        self._market_running = False
+        self.refresh_market_btn.setEnabled(True)
+        self._render_market(data or {})
+
+    def _render_market(self, data: dict[str, Any]) -> None:
+        theme = THEMES[self._theme_name()]
+        rows = data.get("rows") or []
+        _clear_layout(self.market_area)
+        if data.get("error") or not rows:
+            msg = QLabel(data.get("error") or "No board yet — it builds itself in the background "
+                                              "(or click Refresh). The first run takes a few minutes.")
+            msg.setWordWrap(True)
+            msg.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            self.market_area.addWidget(msg)
+        for row in rows:
+            self.market_area.addWidget(MarketRow(row, theme, logic.open_profile, self.avatar_loader))
+        collecting = rows and all(r.get("stars_week") is None for r in rows)
+        self.market_hint.setText(
+            "The popular, active repos in your field, ranked by momentum: stars gained, commits and PyPI "
+            "downloads. ▲▼ = places moved since the last day ranked."
+            + (" Star gains appear once there's a day of snapshots." if collecting else ""))
+        updated = data.get("updated_at")
+        if not self._market_running:
+            self.market_updated_label.setText("updated " + _time_ago(updated) if updated else "")
+        self.market_hint.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        self.market_updated_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
 
     # ------------------------------------------------------------------ live spotlight ticker
     def _update_live_ticker(self) -> None:
