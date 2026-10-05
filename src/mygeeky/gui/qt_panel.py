@@ -377,7 +377,10 @@ class ActivityItem(QFrame):
         text_label.setWordWrap(True)
         text_label.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
         body.addWidget(text_label)
-        time_label = QLabel(_time_ago(event.get("created_at", "")))
+        when = _time_ago(event.get("created_at", ""))
+        if event.get("source") == "match":
+            when += " · matches your profile"
+        time_label = QLabel(when)
         time_label.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
         body.addWidget(time_label)
         row.addLayout(body, 1)
@@ -1428,7 +1431,7 @@ class MyGeekyPanel(QWidget):
         events = (data or {}).get("events") or []
         _clear_layout(self.activity_area)
         if not events:
-            empty = QLabel("No recent activity from people you follow yet.")
+            empty = QLabel("No recent activity from people you follow or your profile matches yet.")
             empty.setWordWrap(True)
             empty.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
             self.activity_area.addWidget(empty)

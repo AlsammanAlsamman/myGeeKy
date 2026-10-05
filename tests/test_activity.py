@@ -1,4 +1,6 @@
-from mygeeky.activity import format_event, get_recent_activity
+from datetime import datetime, timedelta, timezone
+
+from mygeeky.activity import format_event, get_matched_activity, get_recent_activity
 
 
 def test_format_event_push():
@@ -68,3 +70,25 @@ def test_get_recent_activity_drops_actors_you_do_not_follow():
     ]
     result = get_recent_activity(FakeClient(events), "me", following=["friend"])
     assert [r["actor"] for r in result] == ["Friend"]
+
+
+def test_get_matched_activity_tags_and_drops_old_events():
+    now = datetime.now(timezone.utc)
+    recent = (now - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+    old = (now - timedelta(days=60)).isoformat().replace("+00:00", "Z")
+
+    class Client:
+        def list_user_events(self, username, per_page=30):
+            return [
+                {"type": "PushEvent", "actor": {"login": username}, "repo": {"name": f"{username}/x"}, "payload": {"size": 1}, "created_at": recent},
+                {"type": "PushEvent", "actor": {"login": username}, "repo": {"name": f"{username}/y"}, "payload": {"size": 1}, "created_at": old},
+            ]
+
+    result = get_matched_activity(Client(), ["geek"])
+    assert [(r["repo"], r["source"]) for r in result] == [("geek/x", "match")]
+
+
+def test_format_push_without_commit_count_names_branch():
+    event = {"type": "PushEvent", "actor": {"login": "a"}, "repo": {"name": "a/x"},
+             "payload": {"ref": "refs/heads/main"}, "created_at": "t"}
+    assert format_event(event)["verb"] == "pushed to 'main'"

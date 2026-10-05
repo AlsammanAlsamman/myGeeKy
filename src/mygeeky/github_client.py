@@ -120,6 +120,13 @@ class GitHubClient:
             return []
         return resp.json()
 
+    def list_user_events(self, username: str, per_page: int = 10) -> list[dict[str, Any]]:
+        """One account's own recent public events."""
+        resp = self._get(f"/users/{username}/events/public", params={"per_page": per_page})
+        if resp.status_code != 200:
+            return []
+        return resp.json()
+
     def is_following(self, source_username: str, target_username: str) -> bool:
         """True if `source_username` follows `target_username` (public, read-only check)."""
         resp = self._get(f"/users/{source_username}/following/{target_username}")

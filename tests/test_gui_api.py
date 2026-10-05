@@ -187,7 +187,7 @@ def test_get_activity_force_bypasses_cache(monkeypatch, tmp_path):
 
     result = logic.get_activity(cfg, force=True)
     assert result["cached"] is False
-    assert result["events"] == [{"actor": "fresh-friend"}]
+    assert result["events"] == [{"actor": "fresh-friend", "source": "following"}]
     from mygeeky.storage import load_activity_cache, load_following_snapshot
     assert load_activity_cache()["following"] == ["NewFollow"]
     assert load_following_snapshot() == set()  # `learn`'s baseline is never touched by the panel
@@ -293,3 +293,27 @@ def test_get_activity_cache_drops_unfollowed_actors(monkeypatch, tmp_path):
 
     result = logic.get_activity(cfg, force=False)
     assert result["events"] == [{"actor": "Friend"}]
+
+
+def test_get_activity_merges_profile_matches(monkeypatch, tmp_path):
+    _isolate_state(monkeypatch, tmp_path)
+    cfg = MyGeekyConfig(github_username="me", gui_activity_match_people=5)
+
+    from mygeeky.storage import log_suggestions
+    log_suggestions([{"username": "geek", "score": 0.9, "list": "domain", "timestamp": "2026-10-01T00:00:00+00:00"},
+                     {"username": "friend", "score": 0.8, "list": "followback", "timestamp": "2026-10-01T00:00:00+00:00"}])
+
+    class FakeClient:
+        def list_following(self, username):
+            return ["friend"]
+
+    asked = []
+    monkeypatch.setattr(logic, "_build_client", lambda cfg: FakeClient())
+    monkeypatch.setattr(logic, "get_recent_activity",
+                        lambda client, username, limit, following=None: [{"actor": "friend", "created_at": "2026-10-02"}])
+    monkeypatch.setattr(logic, "get_matched_activity",
+                        lambda client, logins: asked.append(list(logins)) or [{"actor": "geek", "source": "match", "created_at": "2026-10-03"}])
+
+    result = logic.get_activity(cfg, force=True)
+    assert asked == [["geek"]]  # people you already follow aren't fetched twice
+    assert [(e["actor"], e["source"]) for e in result["events"]] == [("geek", "match"), ("friend", "following")]

@@ -353,9 +353,12 @@ folded tab to expand it; click the arrow to fold it back to a slim strip.
   "Refresh" runs a new repo search only when you click it.
 - **Activity tab** — a live feed of what people you follow are actually
   doing (pushes, merged PRs, new repos, releases, stars...), from GitHub's
-  own events API. Refreshes automatically, but no more often than
-  `gui_activity_refresh_minutes` (default 5) — and that refresh is a single
-  cheap API call, not a full search.
+  own events API, plus the recent activity of your best profile matches
+  (your top `gui_activity_match_people` suggestions, scored against your
+  CV, ORCID and repos), marked "matches your profile". Strangers acting on
+  repos of orgs you follow are filtered out. Refreshes automatically, but no
+  more often than `gui_activity_refresh_minutes` (default 5) — about one API
+  call per matched person, not a full search.
 - **Model tab** — a chart of your learned model's cross-validated AUC and
   training-set size over time, so you can watch it actually improve as you
   run `mygeeky bootstrap`/`learn`.

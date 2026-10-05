@@ -147,6 +147,8 @@ class MyGeekyConfig:
                                                # rotating spotlight is designed to fit this compact height
     gui_activity_refresh_minutes: int = 5     # min minutes between automatic activity-feed refreshes
     gui_activity_limit: int = 30              # how many recent activity events to show
+    gui_activity_match_people: int = 12       # also show activity of this many top suggestions (matched to your
+                                               # CV/ORCID/repos); one API call each per refresh, 0 = followed only
     gui_suggestions_auto_refresh_hours: float = 6.0  # panel searches again by itself once the follow-back list is
                                                # empty and the last search is this old; 0 = only on Refresh click
     gui_theme: str = "midnight"               # "frosted" | "midnight" | "aurora" -- switchable live via the panel's swatch buttons

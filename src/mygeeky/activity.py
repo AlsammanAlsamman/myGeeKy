@@ -9,6 +9,7 @@ polling every friend's own event stream individually.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 from .github_client import GitHubClient
@@ -16,7 +17,11 @@ from .github_client import GitHubClient
 
 def _format_push(payload: dict[str, Any]) -> str:
     n = payload.get("size") or len(payload.get("commits", []) or [])
-    return f"pushed {n} commit{'s' if n != 1 else ''}"
+    if n:
+        return f"pushed {n} commit{'s' if n != 1 else ''}"
+    # GitHub's events API no longer sends commit counts for pushes
+    branch = (payload.get("ref") or "").removeprefix("refs/heads/")
+    return f"pushed to '{branch}'" if branch else "pushed commits"
 
 
 def _format_pull_request(payload: dict[str, Any]) -> str:
@@ -116,4 +121,31 @@ def get_recent_activity(client: GitHubClient, username: str, limit: int = 30,
                 return formatted
         if len(raw) < 100:
             break
+    return formatted
+
+
+def get_matched_activity(client: GitHubClient, logins: Iterable[str], per_person: int = 3,
+                         max_age_days: int = 14) -> list[dict[str, Any]]:
+    """Recent activity of people who match your CV/ORCID/repos (your latest
+    suggestions -- already vetted against your profile and quality gates),
+    each event tagged `source: "match"`. One API call per person; at most
+    `per_person` events each, so one very busy account can't fill the feed."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    formatted: list[dict[str, Any]] = []
+    for login in logins:
+        kept = 0
+        for event in client.list_user_events(login, per_page=30):
+            if kept >= per_person:
+                break
+            record = format_event(event)
+            if not record:
+                continue
+            try:
+                if datetime.fromisoformat(record["created_at"].replace("Z", "+00:00")) < cutoff:
+                    continue
+            except ValueError:
+                continue
+            record["source"] = "match"
+            formatted.append(record)
+            kept += 1
     return formatted

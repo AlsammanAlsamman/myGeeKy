@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .. import auth
-from ..activity import get_recent_activity
+from ..activity import get_matched_activity, get_recent_activity
 from ..cli import _run_contribute, _run_suggestions
 from ..config import MyGeekyConfig, load_config, save_config
 from ..github_client import GitHubClient
@@ -203,12 +203,32 @@ def refresh_contributions(cfg: MyGeekyConfig) -> list[dict[str, Any]] | dict[str
 
 
 def _followed_only(cache: dict[str, Any]) -> list[dict[str, Any]]:
-    """Caches written before 0.2.3 hold strangers' events too; drop them on read."""
+    """Caches written before 0.2.3 hold strangers' events too; drop them on
+    read. Profile-match events were vetted when fetched, so they stay."""
     following = cache.get("following")
     if following is None:
         return cache["events"]
     allowed = {u.lower() for u in following}
-    return [e for e in cache["events"] if (e.get("actor") or "").lower() in allowed]
+    return [e for e in cache["events"]
+            if e.get("source") == "match" or (e.get("actor") or "").lower() in allowed]
+
+
+def _profile_matches(cfg: MyGeekyConfig, following: list[str]) -> list[str]:
+    """Your best-scoring recent suggestions (both lists), i.e. people already
+    matched against your CV, ORCID and repos and past the quality gates.
+    People you follow are skipped -- their activity comes in anyway."""
+    if cfg.gui_activity_match_people <= 0:
+        return []
+    skip = {u.lower() for u in following} | {cfg.github_username.lower()}
+    pool = last_suggestions(cfg.gui_activity_match_people, list_type="domain", exclude=skip)         + last_suggestions(cfg.gui_activity_match_people, list_type="followback", exclude=skip)
+    seen: set[str] = set()
+    picked = []
+    for r in sorted(pool, key=lambda r: r.get("score", 0), reverse=True):
+        name = r.get("username") or ""
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            picked.append(name)
+    return picked[: cfg.gui_activity_match_people]
 
 
 def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
@@ -234,6 +254,11 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
         following = client.list_following(cfg.github_username)
         events = get_recent_activity(client, cfg.github_username, limit=cfg.gui_activity_limit,
                                      following=following)
+        for e in events:
+            e["source"] = "following"
+        events += get_matched_activity(client, _profile_matches(cfg, following))
+        events.sort(key=lambda e: e.get("created_at", ""), reverse=True)
+        events = events[: cfg.gui_activity_limit]
     except Exception as exc:
         if cache:
             return {"events": _followed_only(cache), "fetched_at": cache["fetched_at"], "cached": True, "error": str(exc)}
