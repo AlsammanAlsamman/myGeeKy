@@ -114,8 +114,8 @@ other answer can be skipped and changed later. Details in
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/repos.png" width="240" alt="Repos tab"><br><sub><b>Repos</b> — projects in your field with starter issues</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="240" alt="Activity tab"><br><sub><b>Activity</b> — what people you follow are doing</sub></td>
-<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — how well it predicts follow-backs, over time</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="240" alt="Activity tab"><br><sub><b>Activity</b> — people you follow, plus your best profile matches</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — how good it is, what it learned, and the trend</sub></td>
 <td align="center" valign="middle"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_128.png" width="58" alt="Folded icon"><br><sub><b>Folded</b> — just the icon on the screen edge, half-transparent until you hover it</sub></td>
 </tr>
 </table>
@@ -359,9 +359,11 @@ folded tab to expand it; click the arrow to fold it back to a slim strip.
   repos of orgs you follow are filtered out. Refreshes automatically, but no
   more often than `gui_activity_refresh_minutes` (default 5) — about one API
   call per matched person, not a full search.
-- **Model tab** — a chart of your learned model's cross-validated AUC and
-  training-set size over time, so you can watch it actually improve as you
-  run `mygeeky bootstrap`/`learn`.
+- **Model tab** — an animated ring with your model's cross-validated AUC and
+  a plain-language grade, tiles for examples / follow-backs / follow-back
+  rate / retrains, bars showing what the trained model rewards and
+  penalizes, and a trend chart (hover a point for details) so you can watch
+  it actually improve as you run `mygeeky bootstrap`/`learn`.
 
 **⚙ Settings** — click the small gear icon in the header to open a compact
 panel with:
