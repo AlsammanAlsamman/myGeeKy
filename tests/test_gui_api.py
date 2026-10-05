@@ -344,3 +344,17 @@ def test_auc_verdict_grades():
     assert logic.auc_verdict(0.65)[0] == "Learning"
     assert logic.auc_verdict(0.52)[0] == "Early"
     assert logic.auc_verdict(None)[0] == "Untrained"
+
+
+def test_group_activity_one_entry_per_person_newest_first():
+    events = [
+        {"actor": "geek", "source": "match", "verb": "a", "created_at": "2026-10-01T00:00:00Z"},
+        {"actor": "Friend", "source": "following", "verb": "b", "created_at": "2026-10-03T00:00:00Z"},
+        {"actor": "geek", "source": "match", "verb": "c", "created_at": "2026-10-02T00:00:00Z"},
+        {"actor": "friend", "source": "following", "verb": "d", "created_at": "2026-09-30T00:00:00Z"},
+    ]
+    groups = logic.group_activity(events)
+    assert [g["actor"] for g in groups] == ["Friend", "geek"]
+    assert [e["verb"] for e in groups[1]["events"]] == ["c", "a"]
+    assert [g["source"] for g in groups] == ["following", "match"]
+    assert len(groups[0]["events"]) == 2  # case-insensitive

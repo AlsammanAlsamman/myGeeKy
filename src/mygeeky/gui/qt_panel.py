@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSlider,
     QStackedWidget,
     QVBoxLayout,
@@ -747,36 +748,127 @@ class SuggestionCard(QFrame):
         self.mousePressEvent = lambda ev: on_click(item)  # noqa: ARG005
 
 
-class ActivityItem(QFrame):
-    def __init__(self, event: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
-                 loader: "AvatarLoader | None" = None) -> None:
-        super().__init__()
-        row = QHBoxLayout(self)
-        row.setContentsMargins(0, 6, 0, 6)
-        row.setSpacing(8)
-        row.addWidget(_avatar_widget(event.get("actor", "?"), event.get("actor_avatar", ""), 24, loader))
+class _ActivityRow(QFrame):
+    """One event inside an expanded person card; clicking opens the repo."""
 
-        body = QVBoxLayout()
-        body.setSpacing(2)
-        actor = event.get("actor", "")
+    def __init__(self, event: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+        super().__init__()
+        self.setObjectName("activityRow")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(8, 4, 8, 4)
+        row.setSpacing(8)
         verb = event.get("verb", "")
         repo = event.get("repo", "")
-        text = f"{actor} {verb}" + (f" in {repo}" if repo else "")
-        text_label = QLabel(text)
-        text_label.setWordWrap(True)
-        text_label.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
-        body.addWidget(text_label)
-        when = _time_ago(event.get("created_at", ""))
-        if event.get("source") == "match":
-            when += " · matches your profile"
-        time_label = QLabel(when)
-        time_label.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
-        body.addWidget(time_label)
-        row.addLayout(body, 1)
-
+        text = QLabel(verb + (f" in <b>{repo}</b>" if repo else ""))
+        text.setWordWrap(True)
+        text.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        text.setStyleSheet(f"color:{theme['text']}; font-size:11px; background:transparent;")
+        row.addWidget(text, 1)
+        when = QLabel(_time_ago(event.get("created_at", "")))
+        when.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        row.addWidget(when, 0, Qt.AlignTop)
+        self.setStyleSheet(f"QFrame#activityRow {{ border-radius:6px; }}"
+                           f"QFrame#activityRow:hover {{ background:{theme['btn_bg']}; }}")
         self.setCursor(Qt.PointingHandCursor)
-        profile_url = event.get("profile_url", "")
-        self.mousePressEvent = lambda ev: on_open(profile_url)  # noqa: ARG005
+        url = event.get("repo_url") or event.get("profile_url", "")
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
+class ActivityGroup(QFrame):
+    """One person in the Activity tab: avatar, name, a one-line summary of
+    their latest event and how many there are. Clicking the header expands
+    their full recent activity; the arrow button opens their profile."""
+
+    toggled = Signal(str, bool)
+
+    def __init__(self, group: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 loader: "AvatarLoader | None" = None, expanded: bool = False) -> None:
+        super().__init__()
+        self.setObjectName("activityGroup")
+        self.actor = group.get("actor", "")
+        events = group.get("events") or []
+        latest = events[0] if events else {}
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 7, 8, 7)
+        outer.setSpacing(4)
+
+        self.header = QWidget()
+        self.header.setCursor(Qt.PointingHandCursor)
+        head = QHBoxLayout(self.header)
+        head.setContentsMargins(0, 0, 0, 0)
+        head.setSpacing(8)
+        head.addWidget(_avatar_widget(self.actor or "?", group.get("actor_avatar", ""), 30, loader))
+
+        text_box = QVBoxLayout()
+        text_box.setSpacing(1)
+        name_row = QHBoxLayout()
+        name_row.setSpacing(6)
+        name = QLabel(self.actor)
+        name.setStyleSheet(f"color:{theme['text']}; font-size:12px; font-weight:600; background:transparent;")
+        name_row.addWidget(name)
+        is_match = group.get("source") == "match"
+        tag = QLabel("profile match" if is_match else "following")
+        tag.setStyleSheet(
+            f"color:{theme['text']}; background:{theme['section_btn'] if is_match else theme['btn_bg']}; "
+            f"border-radius:7px; padding:1px 6px; font-size:9.5px;")
+        tag.setFixedHeight(16)
+        name_row.addWidget(tag)
+        name_row.addStretch(1)
+        text_box.addLayout(name_row)
+        summary = latest.get("verb", "")
+        if latest.get("repo"):
+            summary += f" in {latest['repo'].split('/')[-1]}"
+        self.summary_label = QLabel(f"{summary} · {_time_ago(latest.get('created_at', ''))}")
+        self.summary_label.setWordWrap(True)  # long branch names must not widen the card past the panel
+        self.summary_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.summary_label.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        text_box.addWidget(self.summary_label)
+        head.addLayout(text_box, 1)
+
+        count = QLabel(str(len(events)))
+        count.setAlignment(Qt.AlignCenter)
+        count.setMinimumWidth(22)
+        count.setFixedHeight(18)
+        count.setStyleSheet(f"color:{theme['text']}; background:{theme['btn_bg']}; border-radius:9px; "
+                            f"padding:1px 6px; font-size:10.5px; font-weight:600;")
+        count.setToolTip(f"{len(events)} recent update{'s' if len(events) != 1 else ''}")
+        head.addWidget(count)
+        self.chevron = QLabel()
+        self.chevron.setStyleSheet(f"color:{theme['muted']}; font-size:12px; background:transparent;")
+        head.addWidget(self.chevron)
+        profile_btn = QPushButton("↗")
+        profile_btn.setToolTip(f"Open {self.actor}'s GitHub profile")
+        profile_btn.setCursor(Qt.PointingHandCursor)
+        profile_btn.setFixedSize(24, 24)
+        profile_btn.setStyleSheet(
+            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+            f"border-radius:12px; font-size:12px; }}"
+            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+        profile_url = group.get("profile_url", "")
+        profile_btn.clicked.connect(lambda: on_open(profile_url))
+        head.addWidget(profile_btn)
+        outer.addWidget(self.header)
+
+        self.body = QWidget()
+        body = QVBoxLayout(self.body)
+        body.setContentsMargins(30, 2, 0, 0)
+        body.setSpacing(0)
+        for event in events:
+            body.addWidget(_ActivityRow(event, theme, on_open))
+        outer.addWidget(self.body)
+
+        self.setStyleSheet(f"QFrame#activityGroup {{ background:{theme['card_bg']}; border-radius:10px; }}")
+        self.header.mousePressEvent = lambda ev: self.set_expanded(not self.expanded, notify=True)  # noqa: ARG005
+        self.expanded = False
+        self.set_expanded(expanded)
+
+    def set_expanded(self, expanded: bool, notify: bool = False) -> None:
+        self.expanded = expanded
+        self.body.setVisible(expanded)
+        self.summary_label.setVisible(not expanded)
+        self.chevron.setText("▾" if expanded else "▸")
+        if notify:
+            self.toggled.emit(self.actor, expanded)
 
 
 class _ClickableLabel(QLabel):
@@ -1201,6 +1293,7 @@ class MyGeekyPanel(QWidget):
         self._workers: list[_Worker] = []
         self.avatar_loader = AvatarLoader()
         self._last_activity_events: list[dict[str, Any]] = []
+        self._expanded_actors: set[str] = set()  # kept across refreshes
         self._last_suggestions: list[dict[str, Any]] = []
         self._contrib_running = False
         self._sugg_running = False
@@ -1453,6 +1546,7 @@ class MyGeekyPanel(QWidget):
         activity_container = QWidget()
         self.activity_area = QVBoxLayout(activity_container)
         self.activity_area.setContentsMargins(0, 0, 0, 0)
+        self.activity_area.setSpacing(6)
         layout.addWidget(activity_container)
         layout.addStretch(1)
 
@@ -1879,8 +1973,11 @@ class MyGeekyPanel(QWidget):
             empty.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
             self.activity_area.addWidget(empty)
         else:
-            for event in events:
-                self.activity_area.addWidget(ActivityItem(event, theme, logic.open_profile, self.avatar_loader))
+            for group in logic.group_activity(events):
+                card = ActivityGroup(group, theme, logic.open_profile, self.avatar_loader,
+                                     expanded=group["actor"].lower() in self._expanded_actors)
+                card.toggled.connect(self._on_activity_group_toggled)
+                self.activity_area.addWidget(card)
         fetched_at = (data or {}).get("fetched_at")
         if fetched_at:
             self.activity_updated_label.setText("updated " + _time_ago(fetched_at))
@@ -1888,6 +1985,12 @@ class MyGeekyPanel(QWidget):
         if not (data or {}).get("cached"):
             self._load_suggestions()  # the refresh also re-read who you follow
         self._update_live_ticker()
+
+    def _on_activity_group_toggled(self, actor: str, expanded: bool) -> None:
+        if expanded:
+            self._expanded_actors.add(actor.lower())
+        else:
+            self._expanded_actors.discard(actor.lower())
 
     # ------------------------------------------------------------------ live spotlight ticker
     def _update_live_ticker(self) -> None:

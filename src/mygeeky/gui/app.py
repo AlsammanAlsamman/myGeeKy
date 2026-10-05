@@ -258,7 +258,6 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
             e["source"] = "following"
         events += get_matched_activity(client, _profile_matches(cfg, following))
         events.sort(key=lambda e: e.get("created_at", ""), reverse=True)
-        events = events[: cfg.gui_activity_limit]
     except Exception as exc:
         if cache:
             return {"events": _followed_only(cache), "fetched_at": cache["fetched_at"], "cached": True, "error": str(exc)}
@@ -267,6 +266,29 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
     fetched_at_iso = now.isoformat()
     save_activity_cache(events, fetched_at_iso, following)
     return {"events": events, "fetched_at": fetched_at_iso, "cached": False}
+
+
+def group_activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One entry per person, busiest-recent first: their events newest first,
+    and `source` "following" if any of their events came from people you
+    follow, else "match"."""
+    groups: dict[str, dict[str, Any]] = {}
+    for e in sorted(events, key=lambda e: e.get("created_at", ""), reverse=True):
+        key = (e.get("actor") or "").lower()
+        if not key:
+            continue
+        g = groups.setdefault(key, {
+            "actor": e.get("actor", ""),
+            "actor_avatar": e.get("actor_avatar", ""),
+            "profile_url": e.get("profile_url", ""),
+            "source": "match",
+            "latest": e.get("created_at", ""),
+            "events": [],
+        })
+        g["events"].append(e)
+        if e.get("source") != "match":
+            g["source"] = "following"
+    return list(groups.values())
 
 
 def get_model_history() -> list[dict[str, Any]]:

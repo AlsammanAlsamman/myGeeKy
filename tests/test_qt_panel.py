@@ -190,3 +190,35 @@ def test_model_tab_renders_history_and_weights(qapp, monkeypatch):
         panel.chart.grab()
     finally:
         panel.ticker.stop()
+
+
+def test_activity_tab_groups_by_person_and_expands(qapp, monkeypatch):
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import ActivityGroup, MyGeekyPanel
+
+    events = [{"actor": "geek", "verb": f"pushed to 'b{i}'", "repo": "geek/x", "repo_url": "u",
+               "profile_url": "p", "source": "match", "created_at": f"2026-10-0{i + 1}T00:00:00Z"}
+              for i in range(3)]
+    events.append({"actor": "friend", "verb": "starred the repo", "repo": "o/r", "source": "following",
+                   "created_at": "2026-10-02T00:00:00Z"})
+    monkeypatch.setattr(logic, "get_contributions", lambda cfg: [])
+    monkeypatch.setattr(logic, "get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []})
+    monkeypatch.setattr(logic, "get_activity", lambda cfg, force=False: {"events": events, "cached": True})
+    monkeypatch.setattr(logic, "get_model_history", lambda: [])
+    monkeypatch.setattr(logic, "get_friend_stats", lambda cfg: {
+        "total_friends": 0, "new_this_week": 0, "follow_back_rate": None, "total_labeled": 0})
+
+    panel = MyGeekyPanel(MyGeekyConfig())
+    try:
+        panel._on_activity_ready({"events": events, "cached": True})
+        cards = panel.activity_area.parentWidget().findChildren(ActivityGroup)
+        assert [c.actor for c in cards] == ["geek", "friend"]
+        assert not cards[0].expanded and cards[0].body.isHidden()
+        cards[0].header.mousePressEvent(None)
+        assert cards[0].expanded and "geek" in panel._expanded_actors
+        panel._on_activity_ready({"events": events, "cached": True})  # a refresh keeps it open
+        cards = panel.activity_area.parentWidget().findChildren(ActivityGroup)
+        assert [c for c in cards if c.actor == "geek"][-1].expanded
+    finally:
+        panel.ticker.stop()
