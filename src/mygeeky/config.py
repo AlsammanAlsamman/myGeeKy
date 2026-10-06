@@ -35,6 +35,8 @@ MARKET_FILE = DATA_DIR / "market.json"
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
+MY_BEACON_FILE = DATA_DIR / "beacon.json"          # what you publish to <you>/mygeeky-beacon
+BEACON_CACHE_FILE = DATA_DIR / "beacons_cache.json"  # everyone else's beacons, last read
 
 
 @dataclass
@@ -136,6 +138,18 @@ class MyGeekyConfig:
     sync_repo: str = ""                    # "owner/name", set by `mygeeky sync init`
     sync_auto: bool = True                 # `pipeline` pulls first and pushes last when sync is set up
 
+    # Beacons (`mygeeky beacon init`): non-verbal signals between myGeeKy users
+    # (wave, learn-from, collab, watching, kudos) through a PUBLIC repo,
+    # <you>/mygeeky-beacon. Off until you opt in; everything in it is public.
+    beacon_enabled: bool = False
+    beacon_status: str = ""                 # one of beacon.STATUSES, e.g. "open-to-collab"
+    beacon_share_interests: bool = True     # publish your topics/keywords/languages as interest tags
+    beacon_blocked: list[str] = field(default_factory=list)  # never show signals from these
+    beacon_daily_limit: int = 20            # signals you can send per day
+    beacon_gesture_ttl_days: int = 90       # signals expire (yours are pruned, others' ignored) after this
+    beacon_refresh_minutes: int = 30        # min minutes between re-reading everyone's beacons
+    beacon_max_users: int = 60              # beacons read per refresh (one API call each when changed)
+
     # Learning
     min_training_samples: int = 8         # need at least this many labeled examples before ML kicks in
     ml_blend_weight: float = 0.5          # how much the learned model influences the final score once trained
@@ -148,8 +162,10 @@ class MyGeekyConfig:
     # every profile link is opened in your browser only when you click it.
     gui_dock_side: str = "right"          # "right" or "left"
     gui_expanded_width: int = 380
-    gui_folded_width: int = 58                # folded, the panel is just the app icon on the screen edge
-    gui_folded_height: int = 58
+    gui_folded_width: int = 76                # folded, the panel is just the app icon on the screen edge
+    gui_folded_height: int = 76
+    gui_hearts_enabled: bool = True           # folded icon lets a few small hearts drift up now and then
+    gui_hearts_interval_minutes: float = 3.0  # how often; they fade out in ~3 s, never while the panel is open
     gui_folded_opacity: float = 0.5           # folded icon's opacity; it turns fully opaque while hovered
     gui_panel_height_fraction: float = 0.25   # fraction of screen height the panel occupies -- a short
                                                # docked strip rather than a full sidebar; the Live tab's
@@ -165,6 +181,11 @@ class MyGeekyConfig:
     gui_opacity: float = 1.0                  # whole-window opacity (0.0-1.0); the settings panel exposes this
                                                # as "Transparency" (0% = opaque, 100% = fully transparent), i.e.
                                                # the inverse of this value
+
+    # Bumped when a default changes in a way existing configs should pick up
+    # (see _migrate). Every saved config carries every key, so a new default
+    # alone never reaches people who already ran myGeeKy.
+    config_version: int = 2
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -189,7 +210,16 @@ def load_config() -> MyGeekyConfig:
     # ignore keys this version doesn't know -- a config synced from another
     # machine may have been written by a newer myGeeKy
     base.update({k: v for k, v in raw.items() if k in base})
-    return MyGeekyConfig(**base)
+    return MyGeekyConfig(**_migrate(base, raw.get("config_version", 1)))
+
+
+def _migrate(values: dict[str, Any], version: int) -> dict[str, Any]:
+    if version < 2:
+        # 0.4: the folded icon grew from 58px; keep any size someone chose themselves
+        if values.get("gui_folded_width") == 58 and values.get("gui_folded_height") == 58:
+            values["gui_folded_width"] = values["gui_folded_height"] = 76
+    values["config_version"] = MyGeekyConfig.config_version
+    return values
 
 
 def save_config(cfg: MyGeekyConfig) -> None:

@@ -24,6 +24,13 @@ Design goals, in priority order:
    write endpoint. There is no follow/unfollow code path in this project at
    all (see github_client.py) -- it is impossible for myGeeKy to follow
    anyone even if a broader token were supplied by mistake.
+6. The one exception is opt-in: beacons (`mygeeky beacon init`) publish
+   your non-verbal signals to your own public `mygeeky-beacon` repo. That
+   uses a SECOND, separate token, stored the same way under its own
+   keyring entry, which you create as fine-grained and limited to that
+   single repository with only "Contents: Read and write". The read token
+   above is never used to write, and the beacon token is never used for
+   anything but that one file.
 """
 
 from __future__ import annotations
@@ -120,6 +127,52 @@ def delete_token(username: str) -> bool:
         return True
     except PasswordDeleteError:
         return False
+    except Exception:
+        return False
+
+
+BEACON_SERVICE_NAME = "mygeeky-beacon-token"
+BEACON_ENV_VAR = "MYGEEKY_BEACON_TOKEN"
+
+
+def get_beacon_token(username: str) -> str | None:
+    """The beacon write token: env var first, then the OS keyring. Never
+    falls back to `gh` -- that token is far broader than one repo."""
+    env_token = os.environ.get(BEACON_ENV_VAR)
+    if env_token:
+        return env_token.strip()
+    try:
+        return keyring.get_password(BEACON_SERVICE_NAME, username)
+    except Exception:
+        return None
+
+
+def prompt_and_store_beacon_token(username: str, repo: str) -> None:
+    print(
+        "Beacons need a SECOND token that can write to exactly one repo.\n\n"
+        "Create it at: https://github.com/settings/personal-access-tokens/new\n"
+        f"  -> Repository access: 'Only select repositories' -> {repo}\n"
+        "  -> Repository permissions: 'Contents' -> Read and write\n"
+        "  -> nothing else (Metadata: read-only is added automatically).\n\n"
+        "It's stored only in your OS keyring, separately from your read token.\n"
+    )
+    token = getpass.getpass("Paste the beacon token (input hidden): ").strip()
+    if not token:
+        raise ValueError("Empty token, nothing stored.")
+    try:
+        keyring.set_password(BEACON_SERVICE_NAME, username, token)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not access an OS keyring backend on this machine ({exc}).\n"
+            f"Set the {BEACON_ENV_VAR} environment variable yourself instead."
+        ) from exc
+    print("Beacon token stored securely in your OS keyring.")
+
+
+def delete_beacon_token(username: str) -> bool:
+    try:
+        keyring.delete_password(BEACON_SERVICE_NAME, username)
+        return True
     except Exception:
         return False
 

@@ -253,3 +253,83 @@ def test_market_tab_renders_board(qapp, monkeypatch):
             c.grab()  # paints, sparkline included
     finally:
         panel.ticker.stop()
+
+
+def test_signals_tab_renders_incoming_and_people_and_sends(qapp, monkeypatch):
+    from PySide6.QtWidgets import QLabel
+
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel, SignalCard
+
+    monkeypatch.setattr(logic, "get_contributions", lambda cfg: [])
+    monkeypatch.setattr(logic, "get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []})
+    monkeypatch.setattr(logic, "get_activity", lambda cfg, force=False: {"events": []})
+    monkeypatch.setattr(logic, "get_model_history", lambda: [])
+    monkeypatch.setattr(logic, "get_friend_stats", lambda cfg: {
+        "total_friends": 0, "new_this_week": 0, "follow_back_rate": None, "total_labeled": 0})
+    data = {
+        "enabled": True, "can_send": True, "fetched_at": None, "error": None,
+        "incoming": [{"from": "alice", "avatar_url": "", "profile_url": "https://github.com/alice",
+                      "type": "wave", "emoji": "👋", "text": "👋 waved at you", "repo": "",
+                      "at": "2026-10-06T00:00:00+00:00", "mutual": True}],
+        "people": [{"login": "<b>bob</b>", "avatar_url": "", "profile_url": "https://github.com/bob",
+                    "status": "", "interests": ["gwas"], "shared": ["gwas"],
+                    "signalled_you": False, "you_signalled": False}],
+    }
+    monkeypatch.setattr(logic, "get_signals", lambda cfg, force=False: data)
+    sent = []
+    monkeypatch.setattr(logic, "send_signal", lambda cfg, to, g: sent.append((to, g)) or {"ok": True})
+
+    panel = MyGeekyPanel(MyGeekyConfig())
+    try:
+        assert "signals" in panel.tab_buttons
+        for w in list(panel._workers):
+            w.wait(2000)
+        qapp.processEvents()
+        cards = panel.signals_area.parentWidget().findChildren(SignalCard)
+        assert [c.login for c in cards] == ["alice", "<b>bob</b>"]
+        texts = [lbl.text() for lbl in cards[0].findChildren(QLabel)]
+        assert "🤝 handshake" in texts
+        name = next(lbl for lbl in cards[1].findChildren(QLabel) if lbl.text() == "<b>bob</b>")
+        from PySide6.QtCore import Qt
+        assert name.textFormat() == Qt.PlainText            # beacon data is never rendered as HTML
+        cards[0].gesture_buttons["learn"].click()
+        for w in list(panel._workers):
+            w.wait(2000)
+        qapp.processEvents()
+        assert sent == [("alice", "learn")]
+        assert panel.ticker._items[0]["kind"] == "signal"   # signals lead the Live rotation
+    finally:
+        panel.ticker.stop()
+        panel._activity_timer.stop()
+        panel._signals_timer.stop()
+        for w in list(panel._workers):
+            w.wait(2000)
+        panel.deleteLater()
+
+
+def test_signal_card_without_send_token_has_no_gesture_buttons(qapp):
+    from mygeeky.gui.app import THEMES
+    from mygeeky.gui.qt_panel import SignalCard
+
+    card = SignalCard({"login": "bob", "profile_url": "https://github.com/bob"}, THEMES["midnight"],
+                      lambda u: True, None)
+    assert card.gesture_buttons == {}
+
+
+def test_hearts_rise_fade_and_hide(qapp):
+    from PySide6.QtCore import QRect, Qt
+
+    from mygeeky.gui.qt_panel import HeartsOverlay
+
+    h = HeartsOverlay()
+    assert h.testAttribute(Qt.WA_TransparentForMouseEvents)   # never steals a click
+    h.puff(QRect(500, 500, 76, 76), "right", count=3)
+    assert h.is_active() and h.isVisible()
+    for _ in range(200):                                        # ~6.6 s of frames
+        h._tick()
+        if not h.is_active():
+            break
+    assert not h.is_active() and not h.isVisible()
+    h.close()

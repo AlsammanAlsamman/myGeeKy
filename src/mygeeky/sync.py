@@ -33,6 +33,7 @@ model.pkl
 avatar_cache/
 logs/
 activity_cache.json
+beacons_cache.json
 *.token
 *.lock
 """

@@ -36,8 +36,10 @@ from PySide6.QtGui import (
     QPainterPath,
     QPen,
     QPixmap,
+    QRadialGradient,
 )
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -69,7 +71,8 @@ AVATAR_PALETTE = ["#e08a4f", "#7aa6e0", "#5ac8a8", "#ff6fd8", "#7a5cff", "#35c2e
 
 
 def _build_spotlight_items(activity_events: list[dict[str, Any]],
-                            suggestions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+                            suggestions: list[dict[str, Any]],
+                            signals: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Normalizes activity events and follow-back suggestions into one
     interleaved rotation for the Live tab's ticker: recent real activity
     (pushes, merges, new repos, releases, stars -- already exactly "what
@@ -97,7 +100,16 @@ def _build_spotlight_items(activity_events: list[dict[str, Any]],
         "time_text": "",
     } for s in suggestions]
 
-    interleaved: list[dict[str, Any]] = []
+    # signals people sent you lead the rotation -- they're about you
+    interleaved: list[dict[str, Any]] = [{
+        "kind": "signal",
+        "username": s.get("from", ""),
+        "avatar_url": s.get("avatar_url", ""),
+        "profile_url": s.get("profile_url", ""),
+        "headline": s.get("text", "") + ("  🤝" if s.get("mutual") else ""),
+        "detail": "",
+        "time_text": _time_ago(s.get("at", "")),
+    } for s in (signals or [])[:5]]
     i = j = 0
     while i < len(activity_items) or j < len(suggestion_items):
         if i < len(activity_items):
@@ -871,6 +883,107 @@ class ActivityGroup(QFrame):
             self.toggled.emit(self.actor, expanded)
 
 
+PANEL_GESTURES = ("wave", "learn", "collab", "watching")  # kudos needs a repo: CLI only
+
+
+class SignalCard(QFrame):
+    """One person on the Signals tab: an incoming signal (with a handshake
+    badge when it's mutual) or a fellow myGeeKy user. The emoji buttons
+    send a signal back; the arrow opens their profile. Everything shown
+    from someone's beacon is rendered as plain text."""
+
+    def __init__(self, item: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 on_send: Callable[["SignalCard", str, str], None] | None,
+                 loader: "AvatarLoader | None" = None) -> None:
+        super().__init__()
+        from ..beacon import GESTURES
+        self.setObjectName("signalCard")
+        self.login = item.get("from") or item.get("login") or ""
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 7, 8, 7)
+        outer.setSpacing(4)
+
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        head.addWidget(_avatar_widget(self.login or "?", item.get("avatar_url", ""), 30, loader))
+        text_box = QVBoxLayout()
+        text_box.setSpacing(1)
+        name_row = QHBoxLayout()
+        name_row.setSpacing(6)
+        name = QLabel(self.login)
+        name.setTextFormat(Qt.PlainText)
+        name.setStyleSheet(f"color:{theme['text']}; font-size:12px; font-weight:600; background:transparent;")
+        name_row.addWidget(name)
+        badge_text = "🤝 handshake" if item.get("mutual") else "signalled you" if item.get("signalled_you") else ""
+        if badge_text:
+            badge = QLabel(badge_text)
+            badge.setStyleSheet(f"color:{theme['text']}; background:{theme['section_btn']}; "
+                                f"border-radius:7px; padding:1px 6px; font-size:9.5px;")
+            badge.setFixedHeight(16)
+            name_row.addWidget(badge)
+        name_row.addStretch(1)
+        text_box.addLayout(name_row)
+
+        if "text" in item:  # an incoming signal
+            line = f"{item['text']} · {_time_ago(item.get('at', ''))}"
+        else:               # a fellow user
+            shared = item.get("shared") or []
+            line = " · ".join(x for x in (item.get("status", ""),
+                                          f"shares {', '.join(shared[:4])}" if shared else
+                                          ", ".join((item.get("interests") or [])[:4])) if x)
+        sub = QLabel(line)
+        sub.setTextFormat(Qt.PlainText)
+        sub.setWordWrap(True)
+        sub.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        sub.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        text_box.addWidget(sub)
+        head.addLayout(text_box, 1)
+
+        profile_btn = QPushButton("↗")
+        profile_btn.setToolTip(f"Open {self.login}'s GitHub profile")
+        profile_btn.setCursor(Qt.PointingHandCursor)
+        profile_btn.setFixedSize(24, 24)
+        btn_style = (f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                     f"border-radius:12px; font-size:12px; }}"
+                     f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+                     f"QPushButton:disabled {{ color:{theme['muted']}; }}")
+        profile_btn.setStyleSheet(btn_style)
+        profile_url = item.get("profile_url", "")
+        profile_btn.clicked.connect(lambda: on_open(profile_url))
+        head.addWidget(profile_btn)
+        outer.addLayout(head)
+
+        self.gesture_buttons: dict[str, QPushButton] = {}
+        if on_send is not None:
+            row = QHBoxLayout()
+            row.setContentsMargins(38, 0, 0, 0)
+            row.setSpacing(4)
+            for g in PANEL_GESTURES:
+                emoji, verb = GESTURES[g]
+                btn = QPushButton(emoji)
+                btn.setFixedSize(28, 24)
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setToolTip(f"Send {self.login} a '{g}' signal (public)")
+                btn.setStyleSheet(btn_style)
+                btn.clicked.connect(lambda checked=False, gg=g: on_send(self, self.login, gg))
+                self.gesture_buttons[g] = btn
+                row.addWidget(btn)
+            row.addStretch(1)
+            self.feedback = QLabel("")
+            self.feedback.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+            row.addWidget(self.feedback)
+            outer.addLayout(row)
+
+        self.setStyleSheet(f"QFrame#signalCard {{ background:{theme['card_bg']}; border-radius:10px; }}")
+
+    def set_busy(self, busy: bool) -> None:
+        for btn in self.gesture_buttons.values():
+            btn.setEnabled(not busy)
+
+    def show_result(self, text: str) -> None:
+        self.feedback.setText(text)
+
+
 UP_COLOR = "#34d399"
 DOWN_COLOR = "#f87171"
 
@@ -1114,7 +1227,7 @@ class SpotlightCard(QFrame):
     normalized from either an activity event or a suggestion (see
     MyGeekyPanel._build_spotlight_items)."""
 
-    KIND_BADGES = {"activity": "LIVE", "suggestion": "SUGGESTED"}
+    KIND_BADGES = {"activity": "LIVE", "suggestion": "SUGGESTED", "signal": "FOR YOU"}
 
     def __init__(self, item: dict[str, Any], theme: dict[str, Any],
                  on_open: Callable[[str], bool], loader: "AvatarLoader | None") -> None:
@@ -1361,6 +1474,110 @@ class RoundedPanel(QFrame):
         painter.end()
 
 
+HEART_COLORS = ("#ff6fa8", "#ff8fc0", "#ff5c8a", "#ffa3c9", "#e86fd8")
+
+
+def _heart_path(size: float) -> QPainterPath:
+    """A heart `size` wide, centred on (0, 0)."""
+    s = size / 2.0
+    path = QPainterPath(QPointF(0, s * 0.95))
+    path.cubicTo(-s * 1.3, s * 0.05, -s * 0.75, -s * 1.15, 0, -s * 0.45)
+    path.cubicTo(s * 0.75, -s * 1.15, s * 1.3, s * 0.05, 0, s * 0.95)
+    return path
+
+
+class HeartsOverlay(QWidget):
+    """A see-through, click-through window above the folded icon that lets a
+    few small hearts drift up like smoke: each rises, wobbles, shrinks and
+    fades out within a few seconds. It's only on screen during a puff, so
+    there's nothing to click by accident and nothing ticking in between."""
+
+    W, H = 120, 190
+
+    def __init__(self) -> None:
+        super().__init__(None, Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+                         | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+        self.setFixedSize(self.W, self.H)
+        self._particles: list[dict[str, float]] = []
+        self._clock = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(33)
+        self._timer.timeout.connect(self._tick)
+
+    def is_active(self) -> bool:
+        return bool(self._particles)
+
+    def puff(self, icon_rect, dock_side: str, count: int = 4) -> None:
+        """Release `count` hearts from the top of `icon_rect` (global coords),
+        drifting away from the screen edge the panel is docked to."""
+        import random
+        inward = -1.0 if dock_side != "left" else 1.0
+        x = icon_rect.center().x() - self.W // 2 + int(inward * 18)
+        self.move(x, icon_rect.top() - self.H + icon_rect.height() // 3)
+        for i in range(count):
+            self._particles.append({
+                "born": self._clock + i * random.uniform(0.35, 0.6),
+                "life": random.uniform(2.6, 3.6),
+                "x0": self.W / 2 + random.uniform(-8, 8) - inward * 18,
+                "drift": inward * random.uniform(8, 26),
+                "size": random.uniform(9, 14),
+                "phase": random.uniform(0, math.tau),
+                "color": random.randrange(len(HEART_COLORS)),
+            })
+        if not self.isVisible():
+            self.show()
+        self._timer.start()
+
+    def _tick(self) -> None:
+        self._clock += self._timer.interval() / 1000.0
+        self._particles = [p for p in self._particles if self._clock - p["born"] < p["life"]]
+        if not self._particles:
+            self._timer.stop()
+            self._clock = 0.0
+            self.hide()
+            return
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setCompositionMode(QPainter.CompositionMode_Source)
+        painter.fillRect(self.rect(), Qt.transparent)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)
+        painter.setPen(Qt.NoPen)
+        for p in self._particles:
+            age = self._clock - p["born"]
+            if age < 0:
+                continue
+            t = age / p["life"]
+            ease = 1 - (1 - t) ** 2                     # quick start, slow drift at the end
+            x = p["x0"] + p["drift"] * ease + math.sin(p["phase"] + t * 7) * 5 * (1 - t)
+            y = self.H - 8 - ease * (self.H - 30)
+            size = p["size"] * (1 - 0.65 * t)            # shrinks as it rises
+            fade_in = min(1.0, age / 0.25)
+            alpha = int(215 * fade_in * (1 - t) ** 1.4)
+            color = QColor(HEART_COLORS[int(p["color"])])
+            halo = QRadialGradient(QPointF(x, y), size * 1.4)   # a soft, smoky glow
+            glow = QColor(color)
+            glow.setAlpha(alpha // 4)
+            halo.setColorAt(0.0, glow)
+            glow.setAlpha(0)
+            halo.setColorAt(1.0, glow)
+            painter.setBrush(QBrush(halo))
+            painter.drawEllipse(QPointF(x, y), size * 1.4, size * 1.4)
+            color.setAlpha(alpha)
+            painter.setBrush(color)
+            painter.save()
+            painter.translate(x, y)
+            painter.rotate(math.sin(p["phase"] + t * 5) * 12)
+            painter.drawPath(_heart_path(size))
+            painter.restore()
+        painter.end()
+
+
 class RoundedButton(QPushButton):
     """A pill-shaped button with hand-painted, always-transparent corners.
 
@@ -1435,6 +1652,8 @@ class MyGeekyPanel(QWidget):
         self._contrib_running = False
         self._market_running = False
         self._sugg_running = False
+        self._signals_running = False
+        self._last_incoming: list[dict[str, Any]] = []
 
         self.setWindowTitle("myGeeKy")
         if ICON_WINDOW.exists():
@@ -1461,6 +1680,7 @@ class MyGeekyPanel(QWidget):
         self._refresh_activity(force=False)
         self._load_model_history()
         self._load_market()
+        self._refresh_signals(force=False)
         self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
 
         self._activity_timer = QTimer(self)
@@ -1474,6 +1694,16 @@ class MyGeekyPanel(QWidget):
         self._market_timer.timeout.connect(self._maybe_refresh_market)
         self._market_timer.start(60 * 60_000)
         QTimer.singleShot(20_000, self._maybe_refresh_market)
+
+        # re-reads beacons only once beacon_refresh_minutes have passed
+        self._signals_timer = QTimer(self)
+        self._signals_timer.timeout.connect(lambda: self._refresh_signals(force=False))
+        self._signals_timer.start(5 * 60_000)
+
+        self.hearts = HeartsOverlay()
+        self._hearts_timer = QTimer(self)
+        self._hearts_timer.timeout.connect(self._maybe_puff_hearts)
+        self._hearts_timer.start(max(30_000, int(self.cfg.gui_hearts_interval_minutes * 60_000)))
 
         self._sugg_timer = QTimer(self)
         self._sugg_timer.timeout.connect(self._maybe_auto_refresh_suggestions)
@@ -1542,7 +1772,8 @@ class MyGeekyPanel(QWidget):
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
         for name, label in (("live", "Live"), ("suggestions", "Suggestions"), ("repos", "Repos"),
-                             ("market", "Market"), ("activity", "Activity"), ("model", "Model")):
+                             ("market", "Market"), ("activity", "Activity"), ("signals", "Signals"),
+                             ("model", "Model")):
             btn = QPushButton(label)
             # Qt's Windows style gives every push button a ~75px minimum width;
             # five of those made the panel wider than gui_expanded_width.
@@ -1557,12 +1788,13 @@ class MyGeekyPanel(QWidget):
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
 
-        self._tab_order = ["live", "suggestions", "repos", "market", "activity", "model"]
+        self._tab_order = ["live", "suggestions", "repos", "market", "activity", "signals", "model"]
         self.content_stack.addWidget(self._build_live_tab())
         self.content_stack.addWidget(self._build_suggestions_tab())
         self.content_stack.addWidget(self._build_repos_tab())
         self.content_stack.addWidget(self._build_market_tab())
         self.content_stack.addWidget(self._build_activity_tab())
+        self.content_stack.addWidget(self._build_signals_tab())
         self.content_stack.addWidget(self._build_model_tab())
 
         outer.addWidget(self.panel_frame)
@@ -1747,6 +1979,42 @@ class MyGeekyPanel(QWidget):
         page.setAutoFillBackground(False)
         return scroll
 
+    def _build_signals_tab(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 0, 0)
+
+        actions_row = QHBoxLayout()
+        self.signals_updated_label = QLabel("")
+        self.refresh_signals_btn = QPushButton("Refresh")
+        self.refresh_signals_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_signals_btn.clicked.connect(lambda: self._refresh_signals(force=True))
+        actions_row.addWidget(self.signals_updated_label, 1)
+        actions_row.addWidget(self.refresh_signals_btn)
+        layout.addLayout(actions_row)
+        self.signals_hint = QLabel("")
+        self.signals_hint.setWordWrap(True)
+        layout.addWidget(self.signals_hint)
+
+        signals_container = QWidget()
+        self.signals_area = QVBoxLayout(signals_container)
+        self.signals_area.setContentsMargins(0, 0, 0, 0)
+        self.signals_area.setSpacing(6)
+        layout.addWidget(signals_container)
+        layout.addStretch(1)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        # Same opaque-viewport workaround as the Suggestions tab.
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.viewport().setStyleSheet("background: transparent;")
+        page.setAutoFillBackground(False)
+        return scroll
+
     def _build_settings_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("settings")
@@ -1793,7 +2061,27 @@ class MyGeekyPanel(QWidget):
         self.opacity_slider.sliderReleased.connect(self._on_opacity_committed)
         layout.addWidget(self.opacity_slider)
 
+        self.hearts_check = QCheckBox("Floating hearts on the folded icon")
+        self.hearts_check.setCursor(Qt.PointingHandCursor)
+        self.hearts_check.setChecked(self.cfg.gui_hearts_enabled)
+        self.hearts_check.toggled.connect(self._on_hearts_toggled)
+        layout.addWidget(self.hearts_check)
+
         return panel
+
+    def _on_hearts_toggled(self, enabled: bool) -> None:
+        logic.set_hearts(self.cfg, enabled)
+        if enabled and self.folded_widget.isVisible():
+            self._puff_hearts()  # show what you just turned on
+
+    def _maybe_puff_hearts(self) -> None:
+        if self.cfg.gui_hearts_enabled and self.folded_widget.isVisible() and self.isVisible():
+            self._puff_hearts()
+
+    def _puff_hearts(self) -> None:
+        from PySide6.QtCore import QRect
+        top_left = self.folded_widget.mapToGlobal(QPoint(0, 0))
+        self.hearts.puff(QRect(top_left, self.folded_widget.size()), self.cfg.gui_dock_side)
 
     def _toggle_settings(self) -> None:
         self.settings_panel.setVisible(not self.settings_panel.isVisible())
@@ -1911,6 +2199,7 @@ class MyGeekyPanel(QWidget):
         )
         self.settings_panel.setStyleSheet(f"#settings {{ background:{theme['card_bg']}; border-radius:12px; }}")
         self.opacity_value_label.setStyleSheet(f"font-size:10.5px; color:{theme['muted']}; background:transparent;")
+        self.hearts_check.setStyleSheet(f"QCheckBox {{ font-size:11px; color:{theme['text']}; background:transparent; }}")
         self.opacity_slider.setStyleSheet(
             f"QSlider::groove:horizontal {{ height:4px; background:{theme['border']}; border-radius:2px; }}"
             f"QSlider::sub-page:horizontal {{ background:{theme['accent']}; border-radius:2px; }}"
@@ -1923,7 +2212,8 @@ class MyGeekyPanel(QWidget):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{SWATCH_GRADIENTS[name]}; border-radius:7px; border:{border}; }}"
             )
-        for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_market_btn, self.refresh_act_btn):
+        for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_market_btn, self.refresh_act_btn,
+                    self.refresh_signals_btn):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
                 f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
@@ -1964,6 +2254,7 @@ class MyGeekyPanel(QWidget):
         if not self._contrib_running:  # don't wipe the "Searching…" placeholder mid-search
             self._load_contributions()
         self._refresh_activity(force=False)
+        self._refresh_signals(force=False)  # cached unless due: just re-renders
 
     # ------------------------------------------------------------------ fold/unfold/dock
     def _dock(self, folded: bool) -> None:
@@ -1993,6 +2284,11 @@ class MyGeekyPanel(QWidget):
 
     def unfold(self) -> None:
         self._dock(folded=False)
+        self.hearts.hide()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
+        self.hearts.close()  # a separate top-level window; it would outlive the panel
+        super().closeEvent(event)
 
     # ------------------------------------------------------------------ native window effects
     def showEvent(self, event) -> None:  # noqa: N802
@@ -2175,6 +2471,74 @@ class MyGeekyPanel(QWidget):
         else:
             self._expanded_actors.discard(actor.lower())
 
+    # ------------------------------------------------------------------ signals
+    def _refresh_signals(self, force: bool) -> None:
+        if self._signals_running:
+            return
+        self._signals_running = True
+        self._run_async(lambda: logic.get_signals(self.cfg, force=force), self._on_signals_ready)
+
+    def _on_signals_ready(self, data: Any) -> None:
+        self._signals_running = False
+        data = data or {}
+        self._render_signals(data)
+        self._last_incoming = data.get("incoming") or []
+        self._update_live_ticker()
+
+    def _render_signals(self, data: dict[str, Any]) -> None:
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.signals_area)
+        muted = f"color:{theme['muted']}; font-size:10.5px; background:transparent;"
+        self.signals_hint.setStyleSheet(muted)
+        self.signals_updated_label.setStyleSheet(muted)
+        if not data.get("enabled"):
+            self.signals_hint.setText(
+                "Send other myGeeKy users emoji signals (👋 📚 🤝 👀) and see theirs to you. Signals are public. "
+                "To join, run `mygeeky beacon init` in a terminal.")
+            self.refresh_signals_btn.setEnabled(False)
+            return
+        self.refresh_signals_btn.setEnabled(True)
+        self.signals_hint.setText("👋 wave · 📚 I learn from you · 🤝 let's collaborate · 👀 following your work. "
+                                  "Signals are public, and 🤝 handshake means you've both signalled.")
+        fetched = data.get("fetched_at")
+        self.signals_updated_label.setText(data.get("error") or ("updated " + _time_ago(fetched) if fetched else ""))
+        on_send = self._on_send_signal if data.get("can_send") else None
+
+        def header(text: str) -> None:
+            lbl = QLabel(text)
+            lbl.setStyleSheet("font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
+                              f"margin-top:6px; color:{theme['text']}; background:transparent;")
+            self.signals_area.addWidget(lbl)
+
+        incoming = data.get("incoming") or []
+        header("FOR YOU")
+        if not incoming:
+            empty = QLabel("No signals yet. Say hi to someone below.")
+            empty.setStyleSheet(muted)
+            self.signals_area.addWidget(empty)
+        for item in incoming:
+            self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader))
+        people = data.get("people") or []
+        header("FELLOW GEEKS ON MYGEEKY")
+        if not people:
+            empty = QLabel("No other beacons found yet.")
+            empty.setStyleSheet(muted)
+            self.signals_area.addWidget(empty)
+        for item in people:
+            self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader))
+
+    def _on_send_signal(self, card: "SignalCard", login: str, gesture: str) -> None:
+        card.set_busy(True)
+        card.show_result("sending…")
+
+        def done(result: Any) -> None:
+            card.set_busy(False)
+            ok = isinstance(result, dict) and result.get("ok")
+            card.show_result("sent ✓" if ok else "failed")
+            if not ok:
+                card.setToolTip((result or {}).get("error", "") if isinstance(result, dict) else "")
+        self._run_async(lambda: logic.send_signal(self.cfg, login, gesture), done)
+
     # ------------------------------------------------------------------ market
     def _load_market(self) -> None:
         self._render_market(logic.get_market(self.cfg))
@@ -2221,7 +2585,8 @@ class MyGeekyPanel(QWidget):
 
     # ------------------------------------------------------------------ live spotlight ticker
     def _update_live_ticker(self) -> None:
-        items = _build_spotlight_items(self._last_activity_events, self._last_suggestions)
+        items = _build_spotlight_items(self._last_activity_events, self._last_suggestions,
+                                       getattr(self, "_last_incoming", []))
         was_running = self.ticker.is_running()
         self.ticker.set_items(items)
         if was_running:

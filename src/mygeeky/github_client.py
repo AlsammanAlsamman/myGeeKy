@@ -3,7 +3,9 @@
 Deliberate design constraint: this file contains no `follow` / `unfollow`
 method, and never calls `PUT/DELETE /user/following/*`. myGeeKy suggests;
 it does not act on GitHub on your behalf. If you ever extend this client,
-keep it that way -- see README "Safety" section for why.
+keep it that way -- see README "Safety" section for why. (The single,
+opt-in write myGeeKy can make -- your own beacon file -- lives apart from
+this client, in beacon.BeaconWriter, with its own narrowly scoped token.)
 """
 
 from __future__ import annotations
@@ -126,6 +128,20 @@ class GitHubClient:
         if resp.status_code != 200:
             return []
         return resp.json()
+
+    def get_repo(self, owner_repo: str) -> dict[str, Any] | None:
+        resp = self._get(f"/repos/{owner_repo}")
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+
+    def get_repo_file(self, owner_repo: str, path: str) -> dict[str, Any] | None:
+        """One file's contents-API record (base64 `content`, `size`, ...), or None."""
+        resp = self._get(f"/repos/{owner_repo}/contents/{path}")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        return data if isinstance(data, dict) else None
 
     def is_following(self, source_username: str, target_username: str) -> bool:
         """True if `source_username` follows `target_username` (public, read-only check)."""

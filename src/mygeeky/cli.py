@@ -388,7 +388,8 @@ def _domain_repo_queries(cfg: MyGeekyConfig, terms: list[str]) -> list[str]:
 
 
 def _gather_candidates(client: GitHubClient, cfg: MyGeekyConfig, exclude: set[str],
-                        following: set[str], domain_terms: list[str] | None = None) -> dict[str, list[str]]:
+                        following: set[str], domain_terms: list[str] | None = None,
+                        beacon_signals: dict[str, str] | None = None) -> dict[str, list[str]]:
     """Collect candidates from every configured source and tag each with
     where it came from. Returns {username: [source, ...]}, capped to
     `max_candidates_per_run` and prioritized by how many independent
@@ -470,6 +471,10 @@ def _gather_candidates(client: GitHubClient, cfg: MyGeekyConfig, exclude: set[st
             except Exception:
                 pass
 
+    # 7. myGeeKy users: people who signalled you, and beacons sharing your interests
+    for login, source in (beacon_signals or {}).items():
+        add(login, f"beacon:{source}")
+
     def priority(kv: tuple[str, set[str]]) -> tuple[int, bool]:
         return len(kv[1]), any(not s.startswith("search:") for s in kv[1])
 
@@ -548,7 +553,14 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
     from .contribute import search_terms
     domain_terms = search_terms(cfg, self_profile, vocabulary,
                                 keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()))
-    candidates = _gather_candidates(client, cfg, excluded, following, domain_terms)
+    beacon_signals: dict[str, str] = {}
+    if cfg.beacon_enabled:
+        from . import beacon as bc
+        try:
+            beacon_signals = bc.suggestion_signals(bc.refresh(client, cfg), cfg)
+        except Exception as exc:  # a beacon hiccup must never sink the whole search
+            click.echo(f"[mygeeky] reading beacons failed, skipping them: {exc}", err=True)
+    candidates = _gather_candidates(client, cfg, excluded, following, domain_terms, beacon_signals)
     model = LearnedModel.load()
 
     ts = _now()
@@ -570,6 +582,8 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
         features = compute_features(self_profile, candidate)
         base_score, breakdown = final_score(features, cfg, model)
         source_boost = min(0.01 * (len(sources) - 1), 0.04) if len(sources) > 1 else 0.0
+        # someone who signalled you has already shown interest -- the strongest follow-back hint there is
+        source_boost += {"signalled_you": 0.08, "mygeeky_user": 0.02}.get(beacon_signals.get(username, ""), 0.0)
         domain_fit = domain_fit_score(candidate.corpus, vocabulary)
 
         scored.append({
@@ -996,6 +1010,182 @@ def sync_status() -> None:
     click.echo(sync_mod.status())
 
 
+# --------------------------------------------------------------------------- beacon
+@main.group()
+def beacon() -> None:
+    """Non-verbal signals between myGeeKy users (👋 wave, 📚 learn, 🤝 collab,
+    👀 watching, 🔥 kudos), through your PUBLIC <you>/mygeeky-beacon repo."""
+
+
+def _beacon_call(fn, *args, **kwargs):
+    from . import beacon as bc
+    try:
+        return fn(*args, **kwargs)
+    except bc.BeaconError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+
+@beacon.command("init")
+def beacon_init() -> None:
+    """Create your public beacon repo, store its write token, and publish."""
+    import shutil
+    from . import beacon as bc
+    cfg = load_config()
+    if not cfg.github_username:
+        raise click.ClickException("Run `mygeeky init` first.")
+    repo = f"{cfg.github_username}/{bc.BEACON_REPO}"
+    click.echo(f"Beacons live in a PUBLIC repo, {repo}. Anyone can see the signals you send,\n"
+               "who you send them to, your status and your interest tags. Signals are emoji only,\n"
+               "never text. myGeeKy writes only beacon.json/README.md there, with a token scoped to that repo.\n")
+    client = _client_for(cfg)
+    if (client.get_repo(repo) is None and shutil.which("gh")
+            and not click.confirm(f"Create the public repo {repo} with the GitHub CLI now?", default=True)):
+        return
+    for note in _beacon_call(bc.ensure_repo, cfg, client, create=True):
+        click.echo(note)
+    if not auth.get_beacon_token(cfg.github_username):
+        auth.prompt_and_store_beacon_token(cfg.github_username, repo)
+    _beacon_call(bc.go_live, cfg)
+    click.echo(f"\nYour beacon is live: https://github.com/{repo}\n"
+               "Try `mygeeky beacon people` to see who else is here, then "
+               "`mygeeky beacon send <user> wave`.")
+
+
+def _beacon_cache(cfg: MyGeekyConfig, refresh: bool) -> dict:
+    from . import beacon as bc
+    return bc.refresh(_client_for(cfg), cfg, force=refresh, log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+
+
+@beacon.command("send")
+@click.argument("user")
+@click.argument("gesture", type=click.Choice(["wave", "learn", "collab", "watching", "kudos"]))
+@click.option("--repo", default=None, help="owner/name -- required for kudos.")
+def beacon_send(user: str, gesture: str, repo: str | None) -> None:
+    """Send USER a signal: wave, learn, collab, watching, or kudos --repo owner/name."""
+    from . import beacon as bc
+    cfg = load_config()
+    _beacon_call(bc.send, cfg, user, gesture, repo)
+    emoji = bc.GESTURES[gesture][0]
+    click.echo(f"{emoji} sent to {user} (public, in your beacon).")
+    if user.lower() not in {u.lower() for u in (bc.load_cache().get("users") or {})}:
+        click.echo(f"Note: {user} has no beacon that myGeeKy has seen yet, so they'll only notice "
+                   "once they join.", err=True)
+
+
+@beacon.command("unsend")
+@click.argument("user")
+@click.argument("gesture", required=False)
+def beacon_unsend(user: str, gesture: str | None) -> None:
+    """Take back your signals to USER (all of them, or just GESTURE)."""
+    from . import beacon as bc
+    n = _beacon_call(bc.unsend, load_config(), user, gesture)
+    click.echo(f"Removed {n} signal(s) to {user}." if n else f"You haven't signalled {user}.")
+
+
+@beacon.command("inbox")
+@click.option("--refresh", is_flag=True, help="Re-read everyone's beacons now.")
+@click.option("--json", "as_json", is_flag=True)
+def beacon_inbox(refresh: bool, as_json: bool) -> None:
+    """Signals other myGeeKy users sent you. 🤝 = handshake (you signalled them too)."""
+    from . import beacon as bc
+    cfg = load_config()
+    rows = bc.inbox(_beacon_cache(cfg, refresh), cfg, bc.load_my_beacon())
+    if as_json:
+        click.echo(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("No signals yet. Send some: `mygeeky beacon people`, then `mygeeky beacon send <user> wave`.")
+        return
+    for r in rows:
+        hand = "  🤝 handshake" if r["mutual"] else ""
+        click.echo(f"  {r['from']:<25} {r['text']}  ({r['at'][:10]}){hand}")
+
+
+@beacon.command("people")
+@click.option("--refresh", is_flag=True, help="Re-read everyone's beacons now.")
+@click.option("--json", "as_json", is_flag=True)
+def beacon_people(refresh: bool, as_json: bool) -> None:
+    """Fellow myGeeKy users, those sharing your interests first."""
+    from . import beacon as bc
+    cfg = load_config()
+    rows = bc.people(_beacon_cache(cfg, refresh), cfg, bc.load_my_beacon())
+    if as_json:
+        click.echo(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        click.echo("No other beacons found yet.")
+        return
+    for p in rows:
+        marks = ("📨 " if p["signalled_you"] else "") + ("✓ " if p["you_signalled"] else "")
+        click.echo(f"  {marks}{p['login']:<25} {p['status']}")
+        if p["shared"]:
+            click.echo(f"      shares: {', '.join(p['shared'])}")
+
+
+@beacon.command("sent")
+def beacon_sent() -> None:
+    """The signals you've sent (still in your public beacon)."""
+    from . import beacon as bc
+    gestures = bc.load_my_beacon()["gestures"]
+    if not gestures:
+        click.echo("You haven't sent any signals.")
+    for g in sorted(gestures, key=lambda g: g.get("at", ""), reverse=True):
+        repo = f" ({g['repo']})" if g.get("repo") else ""
+        click.echo(f"  {bc.GESTURES[g['type']][0]} {g['type']:<9} -> {g['to']}{repo}  {g.get('at', '')[:10]}")
+
+
+@beacon.command("status")
+@click.argument("value", required=False)
+def beacon_status(value: str | None) -> None:
+    """Show or set your status (open-to-collab, learning, heads-down,
+    seeking-reviewers, mentoring, or "none")."""
+    from . import beacon as bc
+    cfg = load_config()
+    if value is None:
+        click.echo(f"Status: {bc.STATUSES.get(cfg.beacon_status) or '(none)'}")
+        click.echo("Choices: " + ", ".join(k for k in bc.STATUSES if k) + ", none")
+        return
+    value = "" if value == "none" else value
+    if value not in bc.STATUSES:
+        raise click.ClickException("Choose one of: " + ", ".join(k for k in bc.STATUSES if k) + ", none")
+    cfg.beacon_status = value
+    _beacon_call(bc.publish, cfg, bc.load_my_beacon())
+    save_config(cfg)
+    click.echo(f"Status: {bc.STATUSES[value] or '(none)'}")
+
+
+@beacon.command("block")
+@click.argument("user")
+def beacon_block(user: str) -> None:
+    """Never show signals from USER again (and drop yours to them)."""
+    from . import beacon as bc
+    cfg = load_config()
+    if user.lower() not in {u.lower() for u in cfg.beacon_blocked}:
+        cfg.beacon_blocked.append(user)
+        save_config(cfg)
+    if cfg.beacon_enabled:
+        _beacon_call(bc.unsend, cfg, user)
+    click.echo(f"Blocked {user}.")
+
+
+@beacon.command("unblock")
+@click.argument("user")
+def beacon_unblock(user: str) -> None:
+    """Show signals from USER again."""
+    cfg = load_config()
+    cfg.beacon_blocked = [u for u in cfg.beacon_blocked if u.lower() != user.lower()]
+    save_config(cfg)
+    click.echo(f"Unblocked {user}.")
+
+
+@beacon.command("publish")
+def beacon_publish() -> None:
+    """Re-publish your beacon, after changing your topics or keywords."""
+    from . import beacon as bc
+    _beacon_call(bc.publish, load_config(), bc.load_my_beacon())
+    click.echo("Beacon published.")
+
+
 # --------------------------------------------------------------------------- schedule
 @main.group()
 def schedule() -> None:
@@ -1019,6 +1209,14 @@ def schedule_install(yes: bool) -> None:
 def schedule_remove() -> None:
     from . import scheduler
     click.echo(scheduler.remove())
+
+
+# --------------------------------------------------------------------------- setup
+@main.command()
+def setup() -> None:
+    """Open the setup wizard: update, reconnect GitHub, sync, Signals, shortcuts."""
+    from .gui.setup_wizard import main as setup_main
+    setup_main([])
 
 
 # --------------------------------------------------------------------------- gui

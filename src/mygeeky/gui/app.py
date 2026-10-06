@@ -30,6 +30,9 @@ Design constraints, deliberately unchanged from the previous version:
   follow/unfollow call anywhere in this file, same as the rest of myGeeKy.
   Likewise the Repos tab only opens repo/issue/fork pages -- nothing here
   forks a repo or opens a PR.
+- The one exception, opt-in via `mygeeky beacon init`: clicking a gesture
+  button on the Signals tab publishes that emoji signal to your own public
+  beacon repo (see beacon.py). Nothing else in the panel writes anything.
 """
 
 from __future__ import annotations
@@ -135,6 +138,11 @@ def set_opacity(cfg: MyGeekyConfig, opacity: float) -> bool:
     cfg.gui_opacity = opacity
     save_config(cfg)
     return True
+
+
+def set_hearts(cfg: MyGeekyConfig, enabled: bool) -> None:
+    cfg.gui_hearts_enabled = bool(enabled)
+    save_config(cfg)
 
 
 def _hidden_usernames() -> set[str]:
@@ -321,6 +329,39 @@ def refresh_market(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
     return get_market(cfg)
 
 
+def get_signals(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    """Beacon signals for the Signals tab. Re-reads everyone's beacons only
+    when `beacon_refresh_minutes` have passed (or on a Refresh click)."""
+    from .. import beacon as bc
+    if not cfg.github_username or not cfg.beacon_enabled:
+        return {"enabled": False, "incoming": [], "people": []}
+    cache, error = bc.load_cache(), None
+    if force or bc.refresh_due(cfg, cache):
+        try:
+            cache = bc.refresh(_build_client(cfg), cfg, force=True)
+        except Exception as exc:  # surfaced to the panel, not a crash
+            error = str(exc)
+    mine = bc.load_my_beacon()
+    return {
+        "enabled": True,
+        "can_send": auth.get_beacon_token(cfg.github_username) is not None,
+        "incoming": bc.inbox(cache, cfg, mine),
+        "people": bc.people(cache, cfg, mine),
+        "fetched_at": cache.get("fetched_at"),
+        "error": error,
+    }
+
+
+def send_signal(cfg: MyGeekyConfig, to: str, gesture: str) -> dict[str, Any]:
+    """Only ever called from a click on a gesture button."""
+    from .. import beacon as bc
+    try:
+        bc.send(cfg, to, gesture)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True}
+
+
 def get_model_history() -> list[dict[str, Any]]:
     return load_model_history()
 
@@ -445,7 +486,18 @@ def main() -> None:
             "Install it with: pip install \"mygeeky[gui]\""
         )
 
+    from PySide6.QtCore import QLockFile
+
+    from ..config import DATA_DIR, ensure_dirs
     from .qt_panel import ICON_WINDOW, MyGeekyPanel
+
+    # One panel at a time: the Start menu, the sign-in shortcut and the
+    # installer can all launch it. A crashed panel's lock is detected as
+    # stale (its process is gone) and taken over. `*.lock` is never synced.
+    ensure_dirs()
+    lock = QLockFile(str(DATA_DIR / "panel.lock"))
+    if not lock.tryLock(200):
+        return
 
     app = QApplication.instance() or QApplication([])
     if ICON_WINDOW.exists():

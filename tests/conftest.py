@@ -15,7 +15,9 @@ from pathlib import Path
 
 import pytest
 
-import mygeeky.cli  # noqa: F401 -- import everything that binds paths before patching
+import mygeeky.beacon  # noqa: F401 -- import everything that binds paths before patching
+import mygeeky.cli  # noqa: F401
+import mygeeky.setup_api  # noqa: F401
 import mygeeky.config as config_module
 import mygeeky.gui.app  # noqa: F401
 import mygeeky.storage  # noqa: F401
