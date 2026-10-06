@@ -409,8 +409,55 @@ never needs a server for it: everything goes through GitHub.
 | 👀 | `watching` | "I'm following your progress" |
 | 🔥 | `kudos --repo owner/name` | "this repo of yours is great" |
 
+### Join Signals, step by step
+
+Signals is the one part of myGeeKy where you do two things on github.com
+yourself. Run `mygeeky beacon init` (or tick *Join Signals* in the Windows
+installer): it opens each page for you, waits while you do it, and checks that
+each step worked before going on.
+
+**Step 1: create your public beacon repo.**
+1. Open [github.com/new?name=mygeeky-beacon](https://github.com/new?name=mygeeky-beacon&visibility=public&description=My+myGeeKy+beacon+(non-verbal+signals)).
+   The name `mygeeky-beacon` and **Public** are filled in.
+2. Check that the owner is you, then click **Create repository**. Leave it
+   empty; myGeeKy writes the files. (If the GitHub CLI `gh` is installed and
+   logged in, myGeeKy creates the repo for you instead.)
+
+**Step 2: create a token that can write to that one repo.**
+1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
+   Name it `mygeeky-beacon`, with **Resource owner** set to you.
+2. **Repository access** → **Only select repositories** → pick `mygeeky-beacon`.
+   The permission list only appears after you pick the repo, so do Step 1 first.
+3. Under *Repositories*, click **Add permissions** → **Contents**, and set it to
+   **Read and write**. (On the older page: **Repository permissions** →
+   **Contents** → **Read and write**.) *Metadata: Read-only* is added by itself;
+   that's fine.
+4. Add nothing else. Click **Generate token**, copy it (it starts with
+   `github_pat_`), and paste it when `mygeeky beacon init` asks.
+
+**Step 3: done.** myGeeKy tests the token by publishing your `beacon.json`,
+stores the token in your OS keyring, and reads it back from GitHub to make
+sure others can see you. Your repo should now contain `beacon.json`.
+
+**Not showing up?** Run `mygeeky beacon check`. It changes nothing and lists
+what's missing:
+
+| What you see | What it means | Fix |
+|---|---|---|
+| repo "doesn't exist yet" | Step 1 wasn't done, or under another account | Create `mygeeky-beacon` under your own account |
+| repo "is private" | Nobody can read your beacon | Repo **Settings → Change visibility → Public** |
+| "GitHub refused the write" | The token can't write | Make a new token with **Contents: Read and write** |
+| "token can't see" the repo | The token is for other repos | Choose **Only select repositories → mygeeky-beacon** |
+| "beacon.json isn't published" | Setup stopped before Step 3 | Run `mygeeky beacon init` again |
+
+Adding the topic `mygeeky-beacon` to the repo (⚙ next to *About*) is
+optional: myGeeKy finds beacons by their name as well.
+
+### Using it
+
 ```bash
-mygeeky beacon init                  # one-time: creates <you>/mygeeky-beacon (PUBLIC) + its token
+mygeeky beacon init                  # one-time setup, as above
+mygeeky beacon check                 # what's missing, if others can't see you
 mygeeky beacon people                # fellow myGeeKy users, those sharing your interests first
 mygeeky beacon send alice wave       # or: learn | collab | watching | kudos --repo alice/tool
 mygeeky beacon inbox                 # signals sent to you -- 🤝 handshake = you both signalled

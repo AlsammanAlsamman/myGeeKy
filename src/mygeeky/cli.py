@@ -1088,17 +1088,82 @@ def beacon_init() -> None:
                "who you send them to, your status and your interest tags. Signals are emoji only,\n"
                "never text. myGeeKy writes only beacon.json/README.md there, with a token scoped to that repo.\n")
     client = _client_for(cfg)
-    if (client.get_repo(repo) is None and shutil.which("gh")
-            and not click.confirm(f"Create the public repo {repo} with the GitHub CLI now?", default=True)):
-        return
-    for note in _beacon_call(bc.ensure_repo, cfg, client, create=True):
+    user = cfg.github_username
+
+    # Step 1: the public repo
+    click.secho("\nStep 1 of 3: your public beacon repo", bold=True)
+    if client.get_repo(repo) is None:
+        if shutil.which("gh") and click.confirm(f"Create the public repo {repo} with the GitHub CLI now?",
+                                                default=True):
+            for note in _beacon_call(bc.ensure_repo, cfg, client, create=True):
+                click.echo(note)
+        else:
+            _show_steps(bc.repo_steps(user))
+            if click.confirm("Open that page in your browser now?", default=True):
+                click.launch(bc.NEW_REPO_URL)
+            while client.get_repo(repo) is None:
+                if not click.confirm(f"\nI can't see {repo} yet. Created it? Press Enter to check again "
+                                     "(or answer n to stop)", default=True):
+                    return
+    for note in _beacon_call(bc.ensure_repo, cfg, client, create=False):
         click.echo(note)
-    if not auth.get_beacon_token(cfg.github_username):
-        auth.prompt_and_store_beacon_token(cfg.github_username, repo)
-    _beacon_call(bc.go_live, cfg)
+    click.secho(f"  ✓ {repo} exists and is public.", fg="green")
+
+    # Step 2: a token that can write to that one repo, tested by really publishing
+    click.secho("\nStep 2 of 3: a token that can write to that repo only", bold=True)
+    token = auth.get_beacon_token(user)
+    for attempt in range(3):
+        if not token:
+            _show_steps(bc.token_steps(user))
+            if attempt == 0 and click.confirm("Open that page in your browser now?", default=True):
+                click.launch(bc.TOKEN_URL)
+            token = click.prompt("\nPaste the token (input hidden)", hide_input=True).strip()
+        try:
+            bc.go_live(cfg, bc.BeaconWriter(token, user))
+        except bc.BeaconError as exc:
+            click.secho(f"  ✗ {exc}", fg="red")
+            click.echo("  Check the token's settings against the steps above, generate a new one, and paste it.")
+            token = None
+            continue
+        import keyring
+        keyring.set_password(auth.BEACON_SERVICE_NAME, user, token)
+        click.secho("  ✓ The token works. It's stored in your OS keyring.", fg="green")
+        break
+    else:
+        raise click.ClickException("Signals aren't set up yet. Run `mygeeky beacon init` again when ready.")
+
+    # Step 3: read it back, the way everyone else will
+    click.secho("\nStep 3 of 3: checking that others can see you", bold=True)
+    if bc.fetch_beacon(client, user) is None:
+        click.echo("  beacon.json was written, but GitHub isn't showing it yet. Give it a minute, then run "
+                   "`mygeeky beacon check`.")
+    else:
+        click.secho(f"  ✓ beacon.json is published at https://github.com/{repo}", fg="green")
     click.echo(f"\nYour beacon is live: https://github.com/{repo}\n"
                "Try `mygeeky beacon people` to see who else is here, then "
                "`mygeeky beacon send <user> wave`.")
+
+
+def _show_steps(steps: list[str]) -> None:
+    n = 0
+    for line in steps:
+        if line.startswith("  "):
+            click.echo(f"     {line.strip()}")
+        else:
+            n += 1
+            click.echo(f"  {n}. {line}")
+
+
+@beacon.command("check")
+def beacon_check() -> None:
+    """Find out what's missing if Signals isn't working (changes nothing)."""
+    from . import beacon as bc
+    cfg = load_config()
+    results = bc.check(cfg, _client_for(cfg))
+    for ok, message in results:
+        click.secho(f"  {'✓' if ok else '✗'} {message}", fg="green" if ok else "red")
+    if all(ok for ok, _ in results):
+        click.echo("\nAll good. Others see your beacon; click Refresh on the Signals tab to see theirs.")
 
 
 def _beacon_cache(cfg: MyGeekyConfig, refresh: bool) -> dict:

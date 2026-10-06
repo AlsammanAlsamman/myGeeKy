@@ -147,28 +147,6 @@ def get_beacon_token(username: str) -> str | None:
         return None
 
 
-def prompt_and_store_beacon_token(username: str, repo: str) -> None:
-    print(
-        "Beacons need a SECOND token that can write to exactly one repo.\n\n"
-        "Create it at: https://github.com/settings/personal-access-tokens/new\n"
-        f"  -> Repository access: 'Only select repositories' -> {repo}\n"
-        "  -> Repository permissions: 'Contents' -> Read and write\n"
-        "  -> nothing else (Metadata: read-only is added automatically).\n\n"
-        "It's stored only in your OS keyring, separately from your read token.\n"
-    )
-    token = getpass.getpass("Paste the beacon token (input hidden): ").strip()
-    if not token:
-        raise ValueError("Empty token, nothing stored.")
-    try:
-        keyring.set_password(BEACON_SERVICE_NAME, username, token)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Could not access an OS keyring backend on this machine ({exc}).\n"
-            f"Set the {BEACON_ENV_VAR} environment variable yourself instead."
-        ) from exc
-    print("Beacon token stored securely in your OS keyring.")
-
-
 def delete_beacon_token(username: str) -> bool:
     try:
         keyring.delete_password(BEACON_SERVICE_NAME, username)

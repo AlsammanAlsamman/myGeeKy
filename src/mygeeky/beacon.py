@@ -500,8 +500,8 @@ def ensure_repo(cfg: MyGeekyConfig, client: GitHubClient, create: bool) -> list[
     info = client.get_repo(repo)
     if info is None:
         if not has_gh:
-            raise BeaconError(f"Create the public repo yourself at https://github.com/new (name: {BEACON_REPO}), "
-                              f"add the topic '{BEACON_TOPIC}' to it, then try again.")
+            raise BeaconError(f"Create the public repo {repo} first: open {NEW_REPO_URL} "
+                              "and click 'Create repository', then try again.")
         if not create:
             raise BeaconError(f"{repo} doesn't exist yet.")
         r = _gh("repo", "create", repo, "--public", "--description", "My myGeeKy beacon (non-verbal signals)")
@@ -520,16 +520,86 @@ def ensure_repo(cfg: MyGeekyConfig, client: GitHubClient, create: bool) -> list[
     return notes
 
 
-def go_live(cfg: MyGeekyConfig) -> None:
-    """Turn beacons on and publish (needs the beacon token stored already).
+def go_live(cfg: MyGeekyConfig, writer: BeaconWriter | None = None) -> None:
+    """Turn beacons on and publish (with `writer`, or the stored beacon token).
     Saves `beacon_enabled` only once the first publish worked."""
     from .config import save_config
     cfg.beacon_enabled = True
     try:
-        writer = writer_for(cfg)
+        writer = writer or writer_for(cfg)
         writer.write(README_PATH, BEACON_README, "Explain this myGeeKy beacon")
         publish(cfg, load_my_beacon(), writer)
     except Exception:
         cfg.beacon_enabled = False
         raise
     save_config(cfg)
+
+
+# --------------------------------------------------------------------------- the setup guide (one text for CLI, installer and README)
+NEW_REPO_URL = ("https://github.com/new?name=mygeeky-beacon&visibility=public"
+                "&description=My+myGeeKy+beacon+(non-verbal+signals)")
+TOKEN_URL = "https://github.com/settings/personal-access-tokens/new"
+
+
+def repo_steps(user: str) -> list[str]:
+    return [
+        f"Open {NEW_REPO_URL}",
+        "  (the name 'mygeeky-beacon' and 'Public' are already filled in)",
+        f"Check that the owner is {user} and the visibility is Public, then click 'Create repository'.",
+        "Leave it empty: no README needed. myGeeKy writes the files itself.",
+    ]
+
+
+def token_steps(user: str) -> list[str]:
+    return [
+        f"Open {TOKEN_URL}",
+        f"Token name: mygeeky-beacon. Resource owner: {user}. Pick any expiration.",
+        "Repository access: choose 'Only select repositories', then pick mygeeky-beacon.",
+        "  (the permission list only appears after you pick the repo)",
+        "Permissions: under 'Repositories' click 'Add permissions' and choose 'Contents'",
+        "  (older page: open 'Repository permissions' and find 'Contents').",
+        "Set Contents to 'Read and write'. 'Metadata: Read-only' is added by itself; that's fine.",
+        "Don't add anything else. Click 'Generate token' and copy it (starts with github_pat_).",
+    ]
+
+
+def check(cfg: MyGeekyConfig, client: GitHubClient) -> list[tuple[bool, str]]:
+    """Diagnose a Signals setup without writing anything: [(ok, message), ...]
+    in the order a user has to fix them."""
+    from . import auth
+    user = cfg.github_username
+    if not user:
+        return [(False, "No GitHub username set. Run `mygeeky init` first.")]
+    repo = f"{user}/{BEACON_REPO}"
+    results: list[tuple[bool, str]] = []
+    info = client.get_repo(repo)
+    if info is None:
+        return [(False, f"The repo {repo} doesn't exist yet. Run `mygeeky beacon init` (step 1 creates it).")]
+    if info.get("private"):
+        return [(False, f"{repo} is private. Make it public (Settings -> Danger Zone -> Change visibility).")]
+    results.append((True, f"Repo https://github.com/{repo} exists and is public."))
+    token = auth.get_beacon_token(user)
+    if not token:
+        results.append((False, "No Signals token stored on this computer. Run `mygeeky beacon init` (step 2)."))
+    else:
+        r = requests.get(f"{API_ROOT}/repos/{repo}", timeout=30,
+                         headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+        if r.status_code == 401:
+            results.append((False, "The stored Signals token is invalid or expired. Run `mygeeky beacon init` "
+                                   "again to paste a new one."))
+        elif r.status_code == 404:
+            results.append((False, f"The stored Signals token can't see {repo}. It must be limited to "
+                                   "'Only select repositories' -> mygeeky-beacon."))
+        else:
+            results.append((True, "A Signals token is stored and can see the repo."))
+    raw = fetch_beacon(client, user)
+    parsed = parse_beacon(raw, user, cfg.beacon_gesture_ttl_days) if raw is not None else None
+    if parsed is None:
+        results.append((False, f"beacon.json isn't published in {repo} yet, so nobody can see you. "
+                               "Run `mygeeky beacon init` to publish it."))
+    else:
+        results.append((True, f"beacon.json is published ({len(parsed['gestures'])} signal(s) sent)."))
+    if not cfg.beacon_enabled:
+        results.append((False, "Signals are turned off in this computer's settings. `mygeeky beacon init` "
+                               "turns them on."))
+    return results

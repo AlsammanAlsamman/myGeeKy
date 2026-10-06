@@ -639,27 +639,31 @@ READ_TOKEN_STEPS = (
     "<li>Don't add anything else. Click <b>Generate token</b>, copy it and paste it below.</li></ol>")
 
 
+NEW_BEACON_REPO_URL = ("https://github.com/new?name=mygeeky-beacon&visibility=public"
+                       "&description=My+myGeeKy+beacon+(non-verbal+signals)")
+OL = "<ol style='margin:2px 0 6px -20px'>"
+
+
 def beacon_steps(user: str, has_gh: bool) -> str:
-    new_repo = ("https://github.com/new?name=mygeeky-beacon&visibility=public"
-                "&description=My+myGeeKy+beacon+(non-verbal+signals)")
-    repo_step = (
-        f"<li>Setup creates the public repo <b>{user}/mygeeky-beacon</b> for you.</li>" if has_gh else
-        f"<li><b>Create the repo:</b> open <a {LINK} href='{new_repo}'>github.com/new ↗</a> "
-        "(the name <b>mygeeky-beacon</b> and <b>Public</b> are filled in), click <b>Create repository</b>. "
-        "(Optional: on the repo page, click the ⚙ next to <b>About</b> and add the topic "
-        "<b>mygeeky-beacon</b>.)</li>")
+    """The same steps as beacon.repo_steps/token_steps (kept in sync by hand:
+    this file can't import myGeeKy, which may not be installed yet)."""
+    repo = (f"Setup creates the public repo <b>{user}/mygeeky-beacon</b> for you." if has_gh else
+            OL + "<li>Click <b>Open github.com/new</b> below. The name <b>mygeeky-beacon</b> and "
+            f"<b>Public</b> are already filled in.</li><li>Check the owner is <b>{user}</b>, then click "
+            "<b>Create repository</b>. Leave it empty; myGeeKy writes the files.</li></ol>")
     return (
         f"Your signals live in a public repo, <b>{user}/mygeeky-beacon</b>, written with a token that can "
-        "touch only that repo.<ol style='margin:2px 0 0 -20px'>"
-        + repo_step +
-        f"<li><b>Create the token:</b> open <a {LINK} href='{READ_TOKEN_URL}'>new fine-grained token ↗</a>. "
-        f"Name it <b>mygeeky-beacon</b>, owner <b>{user}</b>.</li>"
+        "touch only that repo. Do these in order:"
+        f"<p style='margin:8px 0 2px'><b>Step 1: create the repo</b></p>{repo}"
+        "<p style='margin:8px 0 2px'><b>Step 2: create a token that can write to it</b></p>" + OL +
+        f"<li>Click <b>Open token page</b> below. Name it <b>mygeeky-beacon</b>, owner <b>{user}</b>.</li>"
         "<li><b>Repository access</b> → <b>Only select repositories</b> → pick <b>mygeeky-beacon</b>. "
-        "(The permissions only appear once a repo is picked, so the repo must exist first.)</li>"
-        "<li>Under <i>Repositories</i>, click <b>Add permissions</b> and pick <b>Contents</b> "
-        "(on older pages: open <b>Repository permissions</b> and find <b>Contents</b> in the list). "
-        "Set it to <b>Read and write</b>. <i>Metadata: Read-only</i> gets added by itself, which is fine.</li>"
-        "<li>Don't add anything else. Click <b>Generate token</b>, copy it and paste it below.</li></ol>")
+        "(The permission list only appears after you pick the repo, so do Step 1 first.)</li>"
+        "<li>Under <i>Repositories</i>, click <b>Add permissions</b> → <b>Contents</b> "
+        "(older page: <b>Repository permissions</b> → <b>Contents</b>). Set it to <b>Read and write</b>. "
+        "<i>Metadata: Read-only</i> is added by itself; that's fine.</li>"
+        "<li>Nothing else. Click <b>Generate token</b>, copy it (starts with github_pat_), paste it below "
+        "and click Next. Setup tests it by publishing your beacon.</li></ol>")
 
 
 class SignalsPage(Page):
@@ -672,16 +676,33 @@ class SignalsPage(Page):
         self.steps = _label("", "muted")
         self.steps.setTextFormat(Qt.RichText)
         self.add(self.steps)
+        buttons = QHBoxLayout()
+        self.open_repo = QPushButton("Open github.com/new ↗")
+        self.open_repo.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(NEW_BEACON_REPO_URL)))
+        self.open_token = QPushButton("Open token page ↗")
+        self.open_token.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(READ_TOKEN_URL)))
+        buttons.addWidget(self.open_repo)
+        buttons.addWidget(self.open_token)
+        buttons.addStretch(1)
+        self.buttons = QWidget()
+        self.buttons.setLayout(buttons)
+        self.add(self.buttons)
         self.token = QLineEdit()
         self.token.setEchoMode(QLineEdit.Password)
-        self.token.setPlaceholderText("beacon token (github_pat_…)")
+        self.token.setPlaceholderText("Step 2 token (github_pat_…)")
         self.add(self.token)
         self.enable.toggled.connect(self._toggle)
         self.finish_layout()
 
     def _toggle(self, on: bool) -> None:
+        s = self.w.state
+        setting_up = on and not s.get("beacon_enabled")
         self.steps.setVisible(on)
-        self.token.setVisible(on and not self.w.state.get("beacon_token"))
+        self.buttons.setVisible(setting_up)
+        self.open_repo.setVisible(setting_up and not s.get("gh"))
+        self.token.setVisible(setting_up)
+        if s.get("beacon_token"):
+            self.token.setPlaceholderText("Leave empty to use the token already saved, or paste a new one")
 
     def initializePage(self) -> None:  # noqa: N802
         super().initializePage()

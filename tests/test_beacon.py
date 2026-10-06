@@ -239,3 +239,39 @@ def test_beacons_without_the_topic_are_found_by_name():
     cache = bc.refresh(client, cfg, force=True)
     assert set(cache["users"]) == {"alice", "newbie"}
     assert [r["from"] for r in bc.inbox(cache, cfg, bc.empty_beacon())] == ["newbie"]
+
+
+def test_beacon_init_walks_through_repo_and_token_and_retries_a_bad_token(monkeypatch):
+    from click.testing import CliRunner
+
+    import mygeeky.cli as cli
+    from mygeeky.config import save_config
+
+    save_config(MyGeekyConfig(github_username="me"))
+    repo_exists = iter([None, None, {"private": False, "topics": []}])
+
+    class Client:
+        def get_repo(self, name):
+            return next(repo_exists, {"private": False, "topics": []})
+
+    monkeypatch.setattr(cli, "_client_for", lambda cfg: Client())
+    monkeypatch.setattr(cli.click, "launch", lambda url: None)
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    monkeypatch.setattr(bc, "fetch_beacon", lambda client, owner: {"mygeeky_beacon": 1})
+    published, stored = [], []
+    monkeypatch.setattr(bc, "go_live", lambda cfg, writer=None: (
+        published.append(writer.session.headers["Authorization"]),
+        (_ for _ in ()).throw(bc.BeaconError("GitHub refused the write.")) if len(published) == 1 else None))
+    import keyring
+    monkeypatch.setattr(keyring, "set_password", lambda *a: stored.append(a))
+    monkeypatch.setattr(cli.auth, "get_beacon_token", lambda user: None)
+
+    # open page? y / repo created? (Enter) / open token page? y / bad token / good token
+    result = CliRunner().invoke(cli.main, ["beacon", "init"], input="y\n\ny\nbad\ngood\n")
+    assert result.exit_code == 0, result.output
+    assert "Step 1 of 3" in result.output and "Step 3 of 3" in result.output
+    assert "Only select repositories" in result.output and "Read and write" in result.output
+    assert "GitHub refused the write" in result.output
+    assert published == ["Bearer bad", "Bearer good"]
+    assert stored == [(cli.auth.BEACON_SERVICE_NAME, "me", "good")]   # only the token that worked is kept
+    assert "Your beacon is live" in result.output

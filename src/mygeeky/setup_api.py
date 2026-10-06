@@ -163,13 +163,14 @@ def beacon_init(req: dict[str, Any]) -> dict[str, Any]:
     _ensure_gh_on_path()
     cfg = load_config()
     user = cfg.github_username
-    token = str(req.get("token") or "").strip()
-    if token:
-        keyring.set_password(auth.BEACON_SERVICE_NAME, user, token)
-    elif not auth.get_beacon_token(user):
-        return {"ok": False, "error": "Paste the beacon token first."}
+    new_token = str(req.get("token") or "").strip()
+    token = new_token or auth.get_beacon_token(user)
+    if not token:
+        return {"ok": False, "error": "Paste the Step 2 token first."}
     notes = beacon.ensure_repo(cfg, GitHubClient(auth.get_token(user), rate_limit_sleep=0), create=True)
-    beacon.go_live(cfg)
+    beacon.go_live(cfg, beacon.BeaconWriter(token, user))   # the real test: publish with it
+    if new_token:  # stored only once it has proven it can write
+        keyring.set_password(auth.BEACON_SERVICE_NAME, user, new_token)
     return {"ok": True, "notes": notes, "url": f"https://github.com/{user}/{beacon.BEACON_REPO}"}
 
 
