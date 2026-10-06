@@ -301,9 +301,12 @@ def group_activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def get_market(cfg: MyGeekyConfig) -> dict[str, Any]:
     """The saved board -- local only, no network."""
+    from .. import producthunt
     from ..market import compute_board, load_state
     state = load_state()
-    return {"rows": compute_board(state), "updated_at": state.get("updated_at")}
+    return {"rows": compute_board(state), "updated_at": state.get("updated_at"),
+            "producthunt": producthunt.load_state().get("posts") or [],
+            "producthunt_token": bool(cfg.github_username and auth.get_producthunt_token(cfg.github_username))}
 
 
 def market_refresh_due(cfg: MyGeekyConfig, now: datetime | None = None) -> bool:
@@ -445,6 +448,19 @@ def open_profile(url: str) -> bool:
     return True
 
 
+LINK_PREFIXES = ("https://github.com/", "https://www.producthunt.com/posts/")
+
+
+def open_link(url: str) -> bool:
+    """Like open_profile, but also lets Product Hunt launch pages through."""
+    if not isinstance(url, str) or not url.startswith(LINK_PREFIXES):
+        return False
+    from PySide6.QtCore import QUrl
+    from PySide6.QtGui import QDesktopServices
+    QDesktopServices.openUrl(QUrl(url))
+    return True
+
+
 def _panel_geometry(cfg: MyGeekyConfig, folded: bool, screen_rect,
                     min_width: int = 0, min_height: int = 0) -> tuple[int, int, int, int]:
     """Returns (x, y, width, height) docked to the configured edge of
@@ -478,15 +494,11 @@ def _panel_geometry(cfg: MyGeekyConfig, folded: bool, screen_rect,
 
 
 def main() -> None:
-    try:
-        from PySide6.QtWidgets import QApplication
-    except ImportError:
-        raise SystemExit(
-            "The live GUI needs the optional 'gui' extra.\n"
-            "Install it with: pip install \"mygeeky[gui]\""
-        )
+    from .bootstrap import ensure_qt
+    ensure_qt()  # installs Qt on first use, wherever this Python can hold it
 
     from PySide6.QtCore import QLockFile
+    from PySide6.QtWidgets import QApplication
 
     from ..config import DATA_DIR, ensure_dirs
     from .qt_panel import ICON_WINDOW, MyGeekyPanel

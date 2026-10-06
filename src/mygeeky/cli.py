@@ -315,6 +315,26 @@ def auth_status() -> None:
     """Show where (if anywhere) your token is coming from -- never prints the token itself."""
     cfg = load_config()
     click.echo(f"Token source: {auth.token_source(cfg.github_username)}")
+    click.echo(f"Product Hunt token: {'set' if auth.get_producthunt_token(cfg.github_username) else 'not set'}")
+
+
+@auth_cmd.command("producthunt")
+@click.option("--remove", is_flag=True, help="Forget the stored Product Hunt token.")
+def auth_producthunt(remove: bool) -> None:
+    """Store a Product Hunt developer token, for launches in your field on the Market tab."""
+    cfg = load_config()
+    if not cfg.github_username:
+        raise click.ClickException("Run `mygeeky init` first.")
+    if remove:
+        import keyring
+        try:
+            keyring.delete_password(auth.PRODUCTHUNT_SERVICE_NAME, cfg.github_username)
+            click.echo("Product Hunt token removed.")
+        except Exception:
+            click.echo("No Product Hunt token was stored.")
+        return
+    auth.prompt_and_store_producthunt_token(cfg.github_username)
+    click.echo("Run `mygeeky market --refresh` (or click Refresh on the Market tab) to load launches.")
 
 
 # --------------------------------------------------------------------------- config
@@ -912,7 +932,22 @@ def _run_market(cfg: MyGeekyConfig, force: bool = False, log=lambda m: None) -> 
         raise click.ClickException("Run `mygeeky init` first.")
     client = _client_for(cfg)
     state = refresh_market(client, cfg, lambda: _market_terms(client, cfg), force=force, log=log)
+    _refresh_producthunt(cfg, client, force=force, log=log)
     return compute_board(state)
+
+
+def _refresh_producthunt(cfg: MyGeekyConfig, client: GitHubClient, force: bool = False,
+                         log=lambda m: None) -> None:
+    """Product Hunt launches in your field -- only with a token, and a
+    failure here never sinks the board itself."""
+    from . import producthunt
+    token = auth.get_producthunt_token(cfg.github_username)
+    if not token:
+        return
+    try:
+        producthunt.refresh(cfg, token, lambda: _market_terms(client, cfg), force=force, log=log)
+    except Exception as exc:
+        log(f"Product Hunt skipped: {exc}")
 
 
 def _fmt_count(n: float) -> str:
@@ -947,6 +982,21 @@ def market(refresh: bool, last: bool, as_json: bool) -> None:
         if r["commits_4w"] is not None:
             line += f"  {r['commits_4w']} commits/4wk"
         click.echo(line)
+    _print_producthunt(cfg)
+
+
+def _print_producthunt(cfg: MyGeekyConfig) -> None:
+    from . import producthunt
+    posts = producthunt.load_state().get("posts") or []
+    if not posts:
+        if not auth.get_producthunt_token(cfg.github_username):
+            click.echo("\nTip: add Product Hunt launches in your field with `mygeeky auth producthunt`.")
+        return
+    click.echo("\nProduct Hunt launches (your field first):")
+    for p in posts:
+        mark = "*" if p.get("match") else " "
+        click.echo(f" {mark} {p['votes']:>5} ▲  {p['name']} - {p['tagline'][:70]}")
+        click.echo(f"           {p['url']}")
 
 
 # --------------------------------------------------------------------------- sync
@@ -1215,6 +1265,8 @@ def schedule_remove() -> None:
 @main.command()
 def setup() -> None:
     """Open the setup wizard: update, reconnect GitHub, sync, Signals, shortcuts."""
+    from .gui.bootstrap import ensure_qt
+    ensure_qt()
     from .gui.setup_wizard import main as setup_main
     setup_main([])
 
@@ -1222,7 +1274,7 @@ def setup() -> None:
 # --------------------------------------------------------------------------- gui
 @main.command()
 def gui() -> None:
-    """Launch the live glass panel (requires `pip install "mygeeky[gui]"`)."""
+    """Launch the live glass panel (sets up Qt by itself the first time)."""
     from .gui.app import main as gui_main
     gui_main()
 

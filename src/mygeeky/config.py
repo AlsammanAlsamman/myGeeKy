@@ -32,6 +32,7 @@ CV_TEXT_FILE = DATA_DIR / "cv_text.txt"
 SCHOLAR_PROFILE_FILE = DATA_DIR / "scholar_profile.json"
 CONTRIBUTE_LOG = DATA_DIR / "contribute_history.jsonl"
 MARKET_FILE = DATA_DIR / "market.json"
+PRODUCTHUNT_FILE = DATA_DIR / "producthunt.json"
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
@@ -131,6 +132,11 @@ class MyGeekyConfig:
     market_pushed_within_days: int = 180
     market_pinned: list[str] = field(default_factory=list)  # "owner/repo" always on the board
     market_refresh_hours: float = 12.0     # panel refreshes the board by itself once it's this old
+    # Product Hunt launches in your field, under the board (needs `mygeeky auth producthunt`)
+    market_ph_topics: list[str] = field(default_factory=lambda: [
+        "developer-tools", "open-source", "github", "artificial-intelligence", "science", "health"])
+    market_ph_days: int = 30               # launches from the last N days
+    market_ph_size: int = 10               # launches shown
 
     # Cross-machine sync: your data dir is a clone of a PRIVATE GitHub repo
     # (`mygeeky sync init`). Uses your normal git/gh credentials, never
@@ -155,7 +161,7 @@ class MyGeekyConfig:
     ml_blend_weight: float = 0.5          # how much the learned model influences the final score once trained
     training_mass_follow_outlier: int = 3000  # exclude accounts following more than this from training data
 
-    # Optional live GUI (`mygeeky gui`, requires `pip install mygeeky[gui]`) -- a
+    # Optional live GUI (`mygeeky gui`, Qt is set up on first run) -- a
     # small always-on-top glass panel docked to a screen edge. Purely a local
     # viewer over the same data the CLI produces; it never runs a full
     # candidate search on its own (see gui/app.py) and never follows anyone --

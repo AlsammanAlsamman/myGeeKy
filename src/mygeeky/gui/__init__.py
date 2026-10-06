@@ -1,4 +1,4 @@
-"""Optional live desktop panel (`pip install mygeeky[gui]`, then `mygeeky gui`).
+"""Optional live desktop panel (`mygeeky gui`; Qt is set up on first run).
 
 A small always-on-top, docked, translucent window showing suggestions, a
 friends' activity feed, and model-improvement history -- all read from the

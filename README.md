@@ -48,7 +48,7 @@ Google Scholar papers) powers everything:
 |---|---|---|---|
 | 👥 **People** | Who shares your research and is likely to follow back, plus domain experts who rarely follow anyone | `mygeeky run` | Suggestions |
 | 🛠️ **Projects** | Repos in your field you could improve: open starter issues, maintainers who merge outside PRs | `mygeeky contribute` | Repos |
-| 📈 **Pulse** | Your field's popular repos ranked by momentum: stars gained, commits, PyPI downloads | `mygeeky market` | Market |
+| 📈 **Pulse** | Your field's popular repos ranked by momentum (stars gained, commits, PyPI downloads), plus new Product Hunt launches in your field | `mygeeky market` | Market |
 | 📰 **Activity** | What the people you follow, and your best matches, are doing right now | (in the panel) | Activity · Live |
 | 👋 **Signals** | Emoji-only signals between myGeeKy users, and a 🤝 handshake when it's mutual | `mygeeky beacon` | Signals |
 | 🧠 **Learning** | A model trained on who actually follows *you* back, getting sharper every week | `mygeeky learn` | Model |
@@ -160,13 +160,17 @@ reconfigure.
 **Any OS, with pip:**
 
 ```bash
-pip install "mygeeky[gui,pdf]"
+pip install mygeeky
 mygeeky init          # GitHub username (required); CV, ORCID, Google Scholar (optional)
 mygeeky run           # who to follow
 mygeeky contribute    # which repos to improve
 mygeeky market        # the "stock race" of your field's repos
-mygeeky gui           # the live panel
+mygeeky gui           # the live panel (sets up its GUI library by itself the first time)
 ```
+
+If `mygeeky` isn't recognized, use `python -m mygeeky` instead (for example
+`python -m mygeeky init`). It offers to fix your PATH so plain `mygeeky`
+works next time.
 
 `init` asks a few questions — only your GitHub username is required, every
 other answer can be skipped and changed later. Details in
@@ -336,6 +340,18 @@ About 3 GitHub API calls per repo, once a day. In the panel it's the
 **Market** tab, refreshed in the background when it's older than
 `market_refresh_hours` (default 12).
 
+**Product Hunt launches in your field.** Under the board, the Market also
+lists recent [Product Hunt](https://www.producthunt.com) launches. Launches
+that mention your profile terms come first (tagged *your field*), then the
+rest by upvotes. Product Hunt has no search, so launches are pulled from a few
+topics (`market_ph_topics`), from the last `market_ph_days` (30). It's
+read-only and needs a free Product Hunt developer token:
+
+```bash
+mygeeky auth producthunt          # walks you through creating the token; stored in the OS keyring
+mygeeky market --refresh          # board + launches
+```
+
 <br clear="right">
 
 ## Your profile: CV + GitHub + ORCID/OpenAlex + Google Scholar
@@ -347,7 +363,7 @@ mygeeky profile refresh     # after updating your CV: re-extract the PDF, re-fet
 mygeeky profile show        # what myGeeKy knows about you (no network)
 ```
 
-- **CV**: PDF/txt/md, converted to text (`pip install "mygeeky[pdf]"` for PDF).
+- **CV**: PDF/txt/md, converted to text.
 - **ORCID** (public API) and **OpenAlex** (looked up by your ORCID): your
   publication titles, abstracts, keywords and research topics. They're free and
   need no key. They feed both people matching and repo suggestions.
@@ -433,11 +449,26 @@ suggestions.
 pip install mygeeky
 ```
 
+That's all: PDF CVs work out of the box, and the panel's GUI library (Qt) is
+set up automatically the first time you run `mygeeky gui`. (`pip install
+"mygeeky[gui,pdf]"` still works too; the extras just aren't needed any more.)
+
 On Windows you can use `MyGeeKySetup.exe` instead (see the top of this page).
 To build it yourself: `pip install pyinstaller build`, then
 `python installer/build.py`, which writes `dist/MyGeeKySetup-<version>.exe`.
 
-(For PDF CVs: `pip install "mygeeky[pdf]"`.)
+### If something goes wrong on Windows
+
+- **`'mygeeky' is not recognized`**: pip put the command in a folder that isn't
+  on your PATH (common with the Microsoft Store Python). Use `python -m mygeeky`
+  instead, e.g. `python -m mygeeky init`. It offers once to add that folder to
+  your PATH, so plain `mygeeky` works in new terminals.
+- **`OSError: [Errno 2] No such file or directory: ...PySide6\qml\...`** with a
+  *Long Path* hint, from installing PySide6 yourself: the Microsoft Store
+  Python's package folder is too deep for Qt's files. You don't need to install
+  Qt by hand. `mygeeky gui` sets it up in a short folder (`~/.mygeeky/qt`) that
+  avoids the limit, no admin rights needed. If you'd rather, `MyGeeKySetup.exe`
+  sets up a regular Python instead.
 
 ## Quick start
 
@@ -474,7 +505,7 @@ mygeeky market              # momentum board of the popular, active repos in you
 mygeeky profile refresh     # re-read your CV + publications (ORCID/OpenAlex)
 mygeeky sync push|pull      # keep your data in your private GitHub repo
 mygeeky pipeline            # sync pull, learn, run, contribute, sync push — the weekly job
-mygeeky gui                 # launch the live glass panel (needs `pip install "mygeeky[gui]"`)
+mygeeky gui                 # launch the live glass panel
 ```
 
 ## Running it weekly
@@ -495,9 +526,12 @@ follows anyone.
 ## Live glass panel (optional GUI)
 
 ```bash
-pip install "mygeeky[gui]"
 mygeeky gui          # (or the standalone `mygeeky-gui` command)
 ```
+
+The first run sets up Qt (PySide6, about 80 MB) by itself. It uses this
+Python's normal package folder when Windows' path limit allows, and otherwise
+a short private folder, `~/.mygeeky/qt` (or `$MYGEEKY_QT_DIR`).
 
 A small, translucent, always-on-top panel docked to the edge of your
 screen (Windows and Linux), built with [PySide6/Qt](https://doc.qt.io/qtforpython-6/)
@@ -636,6 +670,7 @@ mygeeky config reset
 | `market_size` / `market_terms` | repos on the market board / profile terms searched to pick them | `25` / `8` |
 | `market_min_stars` / `market_pushed_within_days` | a board repo needs this many stars and a push this recent | `50` / `180` |
 | `market_pinned` | `owner/repo` always on the board, e.g. `snakemake/snakemake, chrchang/plink-ng` | `[]` |
+| `market_ph_topics` / `market_ph_days` / `market_ph_size` | Product Hunt topics to read, how far back, and how many launches to show (needs `mygeeky auth producthunt`) | `developer-tools, open-source, github, artificial-intelligence, science, health` / `30` / `10` |
 | `market_refresh_hours` | the panel re-snapshots the board once it's this old | `12` |
 | `beacon_enabled` | set by `mygeeky beacon init`; signals are off until then | `false` |
 | `beacon_status` | your status (`open-to-collab`, `learning`, `heads-down`, `seeking-reviewers`, `mentoring`) | `""` |

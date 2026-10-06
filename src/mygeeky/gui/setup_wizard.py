@@ -121,6 +121,10 @@ def find_python() -> str | None:
     if local.exists():
         candidates += [str(p) for p in sorted(local.glob("Python3*/python.exe"), reverse=True)]
     for exe in candidates:
+        if "WindowsApps" in exe:
+            # The Microsoft Store Python installs packages so deep that PySide6
+            # passes Windows' 260-character path limit; set up a regular one instead.
+            continue
         v = python_version(exe)
         if v and v >= MIN_PY:
             return exe
@@ -433,7 +437,7 @@ class InstallPage(Page):
                 wk.line.emit(f"Closed {stopped} open myGeeKy panel(s); they'll restart at the end.")
                 w.restart_panel = True
             wheel = bundled_wheel()
-            target = f"{wheel}[gui,pdf]" if wheel else "mygeeky[gui,pdf]"
+            target = str(wheel) if wheel else "mygeeky"
             wk.line.emit(f"Installing {wheel.name if wheel else 'mygeeky from PyPI'}…")
             proc = subprocess.Popen([w.python, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check",
                                      target], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
@@ -444,6 +448,16 @@ class InstallPage(Page):
                     wk.line.emit(line)
             if proc.wait() != 0:
                 return {"ok": False, "error": "pip couldn't install myGeeKy. See the log above."}
+        wk.line.emit("Setting up Qt for the panel…")
+        proc = subprocess.Popen([w.python, "-m", "mygeeky.gui.bootstrap"], stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, creationflags=NO_WINDOW,
+                                encoding="utf-8", errors="replace")
+        for line in proc.stdout:  # type: ignore[union-attr]
+            line = line.rstrip()
+            if line and not line.startswith("  "):
+                wk.line.emit(line)
+        if proc.wait() != 0:
+            return {"ok": False, "error": "Couldn't set up Qt for the panel. See the log above."}
         status = api(w.python, "status")
         if not status.get("ok"):
             return status

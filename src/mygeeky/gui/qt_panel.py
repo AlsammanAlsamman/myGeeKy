@@ -1121,6 +1121,63 @@ class MarketRow(QFrame):
         self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
 
 
+PH_ORANGE = "#ff6154"
+
+
+class ProductHuntRow(QFrame):
+    """One Product Hunt launch under the Market board: thumbnail, name,
+    tagline, upvotes, and a 'your field' tag when it mentions your terms.
+    Product Hunt text is someone else's, so it's always plain text.
+    Clicking opens the launch page."""
+
+    def __init__(self, post: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 loader: "AvatarLoader | None" = None) -> None:
+        super().__init__()
+        self.setObjectName("phRow")
+        self.slug = post.get("slug", "")
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(8, 6, 8, 6)
+        outer.setSpacing(8)
+        outer.addWidget(_avatar_widget(post.get("name") or "?", post.get("thumbnail", ""), 26, loader))
+
+        body = QVBoxLayout()
+        body.setSpacing(1)
+        name_row = QHBoxLayout()
+        name_row.setSpacing(6)
+        name = QLabel(post.get("name", ""))
+        name.setTextFormat(Qt.PlainText)
+        name.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; font-weight:700; background:transparent;")
+        name_row.addWidget(name)
+        if post.get("match"):
+            tag = QLabel("your field")
+            tag.setToolTip("Mentions " + ", ".join(post["match"][:4]))
+            tag.setStyleSheet(f"color:{theme['text']}; background:{theme['section_btn']}; "
+                              f"border-radius:7px; padding:1px 6px; font-size:9.5px;")
+            tag.setFixedHeight(16)
+            name_row.addWidget(tag)
+        name_row.addStretch(1)
+        body.addLayout(name_row)
+        tagline = QLabel(post.get("tagline", ""))
+        tagline.setTextFormat(Qt.PlainText)
+        tagline.setWordWrap(True)
+        tagline.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        tagline.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        body.addWidget(tagline)
+        outer.addLayout(body, 1)
+
+        votes = QLabel(f"▲ {_fmt_count(post.get('votes'))}")
+        votes.setToolTip(f"{post.get('votes', 0)} upvotes · {post.get('comments', 0)} comments")
+        votes.setStyleSheet(f"color:{PH_ORANGE}; font-size:11px; font-weight:700; background:transparent;")
+        outer.addWidget(votes, 0, Qt.AlignVCenter)
+
+        self.setStyleSheet(f"QFrame#phRow {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"QFrame#phRow:hover {{ background:{theme['btn_bg']}; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(", ".join(post.get("topics") or []))
+        url = post.get("url", "")
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
 class _ClickableLabel(QLabel):
     """A word-wrapping label that acts like a link button."""
 
@@ -2572,6 +2629,7 @@ class MyGeekyPanel(QWidget):
             self.market_area.addWidget(msg)
         for row in rows:
             self.market_area.addWidget(MarketRow(row, theme, logic.open_profile, self.avatar_loader))
+        self._render_producthunt(data, theme)
         collecting = rows and all(r.get("stars_week") is None for r in rows)
         self.market_hint.setText(
             "The popular, active repos in your field, ranked by momentum: stars gained, commits and PyPI "
@@ -2582,6 +2640,24 @@ class MyGeekyPanel(QWidget):
             self.market_updated_label.setText("updated " + _time_ago(updated) if updated else "")
         self.market_hint.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
         self.market_updated_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+
+    def _render_producthunt(self, data: dict[str, Any], theme: dict[str, Any]) -> None:
+        posts = data.get("producthunt") or []
+        header = QLabel("PRODUCT HUNT · LAUNCHES IN YOUR FIELD")
+        header.setStyleSheet("font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
+                             f"margin-top:8px; color:{theme['text']}; background:transparent;")
+        self.market_area.addWidget(header)
+        if not posts:
+            hint = QLabel("Add launches from Product Hunt: run `mygeeky auth producthunt` in a terminal "
+                          "(a free developer token), then click Refresh."
+                          if not data.get("producthunt_token") else
+                          "No launches yet. They load with the next board refresh (or click Refresh).")
+            hint.setWordWrap(True)
+            hint.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+            self.market_area.addWidget(hint)
+            return
+        for post in posts:
+            self.market_area.addWidget(ProductHuntRow(post, theme, logic.open_link, self.avatar_loader))
 
     # ------------------------------------------------------------------ live spotlight ticker
     def _update_live_ticker(self) -> None:

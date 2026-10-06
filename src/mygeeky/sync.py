@@ -34,6 +34,7 @@ avatar_cache/
 logs/
 activity_cache.json
 beacons_cache.json
+.path_offered
 *.token
 *.lock
 """

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mygeeky"
-version = "0.4.0"
+version = "0.4.1"
 description = "Your corner of GitHub: the people, projects and pulse of your field, from your CV, repos and papers. Suggests only; never follows anyone for you."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -39,17 +39,22 @@ dependencies = [
     "platformdirs>=4.0",
     "scikit-learn>=1.3",
     "numpy>=1.24",
+    "pypdf>=4.0",
 ]
 
+# Qt for the panel is NOT a pip dependency: `mygeeky gui` installs it on first
+# use, into a short private folder when this Python's package folder is too
+# deep for it (see mygeeky/gui/bootstrap.py). The old extras stay so existing
+# `pip install "mygeeky[gui,pdf]"` commands keep working.
 [project.optional-dependencies]
-pdf = ["pypdf>=4.0"]
-gui = ["PySide6>=6.5"]
+pdf = []
+gui = []
 dev = ["pytest>=7.4"]
 
 [project.scripts]
 mygeeky = "mygeeky.cli:main"
 mygeeky-gui = "mygeeky.gui.app:main"
-mygeeky-setup = "mygeeky.gui.setup_wizard:main"
+mygeeky-setup = "mygeeky.gui.bootstrap:setup_main"
 
 [project.urls]
 Homepage = "https://github.com/AlsammanAlsamman/myGeeKy"

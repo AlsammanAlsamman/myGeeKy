@@ -9,7 +9,9 @@ myGeeKy
 The people, projects & pulse of your field on GitHub
 
 ## Links
-- Website: https://github.com/AlsammanAlsamman/myGeeKy
+- Website (main link, for now): https://github.com/AlsammanAlsamman/myGeeKy
+- Later, once https://mygeeky.org has its HTTPS certificate and is a few weeks old
+  (some networks block brand-new domains), switch the main link to it.
 - PyPI: https://pypi.org/project/mygeeky/
 - Windows installer: https://github.com/AlsammanAlsamman/myGeeKy/releases/latest
 
@@ -63,8 +65,8 @@ code path for it. Your main token only needs read access and stays in your
 OS keyring. Signals uses a separate, opt-in token that can write to one
 repo only.
 
-**Windows:** grab `MyGeeKySetup.exe` from the releases page. It's Next → Next → Finish (new).
-**Anywhere:** `pip install "mygeeky[gui]"` → `mygeeky init` → `mygeeky gui`
+**Windows:** grab `MyGeeKySetup.exe` from the GitHub releases page. It's Next → Next → Finish (new).
+**Anywhere:** `pip install mygeeky` → `mygeeky init` → `mygeeky gui`
 
 It started with researchers in genomics and bioinformatics, but it works
 for any field. What would you want it to find for you?

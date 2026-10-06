@@ -16,8 +16,8 @@ def load_cv_text(path: str) -> str:
             from pypdf import PdfReader
         except ImportError as exc:
             raise RuntimeError(
-                "Reading a .pdf CV requires the optional 'pdf' extra.\n"
-                "Install it with: pip install 'mygeeky[pdf]'\n"
+                "Reading a .pdf CV needs pypdf, which normally comes with myGeeKy.\n"
+                "Install it with: pip install pypdf\n"
                 "Or export your CV as .txt/.md and point mygeeky at that instead."
             ) from exc
         reader = PdfReader(str(p))

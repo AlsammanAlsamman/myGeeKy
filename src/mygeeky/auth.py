@@ -177,6 +177,41 @@ def delete_beacon_token(username: str) -> bool:
         return False
 
 
+PRODUCTHUNT_SERVICE_NAME = "mygeeky-producthunt-token"
+PRODUCTHUNT_ENV_VAR = "MYGEEKY_PRODUCTHUNT_TOKEN"
+
+
+def get_producthunt_token(username: str) -> str | None:
+    """Product Hunt developer token (read-only API access), if set up."""
+    env_token = os.environ.get(PRODUCTHUNT_ENV_VAR)
+    if env_token:
+        return env_token.strip()
+    try:
+        return keyring.get_password(PRODUCTHUNT_SERVICE_NAME, username)
+    except Exception:
+        return None
+
+
+def prompt_and_store_producthunt_token(username: str) -> None:
+    print(
+        "Product Hunt launches in the Market tab need a free Product Hunt developer token.\n\n"
+        "  1. Open https://www.producthunt.com/v2/oauth/applications and sign in.\n"
+        "  2. Click 'Add an application'. Any name works (e.g. mygeeky), and the\n"
+        "     redirect URI can be https://localhost.\n"
+        "  3. On the app's page, click 'Create Token' under Developer Token and copy it.\n\n"
+        "It's read-only and stored only in your OS keyring.\n"
+    )
+    token = getpass.getpass("Paste the Product Hunt token (input hidden): ").strip()
+    if not token:
+        raise ValueError("Empty token, nothing stored.")
+    try:
+        keyring.set_password(PRODUCTHUNT_SERVICE_NAME, username, token)
+    except Exception as exc:
+        raise RuntimeError(f"Could not access an OS keyring backend ({exc}). "
+                           f"Set {PRODUCTHUNT_ENV_VAR} yourself instead.") from exc
+    print("Product Hunt token stored securely in your OS keyring.")
+
+
 def require_token(username: str) -> str:
     token = get_token(username)
     if not token:
