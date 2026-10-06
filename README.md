@@ -21,7 +21,7 @@
 
 <p align="center">
   <a href="#-whats-inside">What's inside</a> ·
-  <a href="#-quick-start">Quick start</a> ·
+  <a href="#-get-started-in-3-steps">Get started</a> ·
   <a href="#-the-live-panel">Live panel</a> ·
   <a href="#signal-other-mygeeky-users-without-words-mygeeky-beacon">Signals</a> ·
   <a href="#safety">Safety</a> ·
@@ -141,40 +141,79 @@ as easily as you can.
 </tr>
 </table>
 
-## 🚀 Quick start
+## 🚀 Get started in 3 steps
 
-**Windows, the easy way:** download `MyGeeKySetup-<version>.exe` from
-[Releases](https://github.com/AlsammanAlsamman/myGeeKy/releases) and click
-Next → Next → Finish. It installs Python for you if it's missing, installs or
-updates myGeeKy, and stores your token in the Windows Credential Locker. It
-also connects your private data repo, can turn on Signals, and adds Start
-menu and startup shortcuts. It appears in *Settings → Apps* so you can
-uninstall it later. Run it again (or `mygeeky setup`) any time to update or
-reconfigure.
+<!-- VIDEO (enable once uploaded: replace VIDEO_ID and remove this comment wrapper)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=VIDEO_ID"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/video-thumbnail.png" width="720" alt="Watch: install and set up myGeeKy in 2 minutes"></a><br>
+  <sub>▶ <b>Watch the 2-minute video:</b> install, set up, and a tour of the panel</sub>
+</p>
+-->
+
+### 1 · Install
+
+| On Windows | On any OS (Windows, macOS, Linux) |
+|---|---|
+| Download **`MyGeeKySetup.exe`** from [Releases](https://github.com/AlsammanAlsamman/myGeeKy/releases/latest) and click **Next → Next → Finish**. It sets up Python too if you don't have it. | `pip install mygeeky` |
+
+> Windows may say *"Windows protected your PC"*, because the installer isn't
+> code-signed yet. Click **More info → Run anyway**.
+
+### 2 · Tell it who you are
+
+The installer asks you this itself. With pip, run:
+
+```bash
+mygeeky init
+```
+
+Only your **GitHub username** is required. Your CV, ORCID iD and Google Scholar
+profile are optional, and they make the matches much better. It also asks for
+a **read-only GitHub token**:
+
+1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
+2. **Repository access:** *Public repositories*.
+3. Click **Add permissions** under *Account* → **Followers** → *Read-only*.
+4. **Generate token**, then paste it when asked. It's stored in your OS keyring, never in a file.
+
+### 3 · Open your panel
+
+```bash
+mygeeky gui
+```
+
+The first time, it sets up its GUI library by itself (about a minute). Then:
+
+```bash
+mygeeky run           # people in your field worth following
+mygeeky contribute    # repos you could improve
+mygeeky market        # what's rising in your field
+```
+
+### 4 · Optional: join Signals 👋
+
+```bash
+mygeeky beacon init
+```
+
+It walks you through two things on github.com (a public `mygeeky-beacon` repo
+and a token that can write only to it), checking each step. Details in
+[Join Signals, step by step](#join-signals-step-by-step).
+
+<details>
+<summary><b>Something didn't work?</b></summary>
+
+- **`'mygeeky' is not recognized`**: use `python -m mygeeky` instead, e.g.
+  `python -m mygeeky init`. It offers to fix your PATH for next time.
+- **Others can't see you in Signals**: run `mygeeky beacon check`.
+- **More**: see [If something goes wrong on Windows](#if-something-goes-wrong-on-windows).
+
+</details>
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/setup-welcome.png" width="400" alt="Setup wizard: welcome page">
-<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/setup-signals.png" width="400" alt="Setup wizard: step-by-step Signals token instructions">
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/setup-signals.png" width="400" alt="Setup wizard: step-by-step Signals instructions">
 </p>
-
-**Any OS, with pip:**
-
-```bash
-pip install mygeeky
-mygeeky init          # GitHub username (required); CV, ORCID, Google Scholar (optional)
-mygeeky run           # who to follow
-mygeeky contribute    # which repos to improve
-mygeeky market        # the "stock race" of your field's repos
-mygeeky gui           # the live panel (sets up its GUI library by itself the first time)
-```
-
-If `mygeeky` isn't recognized, use `python -m mygeeky` instead (for example
-`python -m mygeeky init`). It offers to fix your PATH so plain `mygeeky`
-works next time.
-
-`init` asks a few questions — only your GitHub username is required, every
-other answer can be skipped and changed later. Details in
-[Quick start](#quick-start) below.
 
 ## 🪟 The live panel
 
