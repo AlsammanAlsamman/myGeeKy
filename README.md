@@ -21,6 +21,7 @@
 
 <p align="center">
   <a href="#-whats-inside">What's inside</a> ·
+  <a href="https://youtu.be/64uug0YHVUY">▶ Watch the video</a> ·
   <a href="#-get-started-in-3-steps">Get started</a> ·
   <a href="#-the-live-panel">Live panel</a> ·
   <a href="#signal-other-mygeeky-users-without-words-mygeeky-beacon">Signals</a> ·
@@ -143,12 +144,11 @@ as easily as you can.
 
 ## 🚀 Get started in 3 steps
 
-<!-- VIDEO (enable once uploaded: replace VIDEO_ID and remove this comment wrapper)
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=VIDEO_ID"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/video-thumbnail.png" width="720" alt="Watch: install and set up myGeeKy in 2 minutes"></a><br>
+  <a href="https://youtu.be/64uug0YHVUY"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/video-thumbnail.png" width="720" alt="Watch: install and set up myGeeKy in 2 minutes"></a><br>
   <sub>▶ <b>Watch the 2-minute video:</b> install, set up, and a tour of the panel</sub>
 </p>
--->
+
 
 ### 1 · Install
 
