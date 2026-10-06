@@ -646,8 +646,8 @@ def beacon_steps(user: str, has_gh: bool) -> str:
         f"<li>Setup creates the public repo <b>{user}/mygeeky-beacon</b> for you.</li>" if has_gh else
         f"<li><b>Create the repo:</b> open <a {LINK} href='{new_repo}'>github.com/new ↗</a> "
         "(the name <b>mygeeky-beacon</b> and <b>Public</b> are filled in), click <b>Create repository</b>. "
-        "Then click the ⚙ next to <b>About</b> on the repo page, add the topic <b>mygeeky-beacon</b> "
-        "and save, so other users can find you.</li>")
+        "(Optional: on the repo page, click the ⚙ next to <b>About</b> and add the topic "
+        "<b>mygeeky-beacon</b>.)</li>")
     return (
         f"Your signals live in a public repo, <b>{user}/mygeeky-beacon</b>, written with a token that can "
         "touch only that repo.<ol style='margin:2px 0 0 -20px'>"

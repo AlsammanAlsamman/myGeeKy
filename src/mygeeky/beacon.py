@@ -8,8 +8,8 @@ gets a small PUBLIC repo, `<you>/mygeeky-beacon`, tagged with the topic
      "interests": ["gwas", "snakemake"],
      "gestures": [{"to": "bob", "type": "wave", "at": "2026-10-06T09:00:00+00:00"}]}
 
-Other users find beacons with a plain repository search for that topic
-(read-only), read the ones that name them, and show the gestures as
+Other users find beacons with plain repository searches for that topic and
+for the repo name (read-only; the topic is easy to forget), read the ones that name them, and show the gestures as
 incoming signals. Two people who have each signalled the other get a
 "handshake".
 
@@ -292,20 +292,23 @@ class BeaconWriter:
 
 # --------------------------------------------------------------------------- reading everyone else's
 def discover(client: GitHubClient, max_users: int) -> dict[str, dict[str, Any]]:
-    """{login: {"pushed_at", "avatar_url"}} for every beacon repo the search
-    finds -- one search call per 100 users."""
+    """{login: {"pushed_at", "avatar_url"}} for every beacon repo the searches
+    find. Two searches: by topic, and by the repo's name -- adding the topic
+    takes a manual step (or the GitHub CLI) that people miss, while every
+    beacon is named `mygeeky-beacon`. One search call per 100 users each."""
     found: dict[str, dict[str, Any]] = {}
     pages = max(1, -(-max_users // 100))
-    for repo in client.search_repositories(f"topic:{BEACON_TOPIC} fork:false", max_pages=pages,
-                                           per_page=100, sort="updated"):
-        owner = repo.get("owner") or {}
-        login = owner.get("login")
-        if (repo.get("name") or "").lower() != BEACON_REPO or owner.get("type") != "User" or not valid_login(login):
-            continue
-        found.setdefault(login, {"pushed_at": repo.get("pushed_at") or "",
-                                 "avatar_url": owner.get("avatar_url") or ""})
-        if len(found) >= max_users:
-            break
+    for query in (f"topic:{BEACON_TOPIC} fork:false", f"{BEACON_REPO} in:name fork:false"):
+        for repo in client.search_repositories(query, max_pages=pages, per_page=100, sort="updated"):
+            owner = repo.get("owner") or {}
+            login = owner.get("login")
+            if ((repo.get("name") or "").lower() != BEACON_REPO or owner.get("type") != "User"
+                    or not valid_login(login) or repo.get("private")):
+                continue
+            found.setdefault(login, {"pushed_at": repo.get("pushed_at") or "",
+                                     "avatar_url": owner.get("avatar_url") or ""})
+            if len(found) >= max_users:
+                return found
     return found
 
 
@@ -512,8 +515,8 @@ def ensure_repo(cfg: MyGeekyConfig, client: GitHubClient, create: bool) -> list[
         if has_gh and _gh("repo", "edit", repo, "--add-topic", BEACON_TOPIC).returncode == 0:
             notes.append(f"Tagged it with the '{BEACON_TOPIC}' topic, so other users can find it.")
         else:
-            notes.append(f"Add the topic '{BEACON_TOPIC}' to {repo} (repo page -> About -> gear icon), "
-                         "or nobody will find your beacon.")
+            notes.append(f"Optional: add the topic '{BEACON_TOPIC}' to {repo} (repo page -> About -> "
+                         "gear icon). Others find your beacon by its name anyway.")
     return notes
 
 

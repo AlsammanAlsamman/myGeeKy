@@ -424,8 +424,8 @@ In the panel, the **Signals** tab shows what people sent you and who else
 is around, with one-click 👋 📚 🤝 👀 buttons. Incoming signals also lead
 the Live tab's rotation.
 
-How it works: each user's beacon is a public repo tagged with the topic
-`mygeeky-beacon`, holding one `beacon.json` file. It lists the signals you
+How it works: each user's beacon is a public repo named `mygeeky-beacon`
+(ideally also tagged with that topic), holding one `beacon.json` file. It lists the signals you
 sent, your status, and a few interest tags taken from your `topics`,
 `keywords` and `languages` (turn those off with `beacon_share_interests false`).
 myGeeKy finds other beacons with a normal repo search and reads the ones that

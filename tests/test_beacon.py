@@ -159,12 +159,14 @@ def test_send_requires_setup():
 
 # --------------------------------------------------------------------------- reading
 class _FakeClient:
-    def __init__(self, repos, files):
-        self.repos, self.files, self.fetched = repos, files, []
+    def __init__(self, repos, files, by_name=()):
+        self.repos, self.files, self.fetched, self.by_name = repos, files, [], list(by_name)
 
     def search_repositories(self, query, max_pages, per_page, sort):
-        assert "topic:mygeeky-beacon" in query
-        return self.repos
+        if "topic:mygeeky-beacon" in query:
+            return self.repos
+        assert "mygeeky-beacon in:name" in query
+        return self.by_name
 
     def get_repo_file(self, owner_repo, path):
         self.fetched.append(owner_repo)
@@ -224,3 +226,16 @@ def test_fetch_beacon_rejects_oversized():
     client = _FakeClient([], {})
     client.get_repo_file = lambda r, p: {"encoding": "base64", "size": bc.MAX_BEACON_BYTES + 1, "content": ""}
     assert bc.fetch_beacon(client, "alice") is None
+
+
+def test_beacons_without_the_topic_are_found_by_name():
+    recent = datetime.now(timezone.utc).isoformat()
+    client = _FakeClient([_repo("alice")], {
+        "alice": _raw([]),
+        "newbie": _raw([{"to": "me", "type": "wave", "at": recent}]),
+    }, by_name=[_repo("alice"), _repo("newbie"), _repo("copycat", name="not-mygeeky-beacon"),
+                dict(_repo("secret"), private=True)])
+    cfg = _cfg()
+    cache = bc.refresh(client, cfg, force=True)
+    assert set(cache["users"]) == {"alice", "newbie"}
+    assert [r["from"] for r in bc.inbox(cache, cfg, bc.empty_beacon())] == ["newbie"]
