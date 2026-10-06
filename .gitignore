@@ -11,3 +11,4 @@ venv*/
 # MyGeeky never writes secrets to the repo, but keep the door shut anyway.
 *.token
 mygeeky_config.local.json
+_site/
