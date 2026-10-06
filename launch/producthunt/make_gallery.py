@@ -81,8 +81,46 @@ def hero():
     return im
 
 
+PILLARS = [
+    ("PEOPLE", "Who shares your research and will follow back", (127, 216, 255)),
+    ("PROJECTS", "Repos you could improve, with merge-happy maintainers", (52, 211, 153)),
+    ("PULSE", "Your field's repos ranked by momentum", (255, 196, 87)),
+    ("ACTIVITY", "What your people are building right now", (122, 92, 255)),
+    ("SIGNALS", "Emoji hellos between myGeeKy users", (255, 111, 216)),
+    ("LEARNING", "A model that learns who follows you back", (248, 113, 113)),
+]
+
+
+def overview():
+    im = background()
+    d = ImageDraw.Draw(im)
+    d.text((80, 60), "One profile. Your whole field.", font=font(50, True), fill="white")
+    d.text((82, 130), "Your CV, repos, ORCID and Google Scholar papers power all of it.",
+           font=font(26), fill=(190, 205, 235))
+    tw, th, gx, gy = 350, 220, 30, 30
+    tiles = Image.new("RGBA", im.size, (0, 0, 0, 0))   # translucent glass tiles need real blending
+    td = ImageDraw.Draw(tiles)
+    for i in range(len(PILLARS)):
+        x = 80 + (i % 3) * (tw + gx)
+        y = 210 + (i // 3) * (th + gy)
+        td.rounded_rectangle((x, y, x + tw, y + th), 22, fill=(255, 255, 255, 20), outline=(255, 255, 255, 45))
+    im.alpha_composite(tiles)
+    d = ImageDraw.Draw(im)
+    for i, (name, line, color) in enumerate(PILLARS):
+        x = 80 + (i % 3) * (tw + gx)
+        y = 210 + (i // 3) * (th + gy)
+        d.rounded_rectangle((x + 28, y + 30, x + 76, y + 36), 3, fill=color + (255,))
+        d.text((x + 28, y + 52), name, font=font(30, True), fill=color + (255,))
+        ty = y + 100
+        for ln in wrap(d, line, font(23), tw - 56):
+            d.text((x + 28, ty), ln, font=font(23), fill=(225, 230, 245))
+            ty += 32
+    return im
+
+
 SLIDES = [
     ("hero", None),
+    ("overview", "overview"),
     ("suggestions", ([SHOTS / "suggestions.png"], "People in your field worth following",
                      "Built from your CV, repos, ORCID & Google Scholar papers. Ranked by real follow-back odds.")),
     ("signals", ([SHOTS / "signals.png"], "Signals: say hi without words",
@@ -105,6 +143,6 @@ SLIDES = [
 
 if __name__ == "__main__":
     for i, (name, spec) in enumerate(SLIDES, 1):
-        img = hero() if spec is None else slide(*spec)
+        img = hero() if spec is None else overview() if spec == "overview" else slide(*spec)
         img.convert("RGB").save(OUT / f"gallery-{i}-{name}.png")
         print(f"gallery-{i}-{name}.png")
