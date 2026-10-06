@@ -69,7 +69,8 @@ how often their maintainers merge outside contributors' PRs.
 
 **🪟 A glass panel on your screen edge**<br>
 Live feed of what your friends are doing, your suggestions and repos —
-always on top, three themes, folds down to a tiny icon.
+always on top, three themes, folds down to a small icon that now and then
+lets out a few floating hearts.
 
 </td>
 </tr>
@@ -89,9 +90,41 @@ you click, you follow people yourself, by hand, on github.com.
 
 </td>
 </tr>
+<tr>
+<td valign="top">
+
+**👋 Signals, without words** <sup>new</sup><br>
+Wave at, learn from, or offer to collaborate with other myGeeKy users,
+using emoji only and no server. 🤝 Handshake when it's mutual.
+
+</td>
+<td valign="top">
+
+**🪄 One-click Windows installer** <sup>new</sup><br>
+Next → Next → Finish. It sets up Python, your token, private sync and
+shortcuts for you, and you can uninstall it from *Settings → Apps*.
+
+</td>
+</tr>
 </table>
 
 ## 🚀 Quick start
+
+**Windows, the easy way:** download `MyGeeKySetup-<version>.exe` from
+[Releases](https://github.com/AlsammanAlsamman/myGeeKy/releases) and click
+Next → Next → Finish. It installs Python for you if it's missing, installs or
+updates myGeeKy, and stores your token in the Windows Credential Locker. It
+also connects your private data repo, can turn on Signals, and adds Start
+menu and startup shortcuts. It appears in *Settings → Apps* so you can
+uninstall it later. Run it again (or `mygeeky setup`) any time to update or
+reconfigure.
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/setup-welcome.png" width="400" alt="Setup wizard: welcome page">
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/setup-signals.png" width="400" alt="Setup wizard: step-by-step Signals token instructions">
+</p>
+
+**Any OS, with pip:**
 
 ```bash
 pip install "mygeeky[gui,pdf]"
@@ -117,10 +150,11 @@ other answer can be skipped and changed later. Details in
 <tr>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="240" alt="Activity tab"><br><sub><b>Activity</b> — one card per person; click to expand</sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — how good it is, what it learned, and the trend</sub></td>
-<td align="center" valign="middle"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_128.png" width="58" alt="Folded icon"><br><sub><b>Folded</b> — just the icon on the screen edge, half-transparent until you hover it</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="240" alt="Market tab"><br><sub><b>Market</b> — your field's repos as a stock race</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="240" alt="Market tab"><br><sub><b>Market</b> — your field's repos as a stock race</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="240" alt="Signals tab"><br><sub><b>Signals</b> — emoji signals from other myGeeKy users (example data)</sub></td>
+<td align="center" valign="bottom"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/hearts.png" width="150" alt="Folded icon with floating hearts"><br><sub><b>Folded</b> — just the icon on the screen edge; every few minutes a few small hearts drift up and fade (turn off in ⚙)</sub></td>
 </tr>
 </table>
 
@@ -311,11 +345,62 @@ history and training data. `mygeeky pipeline` (the weekly job) then does
 - `.jsonl` logs use git's `union` merge, so two machines in the same week merge cleanly.
 - Git uses your own `gh`/git credentials. myGeeKy's API client stays read-only.
 
+## Signal other myGeeKy users, without words (`mygeeky beacon`)
+
+myGeeKy users can send each other **emoji-only signals**, and myGeeKy
+never needs a server for it: everything goes through GitHub.
+
+| | Signal | Means |
+|---|---|---|
+| 👋 | `wave` | "I noticed you" |
+| 📚 | `learn` | "I learn from your work" |
+| 🤝 | `collab` | "I'd like to work with you" |
+| 👀 | `watching` | "I'm following your progress" |
+| 🔥 | `kudos --repo owner/name` | "this repo of yours is great" |
+
+```bash
+mygeeky beacon init                  # one-time: creates <you>/mygeeky-beacon (PUBLIC) + its token
+mygeeky beacon people                # fellow myGeeKy users, those sharing your interests first
+mygeeky beacon send alice wave       # or: learn | collab | watching | kudos --repo alice/tool
+mygeeky beacon inbox                 # signals sent to you -- 🤝 handshake = you both signalled
+mygeeky beacon status open-to-collab # or learning, heads-down, seeking-reviewers, mentoring, none
+mygeeky beacon sent | unsend alice | block troll | unblock troll
+```
+
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="260" align="right" alt="Signals tab (example data)">
+
+In the panel, the **Signals** tab shows what people sent you and who else
+is around, with one-click 👋 📚 🤝 👀 buttons. Incoming signals also lead
+the Live tab's rotation.
+
+How it works: each user's beacon is a public repo tagged with the topic
+`mygeeky-beacon`, holding one `beacon.json` file. It lists the signals you
+sent, your status, and a few interest tags taken from your `topics`,
+`keywords` and `languages` (turn those off with `beacon_share_interests false`).
+myGeeKy finds other beacons with a normal repo search and reads the ones that
+name you. Someone who signalled you also gets a boost in your
+suggestions.
+
+- **It's public.** Anyone can read who you signalled, and when.
+- **There's no text, so there's nothing to moderate.** Signals and statuses come from fixed lists.
+  Everything read from other people's beacons is validated and shown as plain
+  text. `block` hides a person for good.
+- **Signals expire** after `beacon_gesture_ttl_days` (90). You can send
+  `beacon_daily_limit` (20) per day.
+- **A separate, single-repo token.** `init` asks for a fine-grained token
+  with access to *only* `<you>/mygeeky-beacon` and only **Contents: Read and
+  write**. It's stored in your OS keyring under its own entry. Your main token
+  stays read-only.
+
 ## Install
 
 ```bash
 pip install mygeeky
 ```
+
+On Windows you can use `MyGeeKySetup.exe` instead (see the top of this page).
+To build it yourself: `pip install pyinstaller build`, then
+`python installer/build.py`, which writes `dist/MyGeeKySetup-<version>.exe`.
 
 (For PDF CVs: `pip install "mygeeky[pdf]"`.)
 
@@ -517,12 +602,19 @@ mygeeky config reset
 | `market_min_stars` / `market_pushed_within_days` | a board repo needs this many stars and a push this recent | `50` / `180` |
 | `market_pinned` | `owner/repo` always on the board, e.g. `snakemake/snakemake, chrchang/plink-ng` | `[]` |
 | `market_refresh_hours` | the panel re-snapshots the board once it's this old | `12` |
+| `beacon_enabled` | set by `mygeeky beacon init`; signals are off until then | `false` |
+| `beacon_status` | your status (`open-to-collab`, `learning`, `heads-down`, `seeking-reviewers`, `mentoring`) | `""` |
+| `beacon_share_interests` | publish your topics/keywords/languages as interest tags in your beacon | `true` |
+| `beacon_blocked` | people whose signals are never shown | `[]` |
+| `beacon_daily_limit` / `beacon_gesture_ttl_days` | signals you can send per day / days before a signal expires | `20` / `90` |
+| `beacon_refresh_minutes` / `beacon_max_users` | minimum minutes between re-reading beacons / beacons read per refresh | `30` / `60` |
 | `sync_repo` / `sync_auto` | private data repo (set by `sync init`) / whether `pipeline` pulls+pushes | `""` / `true` |
 | `min_training_samples` | labeled examples needed before the ML model kicks in | `8` |
 | `ml_blend_weight` | how much the learned model influences the final score once trained | `0.5` |
 | `training_mass_follow_outlier` | exclude training examples from accounts following more than this | `3000` |
 | `gui_dock_side` | which screen edge the live panel docks to (`"right"`/`"left"`) | `"right"` |
-| `gui_expanded_width` / `gui_folded_width` / `gui_folded_height` | panel size in pixels, expanded vs. folded (the folded icon) | `380` / `58` / `58` |
+| `gui_expanded_width` / `gui_folded_width` / `gui_folded_height` | panel size in pixels, expanded vs. folded (the folded icon) | `380` / `76` / `76` |
+| `gui_hearts_enabled` / `gui_hearts_interval_minutes` | a few small hearts drift up from the folded icon, fade and vanish (toggle in the panel's ⚙ settings) | `true` / `3` |
 | `gui_folded_opacity` | folded icon's opacity (fully opaque while hovered) | `0.5` |
 | `gui_panel_height_fraction` | panel height as a fraction of the screen height | `0.25` |
 | `gui_activity_refresh_minutes` | minimum minutes between automatic activity-feed refreshes | `5` |
@@ -551,6 +643,11 @@ mygeeky config reset
   used for GET requests.
 - **Sync writes only to your own private data repo**, through `git`
   with your own credentials, never through myGeeKy's API client.
+- **Beacons are the one opt-in write.** After `mygeeky beacon init`,
+  myGeeKy writes `beacon.json`/`README.md` in your own public
+  `mygeeky-beacon` repo, and nothing else. The writer has no parameter that
+  could point it at another repo or file. It uses a second, fine-grained token
+  scoped to that single repo, and never falls back to `gh`.
 - **Minimal token scope.** myGeeKy only reads public profile/repo/follower
   data — create your token with **no scopes at all**, or a fine-grained
   token limited to read-only public repositories/followers. Never grant it
@@ -563,7 +660,8 @@ mygeeky config reset
   click in the panel can trigger) refuses to open anything that isn't a
   `https://github.com/...` URL, and there's no other code path from the
   panel to the network beyond the read-only suggestion/activity fetches
-  described above.
+  described above, except the Signals tab's emoji buttons. Once you've run
+  `mygeeky beacon init`, those publish to your own beacon repo.
 
 ## Using myGeeKy from an AI agent / script
 
