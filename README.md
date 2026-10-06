@@ -11,6 +11,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest"><img alt="Download the Windows installer" src="https://img.shields.io/badge/%E2%AC%87%20Download%20for%20Windows-MyGeeKySetup.exe-ff6fd8?style=for-the-badge&logo=windows&logoColor=white" height="42"></a>
+  &nbsp;
+  <a href="#1--install"><img alt="Or: pip install mygeeky" src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-pip%20install%20mygeeky-7a5cff?style=for-the-badge&logo=python&logoColor=white" height="42"></a>
+</p>
+
+<p align="center">
   <a href="https://pypi.org/project/mygeeky/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/mygeeky?color=7fd8ff&label=pypi"></a>
   <a href="https://pypi.org/project/mygeeky/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/mygeeky?color=7a5cff"></a>
   <a href="https://pepy.tech/projects/mygeeky"><img alt="Downloads" src="https://img.shields.io/pepy/dt/mygeeky?color=ff6fd8&label=downloads"></a>
@@ -152,16 +158,35 @@ as easily as you can.
 
 ### 1 · Install
 
-| On Windows | On any OS (Windows, macOS, Linux) |
-|---|---|
-| Download **`MyGeeKySetup.exe`** from [Releases](https://github.com/AlsammanAlsamman/myGeeKy/releases/latest) and click **Next → Next → Finish**. It sets up Python too if you don't have it. | `pip install mygeeky` |
+#### 🪟 Windows: the installer (easiest)
 
-> Windows may say *"Windows protected your PC"*, because the installer isn't
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/setup-welcome.png" width="380" align="right" alt="The myGeeKy setup wizard">
+
+1. Download **[MyGeeKySetup.exe](https://github.com/AlsammanAlsamman/myGeeKy/releases/latest)**
+   (under *Assets* on the latest release).
+2. Open it and click **Next → Next → Finish**.
+
+It does everything for you: it sets up Python if you don't have it, installs
+myGeeKy, asks who you are, stores your GitHub token safely, connects your
+private sync repo, walks you through Signals, and adds myGeeKy to the Start
+menu. Uninstall it any time from *Settings → Apps*.
+
+> Windows may say *"Windows protected your PC"* because the installer isn't
 > code-signed yet. Click **More info → Run anyway**.
+
+If you use the installer, **you're done**: skip to [step 3](#3--open-your-panel).
+
+<br clear="right">
+
+#### 🐍 macOS, Linux, or Windows without the installer
+
+```bash
+pip install mygeeky
+```
 
 ### 2 · Tell it who you are
 
-The installer asks you this itself. With pip, run:
+*(The installer already did this.)* With pip, run:
 
 ```bash
 mygeeky init

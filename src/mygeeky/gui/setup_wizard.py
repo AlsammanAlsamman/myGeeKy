@@ -644,10 +644,11 @@ NEW_BEACON_REPO_URL = ("https://github.com/new?name=mygeeky-beacon&visibility=pu
 OL = "<ol style='margin:2px 0 6px -20px'>"
 
 
-def beacon_steps(user: str, has_gh: bool) -> str:
+def beacon_steps(user: str, has_gh: bool, repo_exists: bool = False) -> str:
     """The same steps as beacon.repo_steps/token_steps (kept in sync by hand:
     this file can't import myGeeKy, which may not be installed yet)."""
-    repo = (f"Setup creates the public repo <b>{user}/mygeeky-beacon</b> for you." if has_gh else
+    repo = (f"✓ Done: <b>{user}/mygeeky-beacon</b> already exists." if repo_exists else
+            f"Setup creates the public repo <b>{user}/mygeeky-beacon</b> for you." if has_gh else
             OL + "<li>Click <b>Open github.com/new</b> below. The name <b>mygeeky-beacon</b> and "
             f"<b>Public</b> are already filled in.</li><li>Check the owner is <b>{user}</b>, then click "
             "<b>Create repository</b>. Leave it empty; myGeeKy writes the files.</li></ol>")
@@ -671,6 +672,7 @@ class SignalsPage(Page):
         super().__init__("Signals (optional)",
                          "Send other myGeeKy users emoji signals (👋 wave · 📚 learn from you · "
                          "🤝 collaborate · 👀 following your work) and see theirs. No text, ever.")
+        self._stage = "none"
         self.enable = QCheckBox("Join Signals. I understand my signals are public.")
         self.add(self.enable)
         self.steps = _label("", "muted")
@@ -697,29 +699,56 @@ class SignalsPage(Page):
     def _toggle(self, on: bool) -> None:
         s = self.w.state
         setting_up = on and not s.get("beacon_enabled")
-        self.steps.setVisible(on)
-        self.buttons.setVisible(setting_up)
-        self.open_repo.setVisible(setting_up and not s.get("gh"))
-        self.token.setVisible(setting_up)
+        live = self._stage == "live"
+        setting_up = on and not (live and s.get("beacon_enabled") and s.get("beacon_token"))
+        self.steps.setVisible(True)   # read what joining involves before deciding
+        self.buttons.setVisible(setting_up and not live)
+        self.open_repo.setVisible(setting_up and self._stage == "none" and not s.get("gh"))
+        self.token.setVisible(setting_up and not (live and s.get("beacon_token")))
         if s.get("beacon_token"):
             self.token.setPlaceholderText("Leave empty to use the token already saved, or paste a new one")
 
     def initializePage(self) -> None:  # noqa: N802
         super().initializePage()
+        self._stage = "checking"
+        self.steps.setText("Checking your Signals setup on GitHub…")
+        self.enable.setChecked(bool(self.w.state.get("beacon_enabled")))
+        self._toggle(self.enable.isChecked())
+        python = self.w.python
+        self._checker = Worker(lambda wk: api(python, "beacon_check", timeout=60))
+        self._checker.done.connect(self._checked)
+        self._checker.start()
+
+    def _checked(self, result: Any) -> None:
+        """Tick the box for anyone who already has a beacon on GitHub (from
+        another computer, or a setup that stopped halfway), and say exactly
+        where they stand. A brand-new user stays unticked: joining makes your
+        signals public, so it must be their own choice."""
         s = self.w.state
         user = s.get("github_username", "you")
-        if s.get("beacon_enabled"):
-            self.steps.setText(f"✓ You're already on Signals: <a {LINK} href='https://github.com/{user}/"
-                               f"mygeeky-beacon'>{user}/mygeeky-beacon ↗</a>. Untick to leave it as it is; "
-                               "nothing changes either way.")
+        result = result if isinstance(result, dict) else {}
+        self._stage = result.get("stage", "none") if result.get("ok") else "none"
+        lines = "".join(f"<br>{'✓' if ok else '✗'} {msg}" for ok, msg in result.get("results") or [])
+        repo_link = f"<a {LINK} href='https://github.com/{user}/mygeeky-beacon'>{user}/mygeeky-beacon ↗</a>"
+        if self._stage == "live":
+            self.enable.setChecked(True)
+            extra = ("" if s.get("beacon_token") else
+                     "<br><br>To send signals from <b>this</b> computer, paste a token made with Step 2 below "
+                     "(or the one you used before).")
+            self.steps.setText(f"<b>You're on Signals:</b> {repo_link}{lines}{extra}")
+        elif self._stage == "partial":
+            self.enable.setChecked(True)
+            self.steps.setText(f"<b>Your Signals setup isn't finished yet</b> ({repo_link}):{lines}"
+                               "<br><br>" + beacon_steps(user, has_gh=True, repo_exists=True))
         else:
             self.steps.setText(beacon_steps(user, has_gh=bool(s.get("gh"))))
-        self.enable.setChecked(bool(s.get("beacon_enabled")))
         self._toggle(self.enable.isChecked())
 
     def job(self):
         s = self.w.state
-        if not self.enable.isChecked() or s.get("beacon_enabled"):
+        if not self.enable.isChecked():
+            return None
+        if self._stage == "live" and s.get("beacon_enabled") and s.get("beacon_token"):
             return None
         token = self.token.text().strip()
         python = self.w.python

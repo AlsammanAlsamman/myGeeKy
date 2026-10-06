@@ -174,6 +174,22 @@ def beacon_init(req: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "notes": notes, "url": f"https://github.com/{user}/{beacon.BEACON_REPO}"}
 
 
+def beacon_check(req: dict[str, Any]) -> dict[str, Any]:
+    """Where this user's Signals setup stands, read from GitHub (writes nothing).
+    stage: "none" (no repo yet), "partial" (repo, but something missing), "live"."""
+    from . import auth, beacon
+    from .config import load_config
+    from .github_client import GitHubClient
+    cfg = load_config()
+    if not cfg.github_username:
+        return {"ok": True, "stage": "none", "results": []}
+    client = GitHubClient(auth.get_token(cfg.github_username), rate_limit_sleep=0)
+    results = beacon.check(cfg, client)
+    repo_ok = bool(results) and results[0][0]
+    stage = "none" if not repo_ok else "live" if all(ok for ok, _ in results) else "partial"
+    return {"ok": True, "stage": stage, "results": [[ok, msg] for ok, msg in results]}
+
+
 def schedule(req: dict[str, Any]) -> dict[str, Any]:
     from . import scheduler
     message = scheduler.install(confirmed=True)
@@ -187,6 +203,7 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "store_token": store_token,
     "sync_init": sync_init,
     "beacon_init": beacon_init,
+    "beacon_check": beacon_check,
     "schedule": schedule,
 }
 
