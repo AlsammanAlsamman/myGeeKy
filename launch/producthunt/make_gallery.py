@@ -76,14 +76,14 @@ def hero():
     icon = Image.open(ROOT / "src/mygeeky/gui/assets/icon_128.png").convert("RGBA").resize((84, 84))
     im.alpha_composite(icon, (60, 45))
     d.text((165, 48), "myGeeKy", font=font(46, True), fill="white")
-    d.text((167, 108), "Find GitHub people who share your research — and will follow you back.",
+    d.text((167, 108), "Your corner of GitHub: the people, projects and pulse of your field.",
            font=font(24), fill=(200, 220, 255))
     return im
 
 
 SLIDES = [
     ("hero", None),
-    ("suggestions", ([SHOTS / "suggestions.png"], "People in your field who'll actually follow back",
+    ("suggestions", ([SHOTS / "suggestions.png"], "People in your field worth following",
                      "Built from your CV, repos, ORCID & Google Scholar papers. Ranked by real follow-back odds.")),
     ("signals", ([SHOTS / "signals.png"], "Signals: say hi without words",
                  "Wave, \"I learn from you\", \"let's collaborate\" or \"following your work\": one click each, "

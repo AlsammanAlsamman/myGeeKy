@@ -5,8 +5,9 @@
 <h1 align="center">myGeeKy</h1>
 
 <p align="center">
-  <b>Find GitHub people who share your research — and will actually follow you back.</b><br>
-  <sub>Your CV, your repos, your ORCID &amp; Google Scholar papers → people and projects worth your time.</sub>
+  <b>Your corner of GitHub: the people, projects and pulse of your field.</b><br>
+  <sub>From your CV, repos, ORCID and Google Scholar papers: who to follow, what to contribute to,
+  what's rising, and a friendly 👋 from fellow geeks. All in one small panel.</sub>
 </p>
 
 <p align="center">
@@ -19,9 +20,10 @@
 </p>
 
 <p align="center">
+  <a href="#-whats-inside">What's inside</a> ·
   <a href="#-quick-start">Quick start</a> ·
   <a href="#-the-live-panel">Live panel</a> ·
-  <a href="#how-it-works">How it works</a> ·
+  <a href="#signal-other-mygeeky-users-without-words-mygeeky-beacon">Signals</a> ·
   <a href="#safety">Safety</a> ·
   <a href="#all-parameters-adjustable-or-leave-at-the-defaults">All settings</a>
 </p>
@@ -29,12 +31,28 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/hero.png" width="900" alt="The myGeeKy panel's Live, Suggestions and Repos tabs, side by side">
 </p>
-<p align="center"><sub><em>Real screenshots, real data: the Live feed, people likely to follow back, and repos you could contribute to.</em></sub></p>
+<p align="center"><sub><em>Real screenshots, real data: the Live feed, people worth following, and repos you could contribute to.</em></sub></p>
 
-> **Why this exists:** I don't have Facebook. I only want to follow people
-> I can genuinely learn from — and who might learn something from me too.
-> myGeeKy is a GitHub-friendly alternative for people like me: we want real
-> friends, and we're wary of fake ones.
+> **Why this exists:** I don't have Facebook. I wanted a real circle in my
+> field: people I can genuinely learn from (and who might learn something
+> from me too), projects where my work would actually be welcome, and a
+> feel for where the field is moving. GitHub has all of that, but scattered
+> and buried under famous accounts. myGeeKy gathers it in one place.
+
+## 🧭 What's inside
+
+One profile (your CV, your repos, and optionally your ORCID/OpenAlex and
+Google Scholar papers) powers everything:
+
+| | What you get | Command | Panel tab |
+|---|---|---|---|
+| 👥 **People** | Who shares your research and is likely to follow back, plus domain experts who rarely follow anyone | `mygeeky run` | Suggestions |
+| 🛠️ **Projects** | Repos in your field you could improve: open starter issues, maintainers who merge outside PRs | `mygeeky contribute` | Repos |
+| 📈 **Pulse** | Your field's popular repos ranked by momentum: stars gained, commits, PyPI downloads | `mygeeky market` | Market |
+| 📰 **Activity** | What the people you follow, and your best matches, are doing right now | (in the panel) | Activity · Live |
+| 👋 **Signals** | Emoji-only signals between myGeeKy users, and a 🤝 handshake when it's mutual | `mygeeky beacon` | Signals |
+| 🧠 **Learning** | A model trained on who actually follows *you* back, getting sharper every week | `mygeeky learn` | Model |
+| ☁️ **Sync** | Your data in a private GitHub repo you own, on every computer | `mygeeky sync` | |
 
 ## ✨ Highlights
 
@@ -43,17 +61,17 @@
 <td width="50%" valign="top">
 
 **🧬 Knows your field, not just your language**<br>
-Builds your profile from your CV, your GitHub repos, and — if you give
-them — your ORCID/OpenAlex and Google Scholar publications. Finds people
-through the repos *in your field* they own and contribute to.
+Builds your profile from your CV, your GitHub repos, and, if you give
+them, your ORCID/OpenAlex and Google Scholar publications. Everything it
+suggests is matched against *your* research, not a generic popularity list.
 
 </td>
 <td width="50%" valign="top">
 
-**🔁 Ranks by real follow-back odds**<br>
-Skips famous accounts that follow almost nobody, mass-followers,
-organizations and dormant profiles — then learns from who actually
-followed you back, and gets better every week.
+**👥 People worth following**<br>
+Skips famous accounts that follow almost nobody, mass-followers and dormant
+profiles, and learns from who actually followed you back. A second list
+surfaces the domain experts a follow-back score would bury.
 
 </td>
 </tr>
@@ -67,26 +85,9 @@ how often their maintainers merge outside contributors' PRs.
 </td>
 <td valign="top">
 
-**🪟 A glass panel on your screen edge**<br>
-Live feed of what your friends are doing, your suggestions and repos —
-always on top, three themes, folds down to a small icon that now and then
-lets out a few floating hearts.
-
-</td>
-</tr>
-<tr>
-<td valign="top">
-
-**☁️ Your data, on every computer**<br>
-Optional sync through a **private** GitHub repo you own. No server, no
-account, no telemetry.
-
-</td>
-<td valign="top">
-
-**🛡️ Suggest-only, by design**<br>
-There is **no follow/unfollow code in this project at all**. You look,
-you click, you follow people yourself, by hand, on github.com.
+**📈 The pulse of your field**<br>
+A daily "stock race" of your field's repos: who gained stars, who's
+shipping commits, whose PyPI downloads are climbing, and who moved up.
 
 </td>
 </tr>
@@ -100,9 +101,41 @@ using emoji only and no server. 🤝 Handshake when it's mutual.
 </td>
 <td valign="top">
 
+**🪟 A glass panel on your screen edge**<br>
+All of it live, always on top, in three themes. It folds down to a small
+icon that now and then lets out a few floating hearts.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
+**🛡️ Suggest-only, by design**<br>
+There is **no follow, star or fork code in this project at all**. You look,
+you click, and you act yourself, by hand, on github.com.
+
+</td>
+<td valign="top">
+
+**☁️ Yours, on every computer**<br>
+Optional sync through a **private** GitHub repo you own. No server, no
+account, no telemetry.
+
+</td>
+</tr>
+<tr>
+<td valign="top">
+
 **🪄 One-click Windows installer** <sup>new</sup><br>
 Next → Next → Finish. It sets up Python, your token, private sync and
 shortcuts for you, and you can uninstall it from *Settings → Apps*.
+
+</td>
+<td valign="top">
+
+**🤖 Scriptable**<br>
+Every command has `--json`, so scripts and AI agents can use myGeeKy
+as easily as you can.
 
 </td>
 </tr>
@@ -184,7 +217,9 @@ zero dependencies.)
 happens — myGeeKy has no follow/unfollow code anywhere in the project; see
 [Safety](#safety).*
 
-## What it does
+## Finding people (`mygeeky run`)
+
+How the people suggestions are made:
 
 1. **Understands you** — reads your CV (txt/md/pdf), your own GitHub
    repos (languages, topics, descriptions) and, if you give them, your

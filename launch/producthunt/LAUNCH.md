@@ -6,7 +6,7 @@ Submit at https://www.producthunt.com/posts/new (logged in as the maker).
 myGeeKy
 
 ## Tagline (≤ 60)
-Find GitHub people in your field who'll follow you back
+The people, projects & pulse of your field on GitHub
 
 ## Links
 - Website: https://github.com/AlsammanAlsamman/myGeeKy
@@ -14,7 +14,7 @@ Find GitHub people in your field who'll follow you back
 - Windows installer: https://github.com/AlsammanAlsamman/myGeeKy/releases/latest
 
 ## Description (≤ 260)
-myGeeKy reads your CV, GitHub repos and ORCID/Google Scholar papers and suggests people in your field who are likely to follow you back, plus repos to contribute to. It learns who actually follows back. It only suggests; it never follows anyone for you.
+myGeeKy reads your CV, repos and ORCID/Scholar papers, then shows who in your field to follow, repos you could contribute to, what's rising, and emoji signals from fellow users, in one small desktop panel. It only suggests; it never acts for you.
 
 ## Topics (pick 3)
 Developer Tools · Open Source · GitHub
