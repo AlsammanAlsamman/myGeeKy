@@ -56,9 +56,10 @@ Google Scholar papers) powers everything:
 | 👥 **People** | Who shares your research and is likely to follow back, plus domain experts who rarely follow anyone | `mygeeky run` | Suggestions |
 | 🛠️ **Projects** | Repos in your field you could improve: open starter issues, maintainers who merge outside PRs | `mygeeky contribute` | Repos |
 | 📈 **Pulse** | Your field's popular repos ranked by momentum (stars gained, commits, PyPI downloads), plus new Product Hunt launches in your field | `mygeeky market` | Market |
+| 🗞️ **News** <sup>new</sup> | New papers and discussions about your interests, from arXiv, bioRxiv and Hacker News | `mygeeky news` | News |
 | 📰 **Activity** | What the people you follow, and your best matches, are doing right now | (in the panel) | Activity · Live |
 | 👋 **Signals** | Emoji-only signals between myGeeKy users, and a 🤝 handshake when it's mutual | `mygeeky beacon` | Signals |
-| 🧠 **Learning** | A model trained on who actually follows *you* back, getting sharper every week | `mygeeky learn` | Model |
+| 🧠 **Learning** | What you click, follow, star and fork tunes everything above, and a model learns who follows *you* back. 🔭 20% of every list stays open for new territory | `mygeeky interests` | Model |
 | ☁️ **Sync** | Your data in a private GitHub repo you own, on every computer | `mygeeky sync` | |
 
 ## ✨ Highlights
@@ -467,6 +468,65 @@ history and training data. `mygeeky pipeline` (the weekly job) then does
 - `.jsonl` logs use git's `union` merge, so two machines in the same week merge cleanly.
 - Git uses your own `gh`/git credentials. myGeeKy's API client stays read-only.
 
+## News for your field (`mygeeky news`)
+
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/news.png" width="280" align="right" alt="News tab">
+
+New preprints and discussions that match your interests, from free and
+constantly updated sources, with no accounts or keys:
+
+- **arXiv:** new preprints (AI, CS, statistics, quantitative biology, ...).
+- **bioRxiv:** the last days' biology preprints.
+- **Hacker News:** what developers are discussing.
+
+Each item says why it's there (*matches gwas, fine mapping*). Items are ranked
+by how well they match your interests and how new they are. A single generic
+word like "stress" isn't enough on its own (physics uses it too); it takes two
+of your terms, or one specific phrase. One source being down never empties
+the feed.
+
+```bash
+mygeeky news              # the saved news (refreshed every 6 hours)
+mygeeky news --refresh    # fetch now
+```
+
+<br clear="right">
+
+## It learns what you're into, and keeps room to explore
+
+Everything you do teaches myGeeKy a little about your interests:
+
+| You | Counts as |
+|---|---|
+| fork a repo | strongest signal |
+| follow someone new | strong |
+| star a repo | strong |
+| click a repo (Repos, Market) | medium |
+| click a news item | medium |
+| click a suggested person | light |
+
+From each one it keeps **a few terms** (topics, words from the description
+or bio, never the full text). Recent actions count more: each one fades to
+half after `interest_half_life_days` (30). A single stray click isn't enough to
+change anything; repeated interest is. What it learns tunes **who it searches
+for, which repos it suggests, which repos the Market watches, and the News**.
+Follows, stars and forks are picked up from your public GitHub activity.
+
+**🔭 New territory.** A profile that only follows your clicks shuts you in a
+bubble. So **20% of every list** (`explore_share`) is kept for things *outside*
+your usual interests, from fields that rotate daily, marked **🔭 new territory**.
+If one catches your eye, clicking it teaches myGeeKy that the new area
+interests you too.
+
+```bash
+mygeeky interests          # what it has learned, and today's new territory
+mygeeky interests --reset  # forget it (your CV, papers and topics stay)
+```
+
+The Model tab shows it too, under *What you're into lately*. Turn learning
+off with `mygeeky config set interest_learning false`, or exploration with
+`mygeeky config set explore_share 0`.
+
 ## Signal other myGeeKy users, without words (`mygeeky beacon`)
 
 myGeeKy users can send each other **emoji-only signals**, and myGeeKy
@@ -842,6 +902,9 @@ mygeeky config reset
 | `beacon_blocked` | people whose signals are never shown | `[]` |
 | `beacon_daily_limit` / `beacon_gesture_ttl_days` | signals you can send per day / days before a signal expires | `20` / `90` |
 | `beacon_refresh_minutes` / `beacon_max_users` | minimum minutes between re-reading beacons / beacons read per refresh | `30` / `60` |
+| `interest_learning` / `interest_half_life_days` | learn from your clicks, follows, stars and forks / days until an action counts half | `true` / `30` |
+| `explore_share` | share of every list kept for 🔭 new territory outside your interests | `0.2` |
+| `news_sources` / `news_size` / `news_refresh_hours` / `news_days` | where news comes from, how many items, how often to refresh, how far back | `arxiv, biorxiv, hackernews` / `25` / `6` / `7` |
 | `check_for_updates` | check PyPI once a day and offer an **Update** button when a new version is out | `true` |
 | `sync_repo` / `sync_auto` | private data repo (set by `sync init`) / whether `pipeline` pulls+pushes | `""` / `true` |
 | `min_training_samples` | labeled examples needed before the ML model kicks in | `8` |
@@ -876,6 +939,9 @@ mygeeky config reset
 - **Token fallback to the GitHub CLI.** If no keyring token or env var is
   set, myGeeKy uses `gh auth token` when `gh` is logged in. This is still only
   used for GET requests.
+- **News** sends only your search terms to arXiv, bioRxiv and Hacker News
+  (public, read-only APIs). What you click is learned **locally**, as a few
+  terms per action, and only syncs to your own private data repo.
 - **Update checks** are one read-only request to PyPI's public API, at most
   once a day, carrying nothing about you. Updating only happens when you click
   **Update** or run `mygeeky update`.

@@ -78,9 +78,17 @@ def test_maintainer_stats_ignores_insiders_and_bots():
 
 
 def test_search_terms_skip_generic_and_duplicates():
-    cfg = MyGeekyConfig(github_username="me", topics=["GWAS", "gwas"], contribute_queries=3)
+    cfg = MyGeekyConfig(github_username="me", topics=["GWAS", "gwas"], contribute_queries=3, explore_share=0)
     terms = contribute.search_terms(cfg, _self(), {"data": 1.0, "fine mapping": 0.9, "snakemake": 0.5})
     assert terms == ["gwas", "fine mapping", "snakemake"]
+
+
+def test_search_terms_keep_one_slot_for_new_territory():
+    from mygeeky import interests
+    cfg = MyGeekyConfig(github_username="me", topics=["GWAS"], contribute_queries=3, explore_share=0.2)
+    terms = contribute.search_terms(cfg, _self(), {"fine mapping": 0.9, "snakemake": 0.5})
+    assert terms[:2] == ["gwas", "fine mapping"]
+    assert terms[2] in interests.EXPLORE_POOL
 
 
 def test_suggest_repositories_ranks_merge_friendly_fit_first():

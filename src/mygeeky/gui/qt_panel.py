@@ -722,6 +722,68 @@ class TrendChart(QWidget):
         painter.end()
 
 
+def _explore_chip(theme: dict[str, Any]) -> QLabel:
+    """Marks an item from outside your usual interests (see interests.mix)."""
+    chip = QLabel("🔭 new territory")
+    chip.setToolTip("Outside your usual interests, on purpose: a little room to discover something new. "
+                    "Clicking it teaches myGeeKy that this interests you too.")
+    chip.setStyleSheet(f"color:{theme['text']}; background:rgba(122,92,255,70); border-radius:7px; "
+                       f"padding:1px 6px; font-size:9.5px;")
+    chip.setFixedHeight(16)
+    return chip
+
+
+NEWS_BADGES = {"arxiv": ("arXiv", "#b31b1b"), "biorxiv": ("bioRxiv", "#bd2736"), "hackernews": ("HN", "#ff6600")}
+
+
+class NewsCard(QFrame):
+    """One news item: source badge, title, why it's here (matching terms, or
+    🔭 new territory) and when. Text from the source is shown as plain text.
+    Clicking opens it (and counts as an interest signal)."""
+
+    def __init__(self, item: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+        super().__init__()
+        self.setObjectName("newsCard")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(3)
+        top = QHBoxLayout()
+        top.setSpacing(6)
+        name, color = NEWS_BADGES.get(item.get("source", ""), (item.get("source", ""), theme["accent"]))
+        badge = QLabel(name)
+        badge.setStyleSheet(f"color:white; background:{color}; border-radius:6px; padding:0 6px; "
+                            f"font-size:9.5px; font-weight:700;")
+        badge.setFixedHeight(15)
+        top.addWidget(badge)
+        if item.get("explore"):
+            top.addWidget(_explore_chip(theme))
+        top.addStretch(1)
+        when = QLabel(_time_ago(item.get("published", "")))
+        when.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        top.addWidget(when)
+        outer.addLayout(top)
+        title = QLabel(item.get("title", ""))
+        title.setTextFormat(Qt.PlainText)
+        title.setWordWrap(True)
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        title.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; font-weight:600; background:transparent;")
+        outer.addWidget(title)
+        why = ", ".join(item.get("match") or [])
+        if why and not item.get("explore"):
+            sub = QLabel(f"matches {why}")
+            sub.setTextFormat(Qt.PlainText)
+            sub.setWordWrap(True)
+            sub.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            sub.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+            outer.addWidget(sub)
+        self.setToolTip(item.get("summary", ""))
+        self.setStyleSheet(f"QFrame#newsCard {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"QFrame#newsCard:hover {{ background:{theme['btn_bg']}; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        url = item.get("url", "")
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
 class SuggestionCard(QFrame):
     """Clicking anywhere on the card opens the profile; the panel then drops
     the person from the suggestions (see MyGeekyPanel._on_suggestion_clicked)."""
@@ -744,6 +806,8 @@ class SuggestionCard(QFrame):
         score_label = QLabel(f"{score:.2f}" if isinstance(score, (int, float)) else "")
         score_label.setStyleSheet(f"color:{theme['muted']}; font-size:12px; background:transparent;")
         title_row.addWidget(name_label)
+        if item.get("explore"):
+            title_row.addWidget(_explore_chip(theme))
         title_row.addStretch(1)
         title_row.addWidget(score_label)
         body.addLayout(title_row)
@@ -1219,6 +1283,8 @@ class RepoCard(QFrame):
         score_label = QLabel(f"{score:.2f}" if isinstance(score, (int, float)) else "")
         score_label.setStyleSheet(f"color:{theme['muted']}; font-size:12px; background:transparent;")
         title_row.addWidget(name_label, 1)
+        if item.get("explore"):
+            title_row.addWidget(_explore_chip(theme))
         title_row.addWidget(score_label)
         body.addLayout(title_row)
 
@@ -1709,6 +1775,7 @@ class MyGeekyPanel(QWidget):
         self._last_suggestions: list[dict[str, Any]] = []
         self._contrib_running = False
         self._market_running = False
+        self._news_running = False
         self._sugg_running = False
         self._signals_running = False
         self._last_incoming: list[dict[str, Any]] = []
@@ -1738,6 +1805,7 @@ class MyGeekyPanel(QWidget):
         self._refresh_activity(force=False)
         self._load_model_history()
         self._load_market()
+        self._load_news()
         self._refresh_signals(force=False)
         self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
 
@@ -1752,6 +1820,12 @@ class MyGeekyPanel(QWidget):
         self._market_timer.timeout.connect(self._maybe_refresh_market)
         self._market_timer.start(60 * 60_000)
         QTimer.singleShot(20_000, self._maybe_refresh_market)
+
+        # news: shown from the cache now, re-fetched in the background when it's due
+        self._news_timer = QTimer(self)
+        self._news_timer.timeout.connect(self._maybe_refresh_news)
+        self._news_timer.start(60 * 60_000)
+        QTimer.singleShot(30_000, self._maybe_refresh_news)
 
         # re-reads beacons only once beacon_refresh_minutes have passed
         self._signals_timer = QTimer(self)
@@ -1847,9 +1921,9 @@ class MyGeekyPanel(QWidget):
 
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
-        for name, label in (("live", "Live"), ("suggestions", "Suggestions"), ("repos", "Repos"),
-                             ("market", "Market"), ("activity", "Activity"), ("signals", "Signals"),
-                             ("model", "Model")):
+        for name, label in (("live", "Live"), ("suggestions", "People"), ("repos", "Repos"),
+                             ("market", "Market"), ("news", "News"), ("activity", "Activity"),
+                             ("signals", "Signals"), ("model", "Model")):
             btn = QPushButton(label)
             # Qt's Windows style gives every push button a ~75px minimum width;
             # five of those made the panel wider than gui_expanded_width.
@@ -1864,11 +1938,12 @@ class MyGeekyPanel(QWidget):
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
 
-        self._tab_order = ["live", "suggestions", "repos", "market", "activity", "signals", "model"]
+        self._tab_order = ["live", "suggestions", "repos", "market", "news", "activity", "signals", "model"]
         self.content_stack.addWidget(self._build_live_tab())
         self.content_stack.addWidget(self._build_suggestions_tab())
         self.content_stack.addWidget(self._build_repos_tab())
         self.content_stack.addWidget(self._build_market_tab())
+        self.content_stack.addWidget(self._build_news_tab())
         self.content_stack.addWidget(self._build_activity_tab())
         self.content_stack.addWidget(self._build_signals_tab())
         self.content_stack.addWidget(self._build_model_tab())
@@ -2009,6 +2084,38 @@ class MyGeekyPanel(QWidget):
         layout.addWidget(market_container)
         layout.addStretch(1)
 
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        return scroll
+
+    def _build_news_tab(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 4, 0)
+        actions_row = QHBoxLayout()
+        self.news_updated_label = QLabel("")
+        self.refresh_news_btn = QPushButton("Refresh")
+        self.refresh_news_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_news_btn.clicked.connect(lambda: self._refresh_news(force=True))
+        actions_row.addWidget(self.news_updated_label, 1)
+        actions_row.addWidget(self.refresh_news_btn)
+        layout.addLayout(actions_row)
+        self.news_hint = QLabel("New papers and discussions about your interests, from arXiv, bioRxiv and "
+                                "Hacker News. \U0001f52d = outside your usual interests, on purpose.")
+        self.news_hint.setWordWrap(True)
+        layout.addWidget(self.news_hint)
+        container = QWidget()
+        self.news_area = QVBoxLayout(container)
+        self.news_area.setContentsMargins(0, 0, 0, 0)
+        self.news_area.setSpacing(6)
+        layout.addWidget(container)
+        layout.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -2349,6 +2456,14 @@ class MyGeekyPanel(QWidget):
         layout.addWidget(self.model_section_labels[1])
         self.chart = TrendChart()
         layout.addWidget(self.chart)
+        self.interests_header = QLabel("WHAT YOU'RE INTO LATELY")
+        self.interests_header.setStyleSheet("font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
+                                            "margin-top:6px; background:transparent;")
+        layout.addWidget(self.interests_header)
+        self.interests_label = QLabel("")
+        self.interests_label.setWordWrap(True)
+        self.interests_label.setTextFormat(Qt.PlainText)
+        layout.addWidget(self.interests_label)
         self.model_footer_label = QLabel("")
         self.model_footer_label.setWordWrap(True)
         layout.addWidget(self.model_footer_label)
@@ -2431,7 +2546,7 @@ class MyGeekyPanel(QWidget):
                 f"QPushButton {{ background:{SWATCH_GRADIENTS[name]}; border-radius:7px; border:{border}; }}"
             )
         for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_market_btn, self.refresh_act_btn,
-                    self.refresh_signals_btn):
+                    self.refresh_signals_btn, self.refresh_news_btn):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
                 f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
@@ -2600,11 +2715,19 @@ class MyGeekyPanel(QWidget):
             layout.addWidget(SuggestionCard(item, score_key, theme, self._on_suggestion_clicked, self.avatar_loader))
 
     def _on_suggestion_clicked(self, item: dict[str, Any]) -> None:
+        logic.record_click(self.cfg, "person", item)
         logic.open_profile(item.get("profile_url", ""))
         logic.mark_suggestion_seen(item.get("username", ""))
         # re-render on the next event-loop turn: the clicked card is still
         # inside its own mousePressEvent right now
         QTimer.singleShot(0, self._load_suggestions)
+
+    def _opener(self, kind: str, item: dict[str, Any]) -> Callable[[str], bool]:
+        """open_profile, plus: this click is an interest signal."""
+        def open_and_learn(url: str) -> bool:
+            logic.record_click(self.cfg, kind, item)
+            return logic.open_link(url)
+        return open_and_learn
 
     def _on_ticker_clicked(self, url: str) -> bool:
         opened = logic.open_profile(url)
@@ -2654,7 +2777,7 @@ class MyGeekyPanel(QWidget):
             self.repos_area.addWidget(empty)
             return
         for item in items:
-            self.repos_area.addWidget(RepoCard(item, theme, logic.open_profile, self.avatar_loader))
+            self.repos_area.addWidget(RepoCard(item, theme, self._opener("repo", item), self.avatar_loader))
 
     # ------------------------------------------------------------------ activity
     def _refresh_activity(self, force: bool) -> None:
@@ -2758,6 +2881,43 @@ class MyGeekyPanel(QWidget):
         self._run_async(lambda: logic.send_signal(self.cfg, login, gesture), done)
 
     # ------------------------------------------------------------------ market
+    def _load_news(self) -> None:
+        self._render_news(logic.get_news(self.cfg))
+
+    def _maybe_refresh_news(self) -> None:
+        if logic.news_refresh_due(self.cfg):
+            self._refresh_news(force=False)
+
+    def _refresh_news(self, force: bool) -> None:
+        if self._news_running:
+            return
+        self._news_running = True
+        self.refresh_news_btn.setEnabled(False)
+        self.news_updated_label.setText("updating\u2026")
+        self._run_async(lambda: logic.refresh_news(self.cfg, force=force), self._on_news_ready)
+
+    def _on_news_ready(self, data: Any) -> None:
+        self._news_running = False
+        self.refresh_news_btn.setEnabled(True)
+        self._render_news(data if isinstance(data, dict) else {})
+
+    def _render_news(self, data: dict[str, Any]) -> None:
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.news_area)
+        items = data.get("items") or []
+        if data.get("error") or not items:
+            msg = QLabel(data.get("error") or "No news yet. It loads in the background (or click Refresh).")
+            msg.setWordWrap(True)
+            msg.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            self.news_area.addWidget(msg)
+        for item in items:
+            self.news_area.addWidget(NewsCard(item, theme, self._opener("news", item)))
+        updated = data.get("updated_at")
+        if not self._news_running:
+            self.news_updated_label.setText("updated " + _time_ago(updated) if updated else "")
+        for lbl in (self.news_hint, self.news_updated_label):
+            lbl.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+
     def _load_market(self) -> None:
         self._render_market(logic.get_market(self.cfg))
 
@@ -2789,7 +2949,7 @@ class MyGeekyPanel(QWidget):
             msg.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
             self.market_area.addWidget(msg)
         for row in rows:
-            self.market_area.addWidget(MarketRow(row, theme, logic.open_profile, self.avatar_loader))
+            self.market_area.addWidget(MarketRow(row, theme, self._opener("repo", row), self.avatar_loader))
         self._render_producthunt(data, theme)
         collecting = rows and all(r.get("stars_week") is None for r in rows)
         self.market_hint.setText(
@@ -2858,6 +3018,13 @@ class MyGeekyPanel(QWidget):
         self.model_tiles["retrains"].set_value(len(history))
 
         self.weight_bars.set_weights(logic.get_model_weights())
+        learned = logic.get_learned_interests(self.cfg)
+        share = int(round(self.cfg.explore_share * 100))
+        self.interests_label.setText(
+            ("  ·  ".join(t for t, _ in learned) if learned else
+             "Nothing yet. As you click people, repos and news, follow, star or fork, myGeeKy learns "
+             "what you're into and tunes People, Repos, the Market and News to it.")
+            + (f"\n🔭 {share}% of every list stays open for new territory." if share else ""))
         self.chart.set_history(history)
         if latest.get("timestamp"):
             self.model_footer_label.setText(

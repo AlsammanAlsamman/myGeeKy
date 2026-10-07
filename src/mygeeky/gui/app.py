@@ -237,6 +237,26 @@ def suggestions_auto_refresh_due(cfg: MyGeekyConfig, now: datetime | None = None
     return (now - last).total_seconds() >= hours * 3600
 
 
+def record_click(cfg: MyGeekyConfig, kind: str, item: dict[str, Any]) -> None:
+    """A click on a person, repo, Market row or news item is an interest
+    signal (terms only; see interests.py). Never raises."""
+    try:
+        from .. import interests
+        if kind == "person":
+            sources = " ".join(s.split(":", 1)[-1].replace("/", " ") for s in item.get("sources") or [])
+            interests.record("person", f"{item.get('bio') or ''} {sources}", source=item.get("username", ""), cfg=cfg)
+        elif kind == "repo":
+            name = item.get("full_name") or item.get("repo") or ""
+            interests.record("repo", f"{name.replace('/', ' ')} {item.get('description') or ''} "
+                                     f"{item.get('language') or ''}", topics=item.get("topics") or [],
+                             source=name, cfg=cfg)
+        elif kind == "news":
+            interests.record("news", item.get("title", ""), topics=item.get("match") or [],
+                             source=item.get("id", ""), cfg=cfg)
+    except Exception:
+        pass
+
+
 def mark_suggestion_seen(username: str) -> None:
     """Clicking a suggestion means you've looked at them: never suggest them again."""
     if username:
@@ -317,6 +337,14 @@ def get_activity(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
         # from the browser drop out of the suggestions within a few minutes;
         # also restricts the feed to people you actually follow
         following = client.list_following(cfg.github_username)
+        # new follows, and repos you starred or forked, teach myGeeKy what you're into
+        before = {u.lower() for u in (cache or {}).get("following") or []}
+        if before:
+            try:
+                from .. import interests
+                interests.learn_from_github(client, cfg, [u for u in following if u.lower() not in before])
+            except Exception:
+                pass   # learning is a bonus; the activity feed matters more
         events = get_recent_activity(client, cfg.github_username, limit=cfg.gui_activity_limit,
                                      following=following)
         for e in events:
@@ -354,6 +382,31 @@ def group_activity(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if e.get("source") != "match":
             g["source"] = "following"
     return list(groups.values())
+
+
+def get_news(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """The saved news -- local only, no network."""
+    from .. import news
+    return news.load_state()
+
+
+def news_refresh_due(cfg: MyGeekyConfig) -> bool:
+    from .. import news
+    return bool(cfg.news_sources) and news.refresh_due(cfg, news.load_state())
+
+
+def refresh_news(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    from .. import news
+    try:
+        return news.refresh(cfg, force=force)
+    except Exception as exc:   # surfaced in the tab, not a crash
+        from ..errors import describe
+        return {**news.load_state(), "error": f"Couldn't update the news: {describe(exc)}"}
+
+
+def get_learned_interests(cfg: MyGeekyConfig) -> list[tuple[str, float]]:
+    from .. import interests
+    return interests.learned_terms(cfg, 10)
 
 
 def get_market(cfg: MyGeekyConfig) -> dict[str, Any]:
@@ -505,7 +558,8 @@ def open_profile(url: str) -> bool:
     return True
 
 
-LINK_PREFIXES = ("https://github.com/", "https://www.producthunt.com/posts/")
+LINK_PREFIXES = ("https://github.com/", "https://www.producthunt.com/posts/", "https://arxiv.org/abs/",
+                 "https://www.biorxiv.org/content/", "https://news.ycombinator.com/item?id=")
 
 
 def open_link(url: str) -> bool:

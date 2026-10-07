@@ -37,6 +37,8 @@ beacons_cache.json
 .path_offered
 update_check.json
 token_check.json
+news.json
+interest_seen.json
 *.token
 *.lock
 """

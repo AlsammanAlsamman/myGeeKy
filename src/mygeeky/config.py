@@ -35,6 +35,9 @@ MARKET_FILE = DATA_DIR / "market.json"
 PRODUCTHUNT_FILE = DATA_DIR / "producthunt.json"
 UPDATE_CHECK_FILE = DATA_DIR / "update_check.json"   # last PyPI version check; never synced
 TOKEN_CHECK_FILE = DATA_DIR / "token_check.json"     # tokens' expiry dates (never the tokens); never synced
+INTEREST_EVENTS_FILE = DATA_DIR / "interest_events.jsonl"   # terms from what you click/follow/star (synced)
+INTEREST_SEEN_FILE = DATA_DIR / "interest_seen.json"        # your stars/forks already learned from
+NEWS_FILE = DATA_DIR / "news.json"
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
@@ -157,6 +160,17 @@ class MyGeekyConfig:
     beacon_gesture_ttl_days: int = 90       # signals expire (yours are pruned, others' ignored) after this
     beacon_refresh_minutes: int = 30        # min minutes between re-reading everyone's beacons
     beacon_max_users: int = 60              # beacons read per refresh (one API call each when changed)
+
+    # Learning your interests from what you do, with room to explore (see interests.py)
+    interest_learning: bool = True
+    interest_half_life_days: float = 30.0  # an action counts half as much after this many days
+    explore_share: float = 0.2             # share of every list kept for "new territory" outside your interests
+
+    # News: new papers and discussions matching your interests (arXiv, bioRxiv, Hacker News)
+    news_sources: list[str] = field(default_factory=lambda: ["arxiv", "biorxiv", "hackernews"])
+    news_size: int = 25
+    news_refresh_hours: float = 6.0
+    news_days: int = 7                     # how far back to look
 
     # Updates: check PyPI for a newer myGeeKy once a day (one read-only request)
     check_for_updates: bool = True

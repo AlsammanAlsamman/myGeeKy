@@ -68,6 +68,12 @@ def search_terms(cfg: MyGeekyConfig, self_profile: Profile, vocabulary: dict[str
     -- a one-off topic says little about what you work on.
     """
     explicit = list(cfg.contribute_extra_terms) + list(cfg.topics)
+    # what you've been engaging with lately (clicks, follows, stars, forks), then
+    # one "new territory" term so the searches also reach outside your bubble
+    from . import interests
+    learned = [t for t, _ in interests.learned_terms(cfg, max(2, cfg.contribute_queries // 4))]
+    explore = interests.explore_terms(cfg, 1) if cfg.explore_share > 0 else []
+    explicit = explicit + learned
     corpus_lower = self_profile.corpus.lower()
     weighted: dict[str, float] = {}
     for kw, n in (keyword_counts or {}).items():
@@ -92,9 +98,9 @@ def search_terms(cfg: MyGeekyConfig, self_profile: Profile, vocabulary: dict[str
             continue
         seen.add(key)
         terms.append(term)
-        if len(terms) >= cfg.contribute_queries:
+        if len(terms) >= cfg.contribute_queries - len(explore):
             break
-    return terms
+    return terms + [t for t in explore if _norm(t) not in seen]
 
 
 def build_repo_queries(cfg: MyGeekyConfig, terms: list[str], now: datetime | None = None) -> list[str]:
@@ -262,5 +268,16 @@ def suggest_repositories(client: GitHubClient, cfg: MyGeekyConfig, self_profile:
             "timestamp": ts,
             "list": "contribute",
         })
+    # what you've been engaging with lately nudges the order...
+    from . import interests
+    weights = interests.profile_terms(cfg)
+    for r in results:
+        boost, _ = interests.match(" ".join([r["full_name"], r["description"], " ".join(r["topics"])]), weights)
+        r["score"] = round(r["score"] + 0.15 * boost, 4)
     results.sort(key=lambda r: r["score"], reverse=True)
-    return results[: cfg.contribute_max_returned]
+    # ...and some places stay open for repos found through today's exploration terms
+    explore = set(interests.explore_terms(cfg, 1))
+    pool = [r for r in results if explore & set(r["matched_terms"])]
+    mixed = interests.mix([r for r in results if r not in pool], cfg.contribute_max_returned, cfg,
+                          explore_pool=pool or None)
+    return mixed

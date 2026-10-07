@@ -663,6 +663,8 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
             click.echo(f"[mygeeky] reading beacons failed, skipping them: {exc}", err=True)
     candidates = _gather_candidates(client, cfg, excluded, following, domain_terms, beacon_signals)
     model = LearnedModel.load()
+    from . import interests
+    interest_weights = interests.profile_terms(cfg)
 
     ts = _now()
     scored = []
@@ -686,6 +688,9 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
         # someone who signalled you has already shown interest -- the strongest follow-back hint there is
         source_boost += {"signalled_you": 0.08, "mygeeky_user": 0.02}.get(beacon_signals.get(username, ""), 0.0)
         domain_fit = domain_fit_score(candidate.corpus, vocabulary)
+        # people working on what you've been engaging with lately rank a little higher
+        interest_boost, interest_terms = interests.match(candidate.corpus, interest_weights)
+        base_score += 0.1 * interest_boost
 
         scored.append({
             "username": candidate.username,
@@ -709,6 +714,11 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
     followback_ranked = sorted((r for r in scored if r["score"] >= cfg.similarity_threshold
                                 and _plausible_followback(r, cfg)),
                                 key=lambda r: r["score"], reverse=True)
+    # keep some places for people outside your usual circle ("new territory");
+    # the domain-fit list below stays a pure match to your field
+    explored = interests.mix(followback_ranked, cfg.max_suggestions_returned, cfg)
+    chosen = {r["username"] for r in explored}
+    followback_ranked = explored + [dict(r, explore=False) for r in followback_ranked if r["username"] not in chosen]
     followback_kept = _apply_activity_qc(client, cfg, followback_ranked, cfg.max_suggestions_returned, activity_cache)
 
     # Domain-fit highlights: ranked purely by match to your CV/repos, independent
@@ -911,6 +921,11 @@ def learn() -> None:
     self_profile = _self_profile(client, cfg)
 
     n_labeled, n_back = _label_and_log(client, cfg, self_profile, newly_followed, recent)
+    try:   # who you chose to follow says what you're into lately
+        from . import interests
+        interests.learn_from_github(client, cfg, newly_followed)
+    except Exception as exc:
+        click.echo(f"[mygeeky] couldn't learn interests from new follows: {exc}", err=True)
 
     save_following_snapshot(current)
     add_excluded(newly_followed)
@@ -1078,6 +1093,58 @@ def _print_producthunt(cfg: MyGeekyConfig) -> None:
         mark = "*" if p.get("match") else " "
         click.echo(f" {mark} {p['votes']:>5} ▲  {p['name']} - {p['tagline'][:70]}")
         click.echo(f"           {p['url']}")
+
+
+# --------------------------------------------------------------------------- news & interests
+@main.command()
+@click.option("--refresh", is_flag=True, help="Fetch again now instead of using the saved news.")
+@click.option("--json", "as_json", is_flag=True)
+def news(refresh: bool, as_json: bool) -> None:
+    """New papers and discussions about your interests (arXiv, bioRxiv, Hacker News)."""
+    from . import news as news_mod
+    cfg = load_config()
+    state = news_mod.refresh(cfg, force=refresh, log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    items = state.get("items") or []
+    if as_json:
+        click.echo(json.dumps(items, indent=2))
+        return
+    if not items:
+        click.echo("No news yet. Try `mygeeky news --refresh`.")
+        return
+    for it in items:
+        tag = "new territory" if it.get("explore") else ", ".join(it.get("match") or [])
+        click.echo(f"  [{news_mod.SOURCE_LABELS.get(it['source'], it['source'])}] {it['title'][:100]}")
+        click.echo(f"      {tag} | {it['url']}")
+    if state.get("errors"):
+        click.echo(f"\n(Couldn't reach: {', '.join(state['errors'])}.)", err=True)
+
+
+@main.command("interests")
+@click.option("--reset", is_flag=True, help="Forget everything learned from your clicks, follows, stars and forks.")
+def interests_cmd(reset: bool) -> None:
+    """What myGeeKy has learned you're into lately, and today's new territory."""
+    from . import interests
+    from .config import INTEREST_EVENTS_FILE
+    cfg = load_config()
+    if reset:
+        if click.confirm("Forget everything learned from what you clicked, followed, starred and forked?",
+                         default=False):
+            INTEREST_EVENTS_FILE.unlink(missing_ok=True)
+            click.echo("Done. Your stated interests (CV, papers, topics) are untouched.")
+        return
+    learned = interests.learned_terms(cfg, 15)
+    if not cfg.interest_learning:
+        click.echo("Learning is off (`mygeeky config set interest_learning true` turns it on).")
+    elif learned:
+        click.echo("Learned from what you do lately (strongest first):")
+        for term, weight in learned:
+            click.echo(f"  {term:<30} {'#' * min(30, max(1, int(weight * 3)))}")
+    else:
+        click.echo("Nothing learned yet: click people, repos and news in the panel, or follow, star and "
+                   "fork on GitHub.")
+    share = int(round(cfg.explore_share * 100))
+    if share:
+        click.echo(f"\nNew territory today ({share}% of every list): {', '.join(interests.explore_terms(cfg, 3))}")
 
 
 # --------------------------------------------------------------------------- sync
