@@ -197,6 +197,8 @@ profile are optional, and they make the matches much better. It also asks for
 a **read-only GitHub token**:
 
 1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
+   Pick a long **Expiration** (90 days or a year): myGeeKy reminds you a week
+   before a token ends (see [Token expiry](#token-expiry)).
 2. **Repository access:** *Public repositories*.
 3. Click **Add permissions** under *Account* → **Followers** → *Read-only*.
 4. **Generate token**, then paste it when asked. It's stored in your OS keyring, never in a file.
@@ -497,7 +499,8 @@ This is separate from the read-only token you made when you set myGeeKy up,
 and it can only be made **after** Step 1: GitHub only lets a token be limited
 to a repo that already exists.
 1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
-   Name it `mygeeky-beacon`, with **Resource owner** set to you.
+   Name it `mygeeky-beacon`, with **Resource owner** set to you, and a long
+   **Expiration**.
 2. **Repository access** → **Only select repositories** → pick `mygeeky-beacon`.
    The permission list only appears after you pick the repo, so do Step 1 first.
 3. Under *Repositories*, click **Add permissions** → **Contents**, and set it to
@@ -590,6 +593,20 @@ mygeeky update --check    # only say whether there's a newer version
 It asks PyPI at most once a day, sending nothing about you. Turn it off with
 `mygeeky config set check_for_updates false`. (A developer install made with
 `pip install -e .` is never touched; update it with `git pull`.)
+
+### Token expiry
+
+GitHub tokens expire on the date you chose when you made them. myGeeKy reads
+that date from GitHub (once a day) and, **from a week before**, reminds you: a
+banner in the panel with **Renew on GitHub** and **Paste new token**, and a
+note in the terminal. To renew, open the token on
+[github.com/settings/personal-access-tokens](https://github.com/settings/personal-access-tokens),
+click **Regenerate token**, and paste the new one (in the panel, or with
+`mygeeky auth login` for token 1 and `mygeeky beacon init` for token 2).
+
+```bash
+mygeeky auth status       # both tokens and when they expire
+```
 
 ### If something goes wrong on Windows
 

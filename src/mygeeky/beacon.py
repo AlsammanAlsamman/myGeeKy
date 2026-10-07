@@ -554,7 +554,8 @@ def token_steps(user: str) -> list[str]:
     return [
         "This is a SECOND token, separate from your read-only one, and it needs the repo from step 1.",
         f"Open {TOKEN_URL}",
-        f"Token name: mygeeky-beacon. Resource owner: {user}. Pick any expiration.",
+        f"Token name: mygeeky-beacon. Resource owner: {user}.",
+        "Expiration: pick a long one (e.g. 90 days or a year). myGeeKy reminds you a week before it ends.",
         "Repository access: choose 'Only select repositories', then pick mygeeky-beacon.",
         "  (the permission list only appears after you pick the repo)",
         "Permissions: under 'Repositories' click 'Add permissions' and choose 'Contents'",

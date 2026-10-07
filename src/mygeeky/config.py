@@ -34,6 +34,7 @@ CONTRIBUTE_LOG = DATA_DIR / "contribute_history.jsonl"
 MARKET_FILE = DATA_DIR / "market.json"
 PRODUCTHUNT_FILE = DATA_DIR / "producthunt.json"
 UPDATE_CHECK_FILE = DATA_DIR / "update_check.json"   # last PyPI version check; never synced
+TOKEN_CHECK_FILE = DATA_DIR / "token_check.json"     # tokens' expiry dates (never the tokens); never synced
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"

@@ -36,6 +36,7 @@ activity_cache.json
 beacons_cache.json
 .path_offered
 update_check.json
+token_check.json
 *.token
 *.lock
 """

@@ -163,6 +163,40 @@ def install_update() -> dict[str, Any]:
     return {"ok": ok, "message": message}
 
 
+def get_token_warnings(cfg: MyGeekyConfig) -> list[dict[str, Any]]:
+    """Tokens that expire within a week (or already have); checked at most daily."""
+    from .. import tokens
+    if not cfg.github_username:
+        return []
+    return tokens.warnings(cfg)
+
+
+def replace_token(cfg: MyGeekyConfig, name: str, value: str) -> dict[str, Any]:
+    """Store a renewed token, but only after it has proven it works: the read
+    token must belong to you, and the Signals token must be able to publish."""
+    import keyring
+    from .. import beacon, tokens
+    value = (value or "").strip()
+    user = cfg.github_username
+    if not value:
+        return {"ok": False, "message": "No token pasted."}
+    try:
+        if name == "read":
+            login = GitHubClient(value, rate_limit_sleep=0).get_authenticated_user().get("login", "")
+            if login.lower() != user.lower():
+                return {"ok": False, "message": f"That token belongs to {login}, not {user}."}
+            keyring.set_password(auth.SERVICE_NAME, user, value)
+        else:
+            beacon.go_live(cfg, beacon.BeaconWriter(value, user))
+            keyring.set_password(auth.BEACON_SERVICE_NAME, user, value)
+    except Exception as exc:
+        from ..errors import describe
+        return {"ok": False, "message": f"That token didn't work: {describe(exc)}"}
+    tokens.forget()
+    renewed = next((t for t in tokens.status(cfg, force=True) if t["name"] == name), None)
+    return {"ok": True, "message": "Saved. " + (renewed["message"] if renewed else "")}
+
+
 def set_hearts(cfg: MyGeekyConfig, enabled: bool) -> None:
     cfg.gui_hearts_enabled = bool(enabled)
     save_config(cfg)

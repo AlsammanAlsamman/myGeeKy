@@ -1769,6 +1769,9 @@ class MyGeekyPanel(QWidget):
         self._update_timer.timeout.connect(self._check_for_update)
         self._update_timer.start(6 * 60 * 60_000)
         QTimer.singleShot(8_000, self._check_for_update)
+        self._token_warnings: list[dict[str, Any]] = []
+        self._update_timer.timeout.connect(self._check_tokens)
+        QTimer.singleShot(10_000, self._check_tokens)
 
         self._sugg_timer = QTimer(self)
         self._sugg_timer.timeout.connect(self._maybe_auto_refresh_suggestions)
@@ -1833,6 +1836,10 @@ class MyGeekyPanel(QWidget):
         self.update_banner = self._build_update_banner()
         self.update_banner.setVisible(False)
         panel_layout.addWidget(self.update_banner)
+
+        self.token_banner = self._build_token_banner()
+        self.token_banner.setVisible(False)
+        panel_layout.addWidget(self.token_banner)
 
         self.status_label = QLabel("Loading…")
         self.status_label.setWordWrap(True)
@@ -2154,6 +2161,63 @@ class MyGeekyPanel(QWidget):
         for b in (self.update_btn, self.later_btn):
             b.setEnabled(True)
 
+    def _build_token_banner(self) -> QFrame:
+        banner = QFrame()
+        banner.setObjectName("tokenBanner")
+        layout = QVBoxLayout(banner)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+        self.token_label = QLabel("")
+        self.token_label.setWordWrap(True)
+        layout.addWidget(self.token_label)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        renew = QPushButton("Renew on GitHub ↗")
+        renew.setCursor(Qt.PointingHandCursor)
+        from ..tokens import SETTINGS_URL
+        renew.clicked.connect(lambda: logic.open_link(SETTINGS_URL))
+        self.paste_token_btn = QPushButton("Paste new token")
+        self.paste_token_btn.setCursor(Qt.PointingHandCursor)
+        self.paste_token_btn.clicked.connect(self._on_paste_token)
+        row.addWidget(renew)
+        row.addWidget(self.paste_token_btn)
+        row.addStretch(1)
+        layout.addLayout(row)
+        return banner
+
+    def _check_tokens(self) -> None:
+        self._run_async(lambda: logic.get_token_warnings(self.cfg), self._on_token_warnings)
+
+    def _on_token_warnings(self, warnings: Any) -> None:
+        self._token_warnings = warnings if isinstance(warnings, list) else []
+        if not self._token_warnings:
+            self.token_banner.setVisible(False)
+            return
+        lines = [w["message"].split(" Renew it")[0].split(" Make a new")[0] for w in self._token_warnings]
+        lines.append("On GitHub, open the token and click 'Regenerate token', then paste it here.")
+        self.token_label.setText("\n".join(("⏳ " + ln) if i < len(lines) - 1 else ln for i, ln in enumerate(lines)))
+        self.token_banner.setVisible(True)
+
+    def _on_paste_token(self) -> None:
+        from PySide6.QtWidgets import QInputDialog, QLineEdit
+        if not self._token_warnings:
+            return
+        target = self._token_warnings[0]
+        value, ok = QInputDialog.getText(self, "myGeeKy", f"Paste your new {target['label']}:",
+                                         QLineEdit.Password)
+        if not ok or not value.strip():
+            return
+        self.paste_token_btn.setEnabled(False)
+        self.token_label.setText("Checking the new token…")
+        self._run_async(lambda: logic.replace_token(self.cfg, target["name"], value), self._on_token_replaced)
+
+    def _on_token_replaced(self, result: Any) -> None:
+        self.paste_token_btn.setEnabled(True)
+        result = result if isinstance(result, dict) else {"ok": False, "message": str(result)}
+        self.token_label.setText(("✓ " if result.get("ok") else "✗ ") + result.get("message", ""))
+        if result.get("ok"):
+            QTimer.singleShot(2500, self._check_tokens)   # another token still due? else the banner goes
+
     def _build_settings_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("settings")
@@ -2328,6 +2392,13 @@ class MyGeekyPanel(QWidget):
             f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
             f"QPushButton#updateNow {{ background:{theme['accent']}; color:#15151f; font-weight:700; }}"
             f"QPushButton:disabled {{ color:{theme['muted']}; }}")
+        self.token_banner.setStyleSheet(
+            f"QFrame#tokenBanner {{ background:rgba(255,196,87,40); border:1px solid rgba(255,196,87,120); "
+            f"border-radius:10px; }}"
+            f"QLabel {{ color:{theme['text']}; font-size:11px; background:transparent; }}"
+            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+            f"border-radius:7px; padding:4px 9px; font-size:11px; }}"
+            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
         self.activity_updated_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
 
         for lbl in (self.stat_friends_label, self.stat_new_label, self.stat_rate_label):

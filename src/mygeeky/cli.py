@@ -100,6 +100,12 @@ def _maybe_announce_update() -> None:
     if info["newer"]:
         click.secho(f"myGeeKy {info['latest']} is available (you have {info['current']}). "
                     "Run `mygeeky update` to get it.\n", fg="magenta", err=True)
+    try:
+        from . import tokens
+        for t in tokens.warnings(load_config()):
+            click.secho(t["message"] + "\n", fg="yellow", err=True)
+    except Exception:
+        pass   # a reminder must never break the command it's attached to
 
 
 # --------------------------------------------------------------------------- update
@@ -364,6 +370,11 @@ def auth_login() -> None:
     if not cfg.github_username:
         raise click.ClickException("Run `mygeeky init` first to set your GitHub username.")
     auth.prompt_and_store_token(cfg.github_username)
+    from . import tokens
+    tokens.forget()
+    for t in tokens.status(cfg, force=True):
+        if t["name"] == "read":
+            click.echo(t["message"])
 
 
 @auth_cmd.command("logout")
@@ -379,9 +390,13 @@ def auth_logout() -> None:
 @auth_cmd.command("status")
 def auth_status() -> None:
     """Show where (if anywhere) your token is coming from -- never prints the token itself."""
+    from . import tokens
     cfg = load_config()
     click.echo(f"Token source: {auth.token_source(cfg.github_username)}")
+    for t in tokens.status(cfg, force=True):
+        click.secho(f"  {'!' if t['warn'] else '-'} {t['message']}", fg="yellow" if t["warn"] else None)
     click.echo(f"Product Hunt token: {'set' if auth.get_producthunt_token(cfg.github_username) else 'not set'}")
+    click.echo(f"Renew tokens at {tokens.SETTINGS_URL} (open a token, then 'Regenerate token').")
 
 
 @auth_cmd.command("producthunt")
@@ -1193,6 +1208,8 @@ def beacon_init() -> None:
             continue
         import keyring
         keyring.set_password(auth.BEACON_SERVICE_NAME, user, token)
+        from . import tokens
+        tokens.forget()
         click.secho("  ✓ The token works. It's stored in your OS keyring.", fg="green")
         break
     else:

@@ -111,6 +111,17 @@ def save_profile(req: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "notes": notes}
 
 
+def _expiry_note(name: str) -> str:
+    """'Token 1 (read-only) expires on ...' for the token just stored, or ''."""
+    try:
+        from . import tokens
+        from .config import load_config
+        tokens.forget()
+        return next((t["message"] for t in tokens.status(load_config(), force=True) if t["name"] == name), "")
+    except Exception:
+        return ""
+
+
 def check_token(req: dict[str, Any]) -> dict[str, Any]:
     """Who a token belongs to -- read-only, nothing stored."""
     from .github_client import GitHubClient
@@ -135,7 +146,7 @@ def store_token(req: dict[str, Any]) -> dict[str, Any]:
     if user and checked["login"].lower() != user.lower():
         return {"ok": False, "error": f"That token belongs to {checked['login']}, not {user}."}
     keyring.set_password(auth.SERVICE_NAME, user, str(req["token"]).strip())
-    return {"ok": True, "login": checked["login"]}
+    return {"ok": True, "login": checked["login"], "expiry": _expiry_note("read")}
 
 
 def sync_init(req: dict[str, Any]) -> dict[str, Any]:
@@ -171,7 +182,8 @@ def beacon_init(req: dict[str, Any]) -> dict[str, Any]:
     beacon.go_live(cfg, beacon.BeaconWriter(token, user))   # the real test: publish with it
     if new_token:  # stored only once it has proven it can write
         keyring.set_password(auth.BEACON_SERVICE_NAME, user, new_token)
-    return {"ok": True, "notes": notes, "url": f"https://github.com/{user}/{beacon.BEACON_REPO}"}
+    return {"ok": True, "notes": notes + [_expiry_note("beacon")],
+            "url": f"https://github.com/{user}/{beacon.BEACON_REPO}"}
 
 
 def beacon_check(req: dict[str, Any]) -> dict[str, Any]:

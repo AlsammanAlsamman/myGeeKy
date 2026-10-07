@@ -723,6 +723,8 @@ class TokenPage(Page):
     def on_result(self, result):
         if result.get("ok"):
             self.token.clear()  # don't keep it in memory longer than needed
+            if result.get("expiry"):
+                self.w.notes.append(result["expiry"])
             self.w.refresh_state()
         return bool(result.get("ok"))
 
@@ -772,7 +774,8 @@ LINK = 'style="color:#7fd8ff"'
 READ_TOKEN_STEPS = (
     "<b>To create token 1 (read-only):</b><ol style='margin:2px 0 0 -20px'>"
     f"<li>Open <a {LINK} href='{READ_TOKEN_URL}'>github.com → new fine-grained token ↗</a>. "
-    "Name it <b>mygeeky</b>.</li>"
+    "Name it <b>mygeeky</b>. <b>Expiration:</b> pick a long one (90 days or a year); myGeeKy reminds "
+    "you a week before it ends.</li>"
     "<li><b>Repository access</b> → choose <b>Public repositories</b>.</li>"
     "<li>Under <i>Account</i>, click <b>Add permissions</b> (on older pages: open <b>Account permissions</b>), "
     "pick <b>Followers</b> and set it to <b>Read-only</b>.</li>"
@@ -884,7 +887,8 @@ class SignalsPage(Page):
             ("<i>Finish Step 1 first: GitHub only lets a token be limited to a repo that already exists.</i><br>"
              if not repo_exists else "") +
             "This is a <b>second</b> token, separate from your read-only one. "
-            f"Name it <b>mygeeky-beacon</b>, owner <b>{user}</b>, then:" + OL +
+            f"Name it <b>mygeeky-beacon</b>, owner <b>{user}</b>, a long <b>Expiration</b> "
+            "(myGeeKy reminds you a week before it ends), then:" + OL +
             "<li><b>Repository access</b> → <b>Only select repositories</b> → pick <b>mygeeky-beacon</b>.</li>"
             "<li><b>Add permissions</b> (under <i>Repositories</i>) → <b>Contents</b> → <b>Read and write</b>. "
             "<i>Metadata: Read-only</i> is added by itself.</li>"

@@ -20,6 +20,7 @@ import mygeeky.cli  # noqa: F401
 import mygeeky.setup_api  # noqa: F401
 import mygeeky.producthunt  # noqa: F401
 import mygeeky.updates  # noqa: F401
+import mygeeky.tokens  # noqa: F401
 import mygeeky.config as config_module
 import mygeeky.gui.app  # noqa: F401
 import mygeeky.storage  # noqa: F401
