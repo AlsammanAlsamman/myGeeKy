@@ -568,6 +568,21 @@ On Windows you can use `MyGeeKySetup.exe` instead (see the top of this page).
 To build it yourself: `pip install pyinstaller build`, then
 `python installer/build.py`, which writes `dist/MyGeeKySetup-<version>.exe`.
 
+### Updating
+
+myGeeKy tells you when a new version is out: a banner in the panel with an
+**Update** button (it updates and restarts the panel by itself), and a one-line
+note in the terminal. Or run:
+
+```bash
+mygeeky update            # update now
+mygeeky update --check    # only say whether there's a newer version
+```
+
+It asks PyPI at most once a day, sending nothing about you. Turn it off with
+`mygeeky config set check_for_updates false`. (A developer install made with
+`pip install -e .` is never touched; update it with `git pull`.)
+
 ### If something goes wrong on Windows
 
 - **`'mygeeky' is not recognized`**: pip put the command in a folder that isn't
@@ -789,6 +804,7 @@ mygeeky config reset
 | `beacon_blocked` | people whose signals are never shown | `[]` |
 | `beacon_daily_limit` / `beacon_gesture_ttl_days` | signals you can send per day / days before a signal expires | `20` / `90` |
 | `beacon_refresh_minutes` / `beacon_max_users` | minimum minutes between re-reading beacons / beacons read per refresh | `30` / `60` |
+| `check_for_updates` | check PyPI once a day and offer an **Update** button when a new version is out | `true` |
 | `sync_repo` / `sync_auto` | private data repo (set by `sync init`) / whether `pipeline` pulls+pushes | `""` / `true` |
 | `min_training_samples` | labeled examples needed before the ML model kicks in | `8` |
 | `ml_blend_weight` | how much the learned model influences the final score once trained | `0.5` |
@@ -822,6 +838,9 @@ mygeeky config reset
 - **Token fallback to the GitHub CLI.** If no keyring token or env var is
   set, myGeeKy uses `gh auth token` when `gh` is logged in. This is still only
   used for GET requests.
+- **Update checks** are one read-only request to PyPI's public API, at most
+  once a day, carrying nothing about you. Updating only happens when you click
+  **Update** or run `mygeeky update`.
 - **Sync writes only to your own private data repo**, through `git`
   with your own credentials, never through myGeeKy's API client.
 - **Beacons are the one opt-in write.** After `mygeeky beacon init`,

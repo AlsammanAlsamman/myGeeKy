@@ -33,6 +33,7 @@ SCHOLAR_PROFILE_FILE = DATA_DIR / "scholar_profile.json"
 CONTRIBUTE_LOG = DATA_DIR / "contribute_history.jsonl"
 MARKET_FILE = DATA_DIR / "market.json"
 PRODUCTHUNT_FILE = DATA_DIR / "producthunt.json"
+UPDATE_CHECK_FILE = DATA_DIR / "update_check.json"   # last PyPI version check; never synced
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
@@ -155,6 +156,10 @@ class MyGeekyConfig:
     beacon_gesture_ttl_days: int = 90       # signals expire (yours are pruned, others' ignored) after this
     beacon_refresh_minutes: int = 30        # min minutes between re-reading everyone's beacons
     beacon_max_users: int = 60              # beacons read per refresh (one API call each when changed)
+
+    # Updates: check PyPI for a newer myGeeKy once a day (one read-only request)
+    check_for_updates: bool = True
+    update_dismissed: str = ""             # "Later" on this version hides the banner until a newer one
 
     # Learning
     min_training_samples: int = 8         # need at least this many labeled examples before ML kicks in

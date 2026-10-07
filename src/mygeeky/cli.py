@@ -78,6 +78,53 @@ def main() -> None:
     for stream in (sys.stdout, sys.stderr):
         if stream is not None and hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+    _maybe_announce_update()
+
+
+def _maybe_announce_update() -> None:
+    """One line on stderr when a newer myGeeKy is out -- only for a person at a
+    terminal (never in scripts, --json, the weekly job, or `update` itself), and
+    the PyPI check runs at most once a day."""
+    import sys
+    argv = sys.argv[1:]
+    if (not (sys.stdout and sys.stdout.isatty()) or "--json" in argv or not argv
+            or argv[0] in ("update", "pipeline", "gui", "setup")):
+        return
+    try:
+        if not load_config().check_for_updates:
+            return
+        from . import updates
+        info = updates.check(timeout=2.0)
+    except Exception:
+        return
+    if info["newer"]:
+        click.secho(f"myGeeKy {info['latest']} is available (you have {info['current']}). "
+                    "Run `mygeeky update` to get it.\n", fg="magenta", err=True)
+
+
+# --------------------------------------------------------------------------- update
+@main.command()
+@click.option("--check", "only_check", is_flag=True, help="Only say whether there's a newer version.")
+def update(only_check: bool) -> None:
+    """Update myGeeKy to the latest version (pip, for this same Python)."""
+    from . import updates
+    info = updates.check(force=True)
+    if not info["latest"]:
+        raise click.ClickException("Couldn't reach PyPI to check for a new version. Try again later.")
+    if not info["newer"]:
+        click.echo(f"You have the latest myGeeKy ({info['current']}).")
+        return
+    click.echo(f"myGeeKy {info['latest']} is available (you have {info['current']}).\n"
+               f"What's new: {updates.RELEASES_URL}")
+    if only_check:
+        return
+    click.echo("Updating...")
+    ok, message = updates.run_upgrade()
+    if not ok:
+        raise click.ClickException(message)
+    click.secho(message, fg="green")
+    click.echo("If the panel is open, it picks up the new version the next time it starts "
+               "(or click Update in the panel).")
 
 
 # --------------------------------------------------------------------------- init

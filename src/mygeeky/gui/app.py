@@ -140,6 +140,29 @@ def set_opacity(cfg: MyGeekyConfig, opacity: float) -> bool:
     return True
 
 
+def get_update_info(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Whether to show the update banner: a newer release on PyPI that the
+    user hasn't said "Later" to. Checks PyPI at most once a day."""
+    from .. import updates
+    if not cfg.check_for_updates:
+        return {"show": False}
+    info = updates.check()
+    show = info["newer"] and info["latest"] != cfg.update_dismissed
+    return {**info, "show": show, "editable": updates.is_editable(), "releases_url": updates.RELEASES_URL}
+
+
+def dismiss_update(cfg: MyGeekyConfig, version: str) -> None:
+    cfg.update_dismissed = version
+    save_config(cfg)
+
+
+def install_update() -> dict[str, Any]:
+    """Only ever called from a click on the banner's Update button."""
+    from .. import updates
+    ok, message = updates.run_upgrade()
+    return {"ok": ok, "message": message}
+
+
 def set_hearts(cfg: MyGeekyConfig, enabled: bool) -> None:
     cfg.gui_hearts_enabled = bool(enabled)
     save_config(cfg)

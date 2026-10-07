@@ -39,6 +39,7 @@ from PySide6.QtGui import (
     QRadialGradient,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QFrame,
     QHBoxLayout,
@@ -1762,6 +1763,13 @@ class MyGeekyPanel(QWidget):
         self._hearts_timer.timeout.connect(self._maybe_puff_hearts)
         self._hearts_timer.start(max(30_000, int(self.cfg.gui_hearts_interval_minutes * 60_000)))
 
+        # a newer myGeeKy on PyPI? (PyPI is asked at most once a day; see updates.py)
+        self._update_info: dict[str, Any] = {}
+        self._update_timer = QTimer(self)
+        self._update_timer.timeout.connect(self._check_for_update)
+        self._update_timer.start(6 * 60 * 60_000)
+        QTimer.singleShot(8_000, self._check_for_update)
+
         self._sugg_timer = QTimer(self)
         self._sugg_timer.timeout.connect(self._maybe_auto_refresh_suggestions)
         self._sugg_timer.start(10 * 60_000)
@@ -1821,6 +1829,10 @@ class MyGeekyPanel(QWidget):
         self.settings_panel = self._build_settings_panel()
         self.settings_panel.setVisible(False)
         panel_layout.addWidget(self.settings_panel)
+
+        self.update_banner = self._build_update_banner()
+        self.update_banner.setVisible(False)
+        panel_layout.addWidget(self.update_banner)
 
         self.status_label = QLabel("Loading…")
         self.status_label.setWordWrap(True)
@@ -2072,6 +2084,76 @@ class MyGeekyPanel(QWidget):
         page.setAutoFillBackground(False)
         return scroll
 
+    def _build_update_banner(self) -> QFrame:
+        banner = QFrame()
+        banner.setObjectName("updateBanner")
+        layout = QVBoxLayout(banner)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+        self.update_label = QLabel("")
+        self.update_label.setWordWrap(True)
+        layout.addWidget(self.update_label)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.update_btn = QPushButton("Update")
+        self.update_btn.setObjectName("updateNow")
+        self.update_btn.setCursor(Qt.PointingHandCursor)
+        self.update_btn.clicked.connect(self._on_update_clicked)
+        self.whats_new_btn = QPushButton("What's new")
+        self.whats_new_btn.setCursor(Qt.PointingHandCursor)
+        self.whats_new_btn.clicked.connect(
+            lambda: logic.open_link(self._update_info.get("releases_url", "")))
+        self.later_btn = QPushButton("Later")
+        self.later_btn.setCursor(Qt.PointingHandCursor)
+        self.later_btn.clicked.connect(self._on_update_later)
+        for b in (self.update_btn, self.whats_new_btn, self.later_btn):
+            row.addWidget(b)
+        row.addStretch(1)
+        layout.addLayout(row)
+        return banner
+
+    def _check_for_update(self) -> None:
+        self._run_async(lambda: logic.get_update_info(self.cfg), self._on_update_info)
+
+    def _on_update_info(self, info: Any) -> None:
+        info = info if isinstance(info, dict) else {}
+        self._update_info = info
+        if not info.get("show"):
+            self.update_banner.setVisible(False)
+            return
+        if info.get("editable"):
+            self.update_label.setText(f"✨ myGeeKy {info['latest']} is out. This is a developer install, "
+                                      "so update it with git pull.")
+            self.update_btn.setVisible(False)
+        else:
+            self.update_label.setText(f"✨ myGeeKy {info['latest']} is available (you have {info['current']}).")
+            self.update_btn.setVisible(True)
+        self.update_banner.setVisible(True)
+
+    def _on_update_later(self) -> None:
+        if self._update_info.get("latest"):
+            logic.dismiss_update(self.cfg, self._update_info["latest"])
+        self.update_banner.setVisible(False)
+
+    def _on_update_clicked(self) -> None:
+        for b in (self.update_btn, self.later_btn):
+            b.setEnabled(False)
+        self.update_label.setText("Updating myGeeKy… (about a minute; keep using it meanwhile)")
+        self._run_async(logic.install_update, self._on_update_done)
+
+    def _on_update_done(self, result: Any) -> None:
+        result = result if isinstance(result, dict) else {"ok": False, "message": str(result)}
+        if result.get("ok"):
+            self.update_label.setText(f"✓ {result['message']} Restarting…")
+            from .. import updates
+            updates.relaunch_panel_after_exit()
+            QTimer.singleShot(600, QApplication.instance().quit)
+            return
+        self.update_label.setText(f"Couldn't update: {result.get('message', 'unknown error')}")
+        self.update_btn.setText("Try again")
+        for b in (self.update_btn, self.later_btn):
+            b.setEnabled(True)
+
     def _build_settings_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("settings")
@@ -2238,6 +2320,14 @@ class MyGeekyPanel(QWidget):
         folded_font.setBold(True)
         self.folded_widget.setFont(folded_font)
         self.status_label.setStyleSheet(f"font-size:11px; color:{theme['muted']}; background:transparent;")
+        self.update_banner.setStyleSheet(
+            f"QFrame#updateBanner {{ background:{theme['tab_active']}; border-radius:10px; }}"
+            f"QLabel {{ color:{theme['text']}; font-size:11px; background:transparent; }}"
+            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+            f"border-radius:7px; padding:4px 9px; font-size:11px; }}"
+            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+            f"QPushButton#updateNow {{ background:{theme['accent']}; color:#15151f; font-weight:700; }}"
+            f"QPushButton:disabled {{ color:{theme['muted']}; }}")
         self.activity_updated_label.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
 
         for lbl in (self.stat_friends_label, self.stat_new_label, self.stat_rate_label):
