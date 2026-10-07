@@ -159,7 +159,11 @@ class MyGeekyConfig:
     beacon_status: str = ""                 # one of beacon.STATUSES, e.g. "open-to-collab"
     beacon_share_interests: bool = True     # publish your topics/keywords/languages as interest tags
     beacon_blocked: list[str] = field(default_factory=list)  # never show signals from these
-    beacon_daily_limit: int = 20            # signals you can send per day
+    beacon_daily_limit: int = 10            # signals you can send per day
+    beacon_repeat_days: int = 30            # the same signal to the same person at most once in this many days
+    beacon_weekly_new_people: int = 5       # people you can start signalling per week
+    beacon_quiet: bool = False              # "not taking signals right now": others can't send to you
+    beacon_muted: list[str] = field(default_factory=list)  # hide their signals (they're not told)
     beacon_gesture_ttl_days: int = 90       # signals expire (yours are pruned, others' ignored) after this
     beacon_refresh_minutes: int = 30        # min minutes between re-reading everyone's beacons
     beacon_max_users: int = 60              # beacons read per refresh (one API call each when changed)

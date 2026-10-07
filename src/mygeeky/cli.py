@@ -670,7 +670,7 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
     if cfg.beacon_enabled:
         from . import beacon as bc
         try:
-            beacon_signals = bc.suggestion_signals(bc.refresh(client, cfg), cfg)
+            beacon_signals = bc.suggestion_signals(bc.refresh(client, cfg), cfg, bc.private_key_or_none(cfg))
         except Exception as exc:  # a beacon hiccup must never sink the whole search
             click.echo(f"[mygeeky] reading beacons failed, skipping them: {exc}", err=True)
     candidates = _gather_candidates(client, cfg, excluded, following, domain_terms, beacon_signals)
@@ -1344,8 +1344,10 @@ def sync_status() -> None:
 # --------------------------------------------------------------------------- beacon
 @main.group()
 def beacon() -> None:
-    """Non-verbal signals between myGeeKy users (👋 wave, 📚 learn, 🤝 collab,
-    👀 watching, 🔥 kudos), through your PUBLIC <you>/mygeeky-beacon repo."""
+    """Private, non-verbal signals between myGeeKy users: 🙏 thanks, 📚 learned
+    from your work, ⭐ used your work, 👀 following, 🤝 collaborate (shown only
+    if you both choose it). Only the recipient can read a signal; no reply is
+    ever expected."""
 
 
 def _beacon_call(fn, *args, **kwargs):
@@ -1465,25 +1467,25 @@ def _beacon_cache(cfg: MyGeekyConfig, refresh: bool) -> dict:
 
 @beacon.command("send")
 @click.argument("user")
-@click.argument("gesture", type=click.Choice(["wave", "learn", "collab", "watching", "kudos"]))
-@click.option("--repo", default=None, help="owner/name -- required for kudos.")
+@click.argument("gesture", type=click.Choice(["thanks", "learn", "used", "watching", "collab"]))
+@click.option("--repo", default=None, help="owner/name -- the repo you used (for 'used').")
 def beacon_send(user: str, gesture: str, repo: str | None) -> None:
-    """Send USER a signal: wave, learn, collab, watching, or kudos --repo owner/name."""
+    """Send USER a private signal: thanks, learn, watching, collab, or used --repo owner/name."""
     from . import beacon as bc
     cfg = load_config()
-    _beacon_call(bc.send, cfg, user, gesture, repo)
+    _beacon_call(bc.send, cfg, user, gesture, repo, cache=_beacon_cache(cfg, refresh=False))
     emoji = bc.GESTURES[gesture][0]
-    click.echo(f"{emoji} sent to {user} (public, in your beacon).")
-    if user.lower() not in {u.lower() for u in (bc.load_cache().get("users") or {})}:
-        click.echo(f"Note: {user} has no beacon that myGeeKy has seen yet, so they'll only notice "
-                   "once they join.", err=True)
+    if gesture in bc.MUTUAL_ONLY:
+        click.echo(f"{emoji} noted. {user} only finds out if they choose it for you too; then you both see it.")
+    else:
+        click.echo(f"{emoji} sent privately to {user}: only they can read it, and no reply is expected.")
 
 
 @beacon.command("unsend")
 @click.argument("user")
 @click.argument("gesture", required=False)
 def beacon_unsend(user: str, gesture: str | None) -> None:
-    """Take back your signals to USER (all of them, or just GESTURE)."""
+    """Take back your signals to USER (all of them, or just GESTURE). They disappear from your beacon."""
     from . import beacon as bc
     n = _beacon_call(bc.unsend, load_config(), user, gesture)
     click.echo(f"Removed {n} signal(s) to {user}." if n else f"You haven't signalled {user}.")
@@ -1493,19 +1495,24 @@ def beacon_unsend(user: str, gesture: str | None) -> None:
 @click.option("--refresh", is_flag=True, help="Re-read everyone's beacons now.")
 @click.option("--json", "as_json", is_flag=True)
 def beacon_inbox(refresh: bool, as_json: bool) -> None:
-    """Signals other myGeeKy users sent you. 🤝 = handshake (you signalled them too)."""
+    """Signals other myGeeKy users sent you (no reply is ever expected)."""
     from . import beacon as bc
     cfg = load_config()
-    rows = bc.inbox(_beacon_cache(cfg, refresh), cfg, bc.load_my_beacon())
+    cache = _beacon_cache(cfg, refresh)
+    _beacon_call(bc.ensure_published, cfg)
+    rows = bc.inbox(cache, cfg, bc.load_my_beacon(), bc.private_key_or_none(cfg))
     if as_json:
         click.echo(json.dumps(rows, indent=2))
         return
+    if cfg.beacon_quiet:
+        click.echo(f"You're not taking signals right now ({len(rows)} waiting). "
+                   "`mygeeky beacon quiet off` when you're back.")
+        return
     if not rows:
-        click.echo("No signals yet. Send some: `mygeeky beacon people`, then `mygeeky beacon send <user> wave`.")
+        click.echo("Nothing yet. Signals are small thank-yous; see `mygeeky beacon people`.")
         return
     for r in rows:
-        hand = "  🤝 handshake" if r["mutual"] else ""
-        click.echo(f"  {r['from']:<25} {r['text']}  ({r['at'][:10]}){hand}")
+        click.echo(f"  {r['from']:<25} {r['text']}  ({r['at'][:10]})")
 
 
 @beacon.command("people")
@@ -1515,7 +1522,7 @@ def beacon_people(refresh: bool, as_json: bool) -> None:
     """Fellow myGeeKy users, those sharing your interests first."""
     from . import beacon as bc
     cfg = load_config()
-    rows = bc.people(_beacon_cache(cfg, refresh), cfg, bc.load_my_beacon())
+    rows = bc.people(_beacon_cache(cfg, refresh), cfg, bc.load_my_beacon(), private_key=bc.private_key_or_none(cfg))
     if as_json:
         click.echo(json.dumps(rows, indent=2))
         return
@@ -1524,21 +1531,23 @@ def beacon_people(refresh: bool, as_json: bool) -> None:
         return
     for p in rows:
         marks = ("📨 " if p["signalled_you"] else "") + ("✓ " if p["you_signalled"] else "")
-        click.echo(f"  {marks}{p['login']:<25} {p['status']}")
+        note = "" if p["can_receive"] or p["quiet"] else "  (older myGeeKy: can't receive yet)"
+        click.echo(f"  {marks}{p['login']:<25} {p['status']}{note}")
         if p["shared"]:
             click.echo(f"      shares: {', '.join(p['shared'])}")
 
 
 @beacon.command("sent")
 def beacon_sent() -> None:
-    """The signals you've sent (still in your public beacon)."""
+    """The signals you've sent. Only you see this list; your beacon holds them sealed."""
     from . import beacon as bc
-    gestures = bc.load_my_beacon()["gestures"]
-    if not gestures:
+    sent = bc.load_my_beacon()["sent"]
+    if not sent:
         click.echo("You haven't sent any signals.")
-    for g in sorted(gestures, key=lambda g: g.get("at", ""), reverse=True):
+    for g in sorted(sent, key=lambda g: g.get("at", ""), reverse=True):
         repo = f" ({g['repo']})" if g.get("repo") else ""
-        click.echo(f"  {bc.GESTURES[g['type']][0]} {g['type']:<9} -> {g['to']}{repo}  {g.get('at', '')[:10]}")
+        emoji = (bc.GESTURES.get(g.get("type")) or bc.LEGACY_GESTURES.get(g.get("type")) or ("·",))[0]
+        click.echo(f"  {emoji} {g.get('type', ''):<9} -> {g.get('to', '')}{repo}  {g.get('at', '')[:10]}  sent ✓")
 
 
 @beacon.command("status")
@@ -1559,6 +1568,37 @@ def beacon_status(value: str | None) -> None:
     _beacon_call(bc.publish, cfg, bc.load_my_beacon())
     save_config(cfg)
     click.echo(f"Status: {bc.STATUSES[value] or '(none)'}")
+
+
+@beacon.command("quiet")
+@click.argument("state", type=click.Choice(["on", "off"]), required=False)
+def beacon_quiet(state: str | None) -> None:
+    """Not taking signals right now? `quiet on` (others can't send to you; nobody is told why)."""
+    from . import beacon as bc
+    cfg = load_config()
+    if state is None:
+        click.echo(f"Quiet: {'on' if cfg.beacon_quiet else 'off'}")
+        return
+    _beacon_call(bc.set_quiet, cfg, state == "on")
+    click.echo("You're not taking signals for now." if state == "on" else "You're taking signals again.")
+
+
+@beacon.command("mute")
+@click.argument("user")
+def beacon_mute(user: str) -> None:
+    """Hide USER's signals. They're never told (block also stops yours to them)."""
+    from . import beacon as bc
+    bc.set_muted(load_config(), user, True)
+    click.echo(f"Muted {user}.")
+
+
+@beacon.command("unmute")
+@click.argument("user")
+def beacon_unmute(user: str) -> None:
+    """Show USER's signals again."""
+    from . import beacon as bc
+    bc.set_muted(load_config(), user, False)
+    click.echo(f"Unmuted {user}.")
 
 
 @beacon.command("block")

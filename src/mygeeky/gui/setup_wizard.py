@@ -890,10 +890,11 @@ class SignalsPage(Page):
 
     def __init__(self) -> None:
         super().__init__("Signals (optional)",
-                         "Send other myGeeKy users emoji signals (👋 wave · 📚 learn from you · "
-                         "🤝 collaborate · 👀 following your work) and see theirs. No text, ever.")
+                         "Send other myGeeKy users small private signals (🙏 thanks · 📚 learned from "
+                         "your work · 👀 following your work · 🤝 collaborate) and see theirs. Only the "
+                         "person you send one to can read it, and no reply is ever expected.")
         self._stage = "none"            # none | partial | live | checking
-        self.enable = QCheckBox("Join Signals. I understand my signals are public.")
+        self.enable = QCheckBox("Join Signals. My beacon (status, interests) is public; my signals are private.")
         self.add(self.enable)
         self.summary = _label("", "muted")
         self.summary.setTextFormat(Qt.RichText)

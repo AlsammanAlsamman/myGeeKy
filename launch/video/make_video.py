@@ -282,7 +282,9 @@ BEACON = Terminal([
     (7.0, "ask", "Paste the token (input hidden): |********"),
     (8.2, "out", "  ✓ The token works. It's stored in your OS keyring."),
     (9.0, "out", "Step 3 of 3: checking that others can see you\n  ✓ beacon.json is published"),
-    (10.4, "out", "Your beacon is live: github.com/your-name/mygeeky-beacon"),
+    (10.4, "out", "Your beacon is live. Signals are private: only the person you
+"
+                  "  send one to can read it, and no reply is ever expected."),
 ], title="mygeeky beacon init: join Signals (optional)")
 
 
@@ -339,7 +341,7 @@ PILLARS = [
     ("🔬", "Research", "papers gaining citations fastest, and their code", GREEN),
     ("🗞️", "News", "arXiv, bioRxiv and Hacker News, for your topics", RED),
     ("📰", "Activity", "what your people are building right now", VIOLET),
-    ("👋", "Signals", "say hi to fellow geeks, without words", PINK),
+    ("🙏", "Signals", "private thank-yous; no reply needed", PINK),
     ("🧠", "Learning", "learns what you're into, keeps room to explore", VIOLET),
     ("💡", "Ideas", "send ideas and problems straight to the maker", AMBER),
 ]
@@ -421,8 +423,8 @@ def s_configure(t: float) -> Image.Image:
 def s_signals(t: float) -> Image.Image:
     im = background(t + 80).convert("RGBA")
     if t < 3.6:
-        section_title(im, t, "STEP 3 · OPTIONAL", "Join Signals", "emoji-only hellos between myGeeKy users")
-        emoji(im, "👋📚🤝👀", (W / 2 - 230, 650), 100, ease(t / 0.6) * ease((3.6 - t) / 0.5))
+        section_title(im, t, "STEP 3 · OPTIONAL", "Join Signals", "private thank-yous between myGeeKy users")
+        emoji(im, "🙏📚👀🤝", (W / 2 - 230, 650), 100, ease(t / 0.6) * ease((3.6 - t) / 0.5))
         return im
     t -= 3.6
     a = ease(t / 0.5) * ease((12.6 - t) / 0.5)
@@ -436,7 +438,7 @@ TOUR = [
      "and the domain experts a follower count would bury"),
     ("repos.png", "Projects that welcome your pull requests", "starter issues, and maintainers who actually merge"),
     ("market.png", "The pulse of your field", "stars, commits and downloads: who's rising this week"),
-    ("signals.png", "Say hi without words", "👋 wave · 📚 learn from you · 🤝 collaborate  (example data)"),
+    ("signals.png", "Say thanks, privately", "only they can read it, and no reply is expected"),
     ("activity.png", "What your people are building, live", "one card per person, right on your screen edge"),
     ("research.png", "The papers behind the code", "rising papers, their repos, and the people behind them"),
     ("news.png", "News from your field, not everyone's", "arXiv, bioRxiv and Hacker News, matched to you"),

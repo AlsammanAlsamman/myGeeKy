@@ -43,15 +43,15 @@ def example_signals(cfg, force=False):
     return {
         "enabled": True, "can_send": True, "fetched_at": ago(0.1), "error": None,
         "incoming": [
-            {"from": "ada-genomics", "avatar_url": "", "profile_url": "", "type": "wave", "emoji": "👋",
-             "text": "waved at you", "repo": "", "at": ago(1), "mutual": True},
-            {"from": "lin-spatial", "avatar_url": "", "profile_url": "", "type": "learn", "emoji": "📚",
-             "text": "is learning from your work", "repo": "", "at": ago(5), "mutual": False},
-            {"from": "omar-plants", "avatar_url": "", "profile_url": "", "type": "collab", "emoji": "🤝",
-             "text": "would like to collaborate", "repo": "", "at": ago(26), "mutual": False},
+            {"from": "ada-genomics", "avatar_url": "", "profile_url": "", "type": "thanks", "emoji": "🙏",
+             "text": "🙏 thanked you for your work", "repo": "", "at": ago(1), "mutual": False},
+            {"from": "lin-spatial", "avatar_url": "", "profile_url": "", "type": "collab", "emoji": "🤝",
+             "text": "🤝 you both want to collaborate", "repo": "", "at": ago(5), "mutual": True},
+            {"from": "omar-plants", "avatar_url": "", "profile_url": "", "type": "used", "emoji": "⭐",
+             "text": "⭐ used your-name/finemap-kit in their work", "repo": "", "at": ago(26), "mutual": False},
         ],
         "people": [{"login": p, "avatar_url": "", "profile_url": "", "status": s, "interests": i, "shared": i[:2],
-                    "signalled_you": True, "you_signalled": p == "ada-genomics"} for p, s, i in people],
+                    "signalled_you": True, "you_signalled": p == "ada-genomics", "can_receive": True} for p, s, i in people],
     }
 
 

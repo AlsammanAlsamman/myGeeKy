@@ -271,10 +271,16 @@ def test_signals_tab_renders_incoming_and_people_and_sends(qapp, monkeypatch):
     data = {
         "enabled": True, "can_send": True, "fetched_at": None, "error": None,
         "incoming": [{"from": "alice", "avatar_url": "", "profile_url": "https://github.com/alice",
-                      "type": "wave", "emoji": "👋", "text": "👋 waved at you", "repo": "",
-                      "at": "2026-10-06T00:00:00+00:00", "mutual": True}],
+                      "type": "thanks", "emoji": "🙏", "text": "🙏 thanked you for your work", "repo": "",
+                      "at": "2026-10-06T00:00:00+00:00", "mutual": False},
+                     {"from": "carol", "avatar_url": "", "profile_url": "https://github.com/carol",
+                      "type": "collab", "emoji": "🤝", "text": "🤝 you both want to collaborate", "repo": "",
+                      "at": "2026-10-05T00:00:00+00:00", "mutual": True}],
         "people": [{"login": "<b>bob</b>", "avatar_url": "", "profile_url": "https://github.com/bob",
-                    "status": "", "interests": ["gwas"], "shared": ["gwas"],
+                    "status": "", "interests": ["gwas"], "shared": ["gwas"], "can_receive": True,
+                    "signalled_you": False, "you_signalled": False},
+                   {"login": "quietq", "avatar_url": "", "profile_url": "", "status": "🔕 not taking signals right now",
+                    "interests": [], "shared": [], "can_receive": False,
                     "signalled_you": False, "you_signalled": False}],
     }
     monkeypatch.setattr(logic, "get_signals", lambda cfg, force=False: data)
@@ -288,10 +294,13 @@ def test_signals_tab_renders_incoming_and_people_and_sends(qapp, monkeypatch):
             w.wait(2000)
         qapp.processEvents()
         cards = panel.signals_area.parentWidget().findChildren(SignalCard)
-        assert [c.login for c in cards] == ["alice", "<b>bob</b>"]
+        assert [c.login for c in cards] == ["alice", "carol", "<b>bob</b>", "quietq"]
         texts = [lbl.text() for lbl in cards[0].findChildren(QLabel)]
-        assert "🤝 handshake" in texts
-        name = next(lbl for lbl in cards[1].findChildren(QLabel) if lbl.text() == "<b>bob</b>")
+        assert any("no reply needed" in t for t in texts)                  # appreciation, never a request
+        assert "🤝 match" in [lbl.text() for lbl in cards[1].findChildren(QLabel)]
+        assert not cards[3].gesture_buttons                                  # quiet: no buttons at all
+        assert "only find out if they choose it" in cards[0].gesture_buttons["collab"].toolTip()
+        name = next(lbl for lbl in cards[2].findChildren(QLabel) if lbl.text() == "<b>bob</b>")
         from PySide6.QtCore import Qt
         assert name.textFormat() == Qt.PlainText            # beacon data is never rendered as HTML
         cards[0].gesture_buttons["learn"].click()

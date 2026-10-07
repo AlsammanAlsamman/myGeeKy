@@ -343,8 +343,9 @@
     <div class="tile wide reveal" style="--c:var(--violet)"><div class="ico">🧠</div><h3>It learns what you're into <span class="tag-new">NEW</span></h3>
       <p>Every click, follow, star and fork tunes every list, and 🔭 20% always stays open for new territory, so you
         never end up in a bubble.</p><div class="cmd mono">mygeeky interests</div></div>
-    <div class="tile wide reveal" style="--c:var(--pink)"><div class="ico">👋</div><h3>Signals, without words</h3>
-      <p>Wave, say "I learn from your work", or offer to collaborate, with emoji only and no server. A 🤝 handshake when it's mutual.</p>
+    <div class="tile wide reveal" style="--c:var(--pink)"><div class="ico">🙏</div><h3>Private thank-yous</h3>
+      <p>Thank someone, say you learned from their work or used their tool. Sealed so only they can read it, and
+        no reply is ever expected. 🤝 "Let's collaborate" only shows up if you both choose it.</p>
       <div class="cmd mono">mygeeky beacon</div></div>
     <div class="tile reveal" style="--c:var(--cyan)"><div class="ico">📰</div><h3>Activity</h3>
       <p>What your people are building, live.</p><div class="cmd mono">in the panel</div></div>
@@ -421,14 +422,17 @@
   <div class="wrap feature flip">
     <div class="copy reveal">
       <div class="eyebrow">Signals</div>
-      <h2>Say hi without words</h2>
-      <div class="emoji-row"><span>👋</span><span>📚</span><span>🤝</span><span>👀</span><span>🔥</span></div>
-      <p class="sub">Signals travel through a small public repo on your own GitHub, so there's no server, no text and
-        nothing to moderate. When it's mutual, you get a 🤝 handshake.</p>
+      <h2>Gratitude, not small talk</h2>
+      <div class="emoji-row"><span>🙏</span><span>📚</span><span>⭐</span><span>👀</span><span>🤝</span></div>
+      <p class="sub">A quiet way to tell someone their work mattered to you: no server, no text, nothing to moderate,
+        and nothing to answer.</p>
       <ul class="ticks">
-        <li>Emoji only, from a fixed set: no spam, no harassment</li>
-        <li>Public and transparent, and you can block anyone</li>
-        <li>Opt-in, with its own token that can write to one repo only</li>
+        <li><b>Private:</b> each signal is encrypted so only its recipient can read it. Nobody can see who
+          you signalled, or who didn't answer.</li>
+        <li><b>No reply needed:</b> every signal says so, and you never see "unanswered"</li>
+        <li><b>🤝 only if you both want it:</b> "let's collaborate" stays hidden until it's mutual</li>
+        <li><b>Courteous by design:</b> once a month per person, a few new people a week, a "not taking signals"
+          switch, mute and block</li>
       </ul>
     </div>
     <div class="pic reveal"><img src="img/signals.png" alt="Signals tab (example people)" loading="lazy"></div>
@@ -585,7 +589,7 @@
     ["research", "Research", "Rising papers, the code behind them, and the people."],
     ["news", "News", "arXiv, bioRxiv and Hacker News about your interests."],
     ["activity", "Activity", "One card per person: what they're building right now."],
-    ["signals", "Signals", "👋 📚 🤝 👀 from fellow users (example people)."],
+    ["signals", "Signals", "Private thank-yous from fellow users; 🤝 only when mutual (example people)."],
     ["model", "Model", "What myGeeKy knows about you, drawn as a living map."],
   ];
   const tabs = document.getElementById("tabs"), frame = document.getElementById("frame");

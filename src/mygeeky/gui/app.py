@@ -557,12 +557,22 @@ def get_signals(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
             cache = bc.refresh(_build_client(cfg), cfg, force=True)
         except Exception as exc:  # surfaced to the panel, not a crash
             error = str(exc)
+    can_send = auth.get_beacon_token(cfg.github_username) is not None
+    if can_send:
+        try:   # after an update: publish this computer's key once, so others can send to you
+            bc.ensure_published(cfg)
+        except Exception as exc:
+            error = error or f"Couldn't update your beacon: {exc}"
+    key = bc.private_key_or_none(cfg)
     mine = bc.load_my_beacon()
+    incoming = bc.inbox(cache, cfg, mine, key)
     return {
         "enabled": True,
-        "can_send": auth.get_beacon_token(cfg.github_username) is not None,
-        "incoming": bc.inbox(cache, cfg, mine),
-        "people": bc.people(cache, cfg, mine),
+        "can_send": can_send,
+        "quiet": cfg.beacon_quiet,
+        "incoming": [] if cfg.beacon_quiet else incoming,
+        "held": len(incoming) if cfg.beacon_quiet else 0,
+        "people": bc.people(cache, cfg, mine, private_key=key),
         "fetched_at": cache.get("fetched_at"),
         "error": error,
     }
@@ -576,6 +586,22 @@ def send_signal(cfg: MyGeekyConfig, to: str, gesture: str) -> dict[str, Any]:
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
     return {"ok": True}
+
+
+def set_signals_quiet(cfg: MyGeekyConfig, quiet: bool) -> dict[str, Any]:
+    from .. import beacon as bc
+    try:
+        bc.set_quiet(cfg, quiet)
+    except Exception as exc:
+        cfg.beacon_quiet = not quiet
+        return {"ok": False, "error": str(exc)}
+    return {"ok": True}
+
+
+def mute_signals(cfg: MyGeekyConfig, login: str, mute: bool = True) -> None:
+    """Hide (or show again) someone's signals. They're never told."""
+    from .. import beacon as bc
+    bc.set_muted(cfg, login, mute)
 
 
 def get_model_history() -> list[dict[str, Any]]:

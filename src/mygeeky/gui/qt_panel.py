@@ -1550,18 +1550,26 @@ class ActivityGroup(QFrame):
             self.toggled.emit(self.actor, expanded)
 
 
-PANEL_GESTURES = ("wave", "learn", "collab", "watching")  # kudos needs a repo: CLI only
+PANEL_GESTURES = ("thanks", "learn", "watching", "collab")  # "used" needs a repo: CLI only
+GESTURE_TIPS = {
+    "thanks": "Thank {who} for their work. Private: only they can read it, and no reply is expected.",
+    "learn": "Tell {who} you learned from their work. Private, and no reply is expected.",
+    "watching": "Let {who} know you're following their work. Private, and no reply is expected.",
+    "collab": "Open to collaborating with {who}. They only find out if they choose it for you too; "
+              "then you both see it. Otherwise nobody ever knows.",
+}
 
 
 class SignalCard(QFrame):
-    """One person on the Signals tab: an incoming signal (with a handshake
-    badge when it's mutual) or a fellow myGeeKy user. The emoji buttons
-    send a signal back; the arrow opens their profile. Everything shown
-    from someone's beacon is rendered as plain text."""
+    """One person on the Signals tab: a signal they sent you, or a fellow
+    myGeeKy user. The emoji buttons send a private signal; the arrow opens
+    their profile; 🔇 mutes them (they're never told). Everything shown from
+    someone's beacon is rendered as plain text."""
 
     def __init__(self, item: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
                  on_send: Callable[["SignalCard", str, str], None] | None,
-                 loader: "AvatarLoader | None" = None) -> None:
+                 loader: "AvatarLoader | None" = None,
+                 on_mute: Callable[[str], None] | None = None) -> None:
         super().__init__()
         from ..beacon import GESTURES
         self.setObjectName("signalCard")
@@ -1581,7 +1589,7 @@ class SignalCard(QFrame):
         name.setTextFormat(Qt.PlainText)
         name.setStyleSheet(f"color:{theme['text']}; font-size:12px; font-weight:600; background:transparent;")
         name_row.addWidget(name)
-        badge_text = "🤝 handshake" if item.get("mutual") else "signalled you" if item.get("signalled_you") else ""
+        badge_text = "🤝 match" if item.get("mutual") else "signalled you" if item.get("signalled_you") else ""
         if badge_text:
             badge = QLabel(badge_text)
             badge.setStyleSheet(f"color:{theme['text']}; background:{theme['section_btn']}; "
@@ -1593,6 +1601,8 @@ class SignalCard(QFrame):
 
         if "text" in item:  # an incoming signal
             line = f"{item['text']} · {_time_ago(item.get('at', ''))}"
+            if not item.get("mutual"):
+                line += " · no reply needed"
         else:               # a fellow user
             shared = item.get("shared") or []
             line = " · ".join(x for x in (item.get("status", ""),
@@ -1617,11 +1627,20 @@ class SignalCard(QFrame):
         profile_btn.setStyleSheet(btn_style)
         profile_url = item.get("profile_url", "")
         profile_btn.clicked.connect(lambda: on_open(profile_url))
+        if on_mute is not None and "text" in item:
+            mute_btn = QPushButton("🔇")
+            mute_btn.setToolTip(f"Mute {self.login}: hide their signals. They're never told; "
+                                "`mygeeky beacon unmute` brings them back.")
+            mute_btn.setCursor(Qt.PointingHandCursor)
+            mute_btn.setFixedSize(24, 24)
+            mute_btn.setStyleSheet(btn_style)
+            mute_btn.clicked.connect(lambda: on_mute(self.login))
+            head.addWidget(mute_btn)
         head.addWidget(profile_btn)
         outer.addLayout(head)
 
         self.gesture_buttons: dict[str, QPushButton] = {}
-        if on_send is not None:
+        if on_send is not None and item.get("can_receive", True):
             row = QHBoxLayout()
             row.setContentsMargins(38, 0, 0, 0)
             row.setSpacing(4)
@@ -1630,7 +1649,7 @@ class SignalCard(QFrame):
                 btn = QPushButton(emoji)
                 btn.setFixedSize(28, 24)
                 btn.setCursor(Qt.PointingHandCursor)
-                btn.setToolTip(f"Send {self.login} a '{g}' signal (public)")
+                btn.setToolTip(GESTURE_TIPS[g].format(who=self.login))
                 btn.setStyleSheet(btn_style)
                 btn.clicked.connect(lambda checked=False, gg=g: on_send(self, self.login, gg))
                 self.gesture_buttons[g] = btn
@@ -1647,8 +1666,9 @@ class SignalCard(QFrame):
         for btn in self.gesture_buttons.values():
             btn.setEnabled(not busy)
 
-    def show_result(self, text: str) -> None:
+    def show_result(self, text: str, detail: str = "") -> None:
         self.feedback.setText(text)
+        self.feedback.setToolTip(detail)
 
 
 UP_COLOR = "#34d399"
@@ -2876,6 +2896,12 @@ class MyGeekyPanel(QWidget):
         self.signals_hint = QLabel("")
         self.signals_hint.setWordWrap(True)
         layout.addWidget(self.signals_hint)
+        self.signals_quiet = QCheckBox("🔕 Not taking signals right now")
+        self.signals_quiet.setToolTip("Others can't send you signals while this is on. Nobody is told why, "
+                                      "and anything already sent waits for you.")
+        self.signals_quiet.setChecked(self.cfg.beacon_quiet)
+        self.signals_quiet.toggled.connect(self._on_quiet_toggled)
+        layout.addWidget(self.signals_quiet)
 
         signals_container = QWidget()
         self.signals_area = QVBoxLayout(signals_container)
@@ -3751,15 +3777,23 @@ class MyGeekyPanel(QWidget):
         muted = f"color:{theme['muted']}; font-size:10.5px; background:transparent;"
         self.signals_hint.setStyleSheet(muted)
         self.signals_updated_label.setStyleSheet(muted)
+        self.signals_quiet.setStyleSheet(f"QCheckBox {{ color:{theme['muted']}; font-size:10.5px; "
+                                         "background:transparent; }")
         if not data.get("enabled"):
             self.signals_hint.setText(
-                "Send other myGeeKy users emoji signals (👋 📚 🤝 👀) and see theirs to you. Signals are public. "
+                "Send other myGeeKy users small private signals (🙏 📚 👀 🤝) and see theirs to you. "
                 "To join, run `mygeeky beacon init` in a terminal.")
             self.refresh_signals_btn.setEnabled(False)
+            self.signals_quiet.setVisible(False)
             return
         self.refresh_signals_btn.setEnabled(True)
-        self.signals_hint.setText("👋 wave · 📚 I learn from you · 🤝 let's collaborate · 👀 following your work. "
-                                  "Signals are public, and 🤝 handshake means you've both signalled.")
+        self.signals_quiet.setVisible(bool(data.get("can_send")))
+        self.signals_quiet.blockSignals(True)
+        self.signals_quiet.setChecked(bool(data.get("quiet")))
+        self.signals_quiet.blockSignals(False)
+        self.signals_hint.setText("🙏 thanks · 📚 learned from you · 👀 following your work · 🤝 open to "
+                                  "collaborating (shown only if you both choose it). Signals are private: only "
+                                  "the person you send one to can read it, and no reply is ever expected.")
         fetched = data.get("fetched_at")
         self.signals_updated_label.setText(data.get("error") or ("updated " + _time_ago(fetched) if fetched else ""))
         on_send = self._on_send_signal if data.get("can_send") else None
@@ -3772,12 +3806,21 @@ class MyGeekyPanel(QWidget):
 
         incoming = data.get("incoming") or []
         header("FOR YOU")
-        if not incoming:
-            empty = QLabel("No signals yet. Say hi to someone below.")
+        if data.get("quiet"):
+            held = data.get("held") or 0
+            empty = QLabel("You're not taking signals right now." +
+                           (f" {held} signal(s) are waiting for when you're back." if held else ""))
+            empty.setWordWrap(True)
+            empty.setStyleSheet(muted)
+            self.signals_area.addWidget(empty)
+        elif not incoming:
+            empty = QLabel("Nothing yet. Signals here are small thank-yous: no reply is ever expected.")
+            empty.setWordWrap(True)
             empty.setStyleSheet(muted)
             self.signals_area.addWidget(empty)
         for item in incoming:
-            self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader))
+            self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader,
+                                                   on_mute=self._on_mute_signals))
         people = data.get("people") or []
         header("FELLOW GEEKS ON MYGEEKY")
         if not people:
@@ -3785,6 +3828,8 @@ class MyGeekyPanel(QWidget):
             empty.setStyleSheet(muted)
             self.signals_area.addWidget(empty)
         for item in people:
+            if item.get("muted"):
+                continue
             self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader))
 
     def _on_send_signal(self, card: "SignalCard", login: str, gesture: str) -> None:
@@ -3794,10 +3839,32 @@ class MyGeekyPanel(QWidget):
         def done(result: Any) -> None:
             card.set_busy(False)
             ok = isinstance(result, dict) and result.get("ok")
-            card.show_result("sent ✓" if ok else "failed")
-            if not ok:
-                card.setToolTip((result or {}).get("error", "") if isinstance(result, dict) else "")
+            if ok:
+                card.show_result("sent privately ✓")
+            else:
+                error = (result or {}).get("error", "") if isinstance(result, dict) else ""
+                # courtesy limits explain themselves; show the first sentence, the rest on hover
+                card.show_result((error.split(". ")[0] or "Not sent")[:60], error)
         self._run_async(lambda: logic.send_signal(self.cfg, login, gesture), done)
+
+    def _on_quiet_toggled(self, quiet: bool) -> None:
+        self.signals_quiet.setEnabled(False)
+
+        def done(result: Any) -> None:
+            self.signals_quiet.setEnabled(True)
+            if not (isinstance(result, dict) and result.get("ok")):
+                self.signals_quiet.blockSignals(True)
+                self.signals_quiet.setChecked(not quiet)
+                self.signals_quiet.blockSignals(False)
+                self.signals_updated_label.setText((result or {}).get("error", "Couldn't change it")
+                                                   if isinstance(result, dict) else "Couldn't change it")
+            self._refresh_signals(force=False)
+        self._run_async(lambda: logic.set_signals_quiet(self.cfg, quiet), done)
+
+    def _on_mute_signals(self, login: str) -> None:
+        logic.mute_signals(self.cfg, login, True)
+        self.signals_updated_label.setText(f"Muted {login}. They're not told.")
+        self._refresh_signals(force=False)
 
     # ------------------------------------------------------------------ market
     def _load_news(self) -> None:

@@ -68,7 +68,9 @@
 
 🗞️ **Brings the news.** New arXiv, bioRxiv and Hacker News items about *your* topics.
 
-👋 **Says hi without words.** Emoji signals between myGeeKy users, and a 🤝 handshake when it's mutual.
+🙏 **Says thanks, privately.** Small signals between myGeeKy users (thanks, "I learned from your work",
+"I used your tool"), sealed so **only the recipient can read them**. No reply is ever expected, and 🤝
+"let's collaborate" only shows up if you *both* choose it.
 
 🧠 **Learns what you're into.** Every click, follow, star and fork tunes it, and 🔭 20% of every list stays open for new territory.
 
@@ -125,7 +127,7 @@ mygeeky contribute    # 🛠️ repos you could improve
 mygeeky market        # 📈 what's rising in your field
 mygeeky trends        # 🔬 papers and tools gaining traction
 mygeeky news          # 🗞️ news about your interests
-mygeeky beacon init   # 👋 join Signals (optional)
+mygeeky beacon init   # 🙏 join Signals (optional)
 ```
 
 ## 🔑 Two tokens, two jobs
@@ -159,7 +161,7 @@ myGeeKy reminds you a week before either one expires, and `mygeeky auth status` 
 </tr>
 <tr>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="260" alt="Activity tab"><br><b>Activity</b><br><sub>One card per person: what they're building right now</sub></td>
-<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="260" alt="Signals tab"><br><b>Signals</b><br><sub>👋 📚 🤝 👀 from fellow users, 🤝 when mutual <i>(example people)</i></sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="260" alt="Signals tab"><br><b>Signals</b><br><sub>Private 🙏 📚 👀 from fellow users; 🤝 only when you both choose it <i>(example people)</i></sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="260" alt="Model tab"><br><b>Model</b><br><sub>What myGeeKy knows about you: your interest map, what teaches it, room to explore</sub></td>
 </tr>
 </table>

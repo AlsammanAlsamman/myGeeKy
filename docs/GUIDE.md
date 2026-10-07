@@ -323,16 +323,20 @@ off with `mygeeky config set interest_learning false`, or exploration with
 
 ## Signal other myGeeKy users, without words (`mygeeky beacon`)
 
-myGeeKy users can send each other **emoji-only signals**, and myGeeKy
-never needs a server for it: everything goes through GitHub.
+myGeeKy users can send each other small **private signals**, and myGeeKy
+never needs a server for it: everything goes through GitHub. They're built to
+be **gifts, not requests**, so nobody is ever left feeling ignored:
 
-| | Signal | Means |
+| | Signal | The recipient sees |
 |---|---|---|
-| 👋 | `wave` | "I noticed you" |
-| 📚 | `learn` | "I learn from your work" |
-| 🤝 | `collab` | "I'd like to work with you" |
-| 👀 | `watching` | "I'm following your progress" |
-| 🔥 | `kudos --repo owner/name` | "this repo of yours is great" |
+| 🙏 | `thanks` | "thanked you for your work" |
+| 📚 | `learn` | "learned from your work" |
+| ⭐ | `used --repo owner/name` | "used owner/name in their work" (an informal citation) |
+| 👀 | `watching` | "is following your work" |
+| 🤝 | `collab` | **nothing, unless they choose it for you too.** Then you both see "you both want to collaborate". |
+
+Every signal they receive says **"no reply needed"**, and your own side never
+shows "no answer yet": only "sent ✓".
 
 ### Join Signals, step by step
 
@@ -342,7 +346,7 @@ installer): it opens each page for you, waits while you do it, and checks that
 each step worked before going on.
 
 **Step 1: create your public beacon repo.**
-1. Open [github.com/new?name=mygeeky-beacon](https://github.com/new?name=mygeeky-beacon&visibility=public&description=My+myGeeKy+beacon+(non-verbal+signals)).
+1. Open [github.com/new?name=mygeeky-beacon](https://github.com/new?name=mygeeky-beacon&visibility=public&description=My+myGeeKy+beacon+(private+signals)).
    The name `mygeeky-beacon` and **Public** are filled in.
 2. Check that the owner is you, then click **Create repository**. Leave it
    empty; myGeeKy writes the files. (If the GitHub CLI `gh` is installed and
@@ -388,32 +392,48 @@ optional: myGeeKy finds beacons by their name as well.
 mygeeky beacon init                  # one-time setup, as above
 mygeeky beacon check                 # what's missing, if others can't see you
 mygeeky beacon people                # fellow myGeeKy users, those sharing your interests first
-mygeeky beacon send alice wave       # or: learn | collab | watching | kudos --repo alice/tool
-mygeeky beacon inbox                 # signals sent to you -- 🤝 handshake = you both signalled
+mygeeky beacon send alice thanks     # or: learn | watching | collab | used --repo alice/tool
+mygeeky beacon inbox                 # signals sent to you (no reply is ever expected)
 mygeeky beacon status open-to-collab # or learning, heads-down, seeking-reviewers, mentoring, none
-mygeeky beacon sent | unsend alice | block troll | unblock troll
+mygeeky beacon quiet on              # not taking signals right now (off to undo)
+mygeeky beacon sent | unsend alice | mute alice | block troll
 ```
 
 <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="260" align="right" alt="Signals tab (example data)">
 
 In the panel, the **Signals** tab shows what people sent you and who else
-is around, with one-click 👋 📚 🤝 👀 buttons. Incoming signals also lead
-the Live tab's rotation.
+is around, with one-click 🙏 📚 👀 🤝 buttons (hover one to see exactly what
+it does), a **🔕 Not taking signals right now** switch, and 🔇 to mute someone.
+Incoming signals also lead the Live tab's rotation.
 
 How it works: each user's beacon is a public repo named `mygeeky-beacon`
-(ideally also tagged with that topic), holding one `beacon.json` file. It lists the signals you
-sent, your status, and a few interest tags taken from your `topics`,
-`keywords` and `languages` (turn those off with `beacon_share_interests false`).
-myGeeKy finds other beacons with a normal repo search and reads the ones that
-name you. Someone who signalled you also gets a boost in your
-suggestions.
+(ideally also tagged with that topic), holding one `beacon.json` file: your
+status, a few interest tags from your `topics`, `keywords` and `languages`
+(turn those off with `beacon_share_interests false`), one public key per
+computer you use, and your **sealed** signals. myGeeKy finds other beacons with
+a normal repo search and tries to open every sealed signal with your key.
+Someone who signalled you also gets a boost in your suggestions.
 
-- **It's public.** Anyone can read who you signalled, and when.
-- **There's no text, so there's nothing to moderate.** Signals and statuses come from fixed lists.
-  Everything read from other people's beacons is validated and shown as plain
-  text. `block` hides a person for good.
-- **Signals expire** after `beacon_gesture_ttl_days` (90). You can send
-  `beacon_daily_limit` (20) per day.
+- **Signals are private.** Each one is encrypted to the recipient's key
+  (X25519 + ChaCha20-Poly1305, padded so every signal looks the same size).
+  Nobody else can tell who it's for or what it says, so nobody can see who
+  didn't answer. Your private key never leaves your computer's keyring. The
+  sender's name is sealed inside too, so nobody can pass off someone else's signal.
+- **🤝 is mutual opt-in.** The other person's panel only shows it once they've
+  chosen it for you too. (The app hides it; a determined person running modified
+  code could find out early, but nobody else ever can.)
+- **Courtesy, built in.** The same signal to the same person once a month
+  (`beacon_repeat_days`, 30), at most `beacon_weekly_new_people` (5) new people
+  a week and `beacon_daily_limit` (10) signals a day. Someone who's *quiet*
+  can't be signalled at all; nobody is told why.
+- **There's no text, so there's nothing to moderate.** Signals and statuses come
+  from fixed lists. Everything read from other people's beacons is validated and
+  shown as plain text. `mute` hides someone quietly; `block` also stops yours to them.
+- **Signals expire** after `beacon_gesture_ttl_days` (90), and `unsend` takes one
+  back from your beacon at once.
+- **Older versions:** people still on myGeeKy 0.7.5 or older can't receive
+  private signals until they update (the panel says so). Their old public
+  signals still show up for you, in the new wording.
 - **A separate, single-repo token.** `init` asks for a fine-grained token
   with access to *only* `<you>/mygeeky-beacon` and only **Contents: Read and
   write**. It's stored in your OS keyring under its own entry. Your main token
