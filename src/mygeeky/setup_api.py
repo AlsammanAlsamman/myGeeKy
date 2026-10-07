@@ -64,7 +64,7 @@ def status(req: dict[str, Any]) -> dict[str, Any]:
         "token_source": auth.token_source(user) if user else "none",
         "gh": shutil.which("gh") is not None,
         "sync_repo": cfg.sync_repo,
-        "git": shutil.which("git") is not None,
+        "git": sync.git_exe() is not None,
         "sync_initialized": sync.is_initialized(),
         "beacon_enabled": cfg.beacon_enabled,
         "beacon_token": bool(user and auth.get_beacon_token(user)),

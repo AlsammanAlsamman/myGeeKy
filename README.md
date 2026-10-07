@@ -167,8 +167,12 @@ as easily as you can.
    (under *Assets* on the latest release).
 2. Open it and click **Next → Next → Finish**.
 
-It does everything for you: it sets up Python if you don't have it, installs
-myGeeKy, asks who you are, stores your GitHub token safely, connects your
+It does everything for you, and **you don't need anything installed first**:
+- **Python:** set up if you don't have it (just for you, no admin rights).
+- **myGeeKy** and its GUI library.
+- **Git**, only if you choose sync.
+
+It also asks who you are, stores your GitHub token safely, connects your
 private sync repo, walks you through Signals, and adds myGeeKy to the Start
 menu. Uninstall it any time from *Settings → Apps*.
 
@@ -449,8 +453,8 @@ mygeeky profile show        # what myGeeKy knows about you (no network)
 
 Your myGeeKy data can live in a **private** GitHub repo, so the model keeps
 learning no matter which machine you run it on. It's optional, and it needs
-**Git** ([Git for Windows](https://git-scm.com/download/win) on Windows); the
-installer skips it when Git isn't there.
+**Git**. On Windows the installer installs Git for you when you tick sync;
+otherwise get [Git for Windows](https://git-scm.com/download/win).
 
 ```bash
 mygeeky sync init                      # creates <you>/mygeeky-data (private) and pushes

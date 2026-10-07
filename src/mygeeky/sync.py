@@ -18,6 +18,7 @@ conflicting.
 
 from __future__ import annotations
 
+import os
 import platform
 import shutil
 import subprocess
@@ -68,8 +69,21 @@ GIT_MISSING = ("Sync needs Git, which isn't installed on this computer. Install 
                "try again. Everything else in myGeeKy works without it.")
 
 
+def git_exe() -> str | None:
+    """git on PATH, or a Git for Windows installed a moment ago (per-user or
+    machine-wide) that this process's PATH doesn't know about yet."""
+    found = shutil.which("git")
+    if found:
+        return found
+    for base in (os.environ.get("LOCALAPPDATA", ""), os.environ.get("ProgramFiles", r"C:\Program Files")):
+        candidate = Path(base) / ("Programs/Git/cmd/git.exe" if "Local" in base else "Git/cmd/git.exe")
+        if base and candidate.exists():
+            return str(candidate)
+    return None
+
+
 def _require_git() -> None:
-    if shutil.which("git") is None:
+    if git_exe() is None:
         raise SyncError(GIT_MISSING)
 
 
@@ -78,7 +92,7 @@ def _has_gh() -> bool:
 
 
 def _git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    cmd = ["git"]
+    cmd = [git_exe() or "git"]
     if _has_gh():
         # let git borrow gh's login for github.com without touching the user's git config
         cmd += ["-c", "credential.https://github.com.helper=", "-c",
@@ -117,9 +131,10 @@ def _repo_is_private(repo: str) -> bool | None:
 
 def _create_private_repo(repo: str) -> None:
     if not _has_gh():
+        name = repo.split("/", 1)[-1]
         raise SyncError(
-            f"Repo {repo} doesn't exist and the GitHub CLI (`gh`) isn't installed to create it.\n"
-            f"Create it yourself as a PRIVATE repo at https://github.com/new, then re-run this command."
+            f"The private repo {repo} doesn't exist yet. Create it at "
+            f"https://github.com/new?name={name}&visibility=private (keep it Private and empty), then try again."
         )
     r = subprocess.run(["gh", "repo", "create", repo, "--private",
                         "--description", "Private myGeeKy data (synced by mygeeky)"],

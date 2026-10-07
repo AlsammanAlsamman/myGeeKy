@@ -93,3 +93,35 @@ def test_api_explains_a_python_without_mygeeky(monkeypatch, tmp_path):
         cmd, 1, "", "Traceback...\nModuleNotFoundError: No module named 'mygeeky'"))
     result = sw.api(sys.executable, "status")
     assert not result["ok"] and "isn't installed" in result["error"]
+
+
+def test_without_winget_git_comes_from_git_for_windows_releases(monkeypatch, tmp_path):
+    import io
+    import json as _json
+    monkeypatch.setattr(sw, "SETUP_LOG", tmp_path / "setup.log")
+    ran = []
+
+    def fake_run(cmd, stdin=None, timeout=600):
+        ran.append(cmd)
+        if cmd[0] == "winget":
+            raise sw.SetupError("Couldn't start winget (Windows' app installer): it isn't installed on this PC.")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(sw, "_run", fake_run)
+    release = {"assets": [{"name": "PortableGit-2.56.0.2-64-bit.7z.exe", "browser_download_url": "x"},
+                          {"name": "Git-2.56.0.2-64-bit.exe", "browser_download_url": "https://github.com/g.exe"}]}
+
+    class Resp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=30: Resp(_json.dumps(release).encode()))
+    got = []
+    monkeypatch.setattr("urllib.request.urlretrieve", lambda url, target: got.append(url))
+    monkeypatch.setattr(sw, "find_git", lambda: r"C:\Users\x\AppData\Local\Programs\Git\cmd\git.exe")
+    said = []
+    assert sw.install_git(said.append).endswith("git.exe")
+    assert got == ["https://github.com/g.exe"]                      # the full installer, not PortableGit
+    assert ran[-1][0].endswith("Git-2.56.0.2-64-bit.exe") and "/CURRENTUSER" in ran[-1]
+    assert any("winget isn't on this PC" in s for s in said)

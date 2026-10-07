@@ -61,7 +61,7 @@ def test_wizard_helpers():
 
 def test_sync_without_git_says_so(monkeypatch):
     from mygeeky import sync
-    monkeypatch.setattr(sync.shutil, "which", lambda name: None)
+    monkeypatch.setattr(sync, "git_exe", lambda: None)
     with pytest.raises(sync.SyncError, match="git-scm.com"):
         sync.init("me/mygeeky-data")
     with pytest.raises(sync.SyncError, match="needs Git"):
@@ -85,7 +85,7 @@ def test_setup_api_relays_a_clear_error_and_details(monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["error"] == "Sync needs Git."   # our own message, unchanged
 
 
-def test_installer_sync_page_is_off_and_explained_without_git():
+def test_installer_sync_page_installs_git_when_you_choose_sync(monkeypatch):
     pytest.importorskip("PySide6")
     import os
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -97,8 +97,19 @@ def test_installer_sync_page_is_off_and_explained_without_git():
     page = w.page(w.pageIds()[4])
     page.initializePage()
     assert not page.enable.isChecked() and "Git" in page.note.text()
+    assert "installs Git for you" in page.note.text()
     page.enable.setChecked(True)
-    assert "Untick" in page.job()(None)["error"]
+    assert "Installing Git" in page.busy_text()
+    # ticked without Git: setup installs Git first, then runs the sync step with it on PATH
+    calls = []
+    monkeypatch.setattr(sw, "find_git", lambda: None)
+    monkeypatch.setattr(sw, "install_git", lambda say: calls.append("install") or r"C:\Git\cmd\git.exe")
+    monkeypatch.setattr(sw, "api", lambda python, action, payload=None, timeout=600:
+                        calls.append(action) or {"ok": True, "message": "synced"})
+    assert page.job()(None)["ok"] and calls == ["install", "sync_init"]
+    assert r"C:\Git\cmd" in os.environ["PATH"]
+    monkeypatch.setattr(sw, "install_git", lambda say: None)
+    assert "couldn't be installed" in page.job()(None)["error"]
     w.state.update(git=True, gh=True)
     page.initializePage()
     assert page.enable.isChecked()

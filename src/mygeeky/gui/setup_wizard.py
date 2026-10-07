@@ -243,6 +243,62 @@ def install_python(say: Callable[[str], Any]) -> str | None:
     return find_python()
 
 
+GIT_RELEASES_API = "https://api.github.com/repos/git-for-windows/git/releases/latest"
+
+
+def find_git() -> str | None:
+    import shutil
+    found = shutil.which("git")
+    if found:
+        return found
+    for base, rel in ((os.environ.get("LOCALAPPDATA", ""), "Programs/Git/cmd/git.exe"),
+                      (os.environ.get("ProgramFiles", r"C:\Program Files"), "Git/cmd/git.exe")):
+        if base and (Path(base) / rel).exists():
+            return str(Path(base) / rel)
+    return None
+
+
+def put_on_path(exe: str) -> None:
+    """So the steps that follow (child processes) find a program installed a moment ago."""
+    folder = str(Path(exe).parent)
+    if folder not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
+
+
+def install_git(say: Callable[[str], Any]) -> str | None:
+    """Git for Windows just for this user (no admin): winget when this PC has
+    it, otherwise the official installer from Git for Windows' GitHub releases."""
+    say("Installing Git (needed for sync), just for you...")
+    try:
+        r = _run(["winget", "install", "-e", "--id", "Git.Git", "--scope", "user", "--silent",
+                  "--accept-package-agreements", "--accept-source-agreements"], timeout=1200)
+        if r.returncode == 0 and find_git():
+            return find_git()
+        say("winget couldn't install Git, so downloading it from Git for Windows' releases instead...")
+    except SetupError:
+        say("winget isn't on this PC, so downloading Git from Git for Windows' releases instead...")
+    import re
+    import tempfile
+    import urllib.request
+    try:
+        with urllib.request.urlopen(GIT_RELEASES_API, timeout=30) as resp:
+            release = json.loads(resp.read().decode("utf-8"))
+        asset = next(a for a in release.get("assets", [])
+                     if re.fullmatch(r"Git-[\d.]+-64-bit\.exe", a.get("name", "")))
+        target = Path(tempfile.gettempdir()) / asset["name"]
+        log(f"download {asset['browser_download_url']}")
+        urllib.request.urlretrieve(asset["browser_download_url"], target)
+    except (OSError, StopIteration, ValueError, KeyError) as exc:
+        raise SetupError(f"Couldn't download Git ({exc}). Install it yourself from "
+                         "https://git-scm.com/download/win, then run setup again.") from exc
+    say("Installing Git (a minute or two)...")
+    r = _run([str(target), "/VERYSILENT", "/NORESTART", "/NOCANCEL", "/SP-", "/SUPPRESSMSGBOXES",
+              "/CURRENTUSER"], timeout=1200)
+    if r.returncode != 0:
+        raise SetupError(f"The Git installer stopped with code {r.returncode}. Details are in {SETUP_LOG}.")
+    return find_git()
+
+
 def pythonw_for(python: str) -> str:
     w = Path(python).with_name("pythonw.exe")
     return str(w) if w.exists() else python
@@ -458,6 +514,9 @@ class Page(QWizardPage):
     def on_result(self, result: dict[str, Any]) -> bool:
         return bool(result.get("ok"))
 
+    def busy_text(self) -> str:
+        return "Working…"
+
     def initializePage(self) -> None:  # noqa: N802 -- Qt's own naming convention
         self._passed = False
 
@@ -467,7 +526,7 @@ class Page(QWizardPage):
         job = self.job()
         if job is None:
             return True
-        self.say("Working…")
+        self.say(self.busy_text())
         self.w.set_busy(True)
         self._worker = Worker(job)
         self._worker.done.connect(self._done)
@@ -498,9 +557,9 @@ class WelcomePage(Page):
             icon.setPixmap(QPixmap(str(ASSETS / "icon_128.png")))
         row.addWidget(icon)
         row.addWidget(_label("This wizard will:\n"
-                             "  •  install or update myGeeKy\n"
+                             "  •  install or update myGeeKy (and Python, if you don't have it)\n"
                              "  •  connect your GitHub account\n"
-                             "  •  optionally keep your data in a private GitHub repo\n"
+                             "  •  optionally keep your data in a private GitHub repo (and install Git for it)\n"
                              "  •  optionally turn on Signals (👋 📚 🤝 👀)\n"
                              "  •  add myGeeKy to your Start menu\n\n"
                              "myGeeKy only ever suggests. It never follows anyone for you."), 1)
@@ -754,10 +813,9 @@ class SyncPage(Page):
         if already:
             self.note.setText(f"✓ Already syncing with {s['sync_repo']}. Next re-connects and pulls the latest.")
         elif not s.get("git"):
-            self.note.setText("<b>Optional, and skipped for now:</b> sync needs <b>Git</b>, which isn't on this PC. "
-                              "Everything else works without it. To use it later, install "
-                              f"<a {LINK} href='https://git-scm.com/download/win'>Git for Windows ↗</a> "
-                              "and run <code>mygeeky sync init</code>.")
+            self.note.setText("<b>Optional.</b> Sync needs <b>Git</b>, which isn't on this PC yet. Tick the box and "
+                              "setup <b>installs Git for you</b> (just for you, no admin, a minute or two), then "
+                              "sets up sync. Everything else works without it.")
         elif not s.get("gh"):
             self.note.setText("Creating a new repo needs the GitHub CLI (<code>gh</code>, from cli.github.com, "
                               "then <code>gh auth login</code>). An existing private repo works with your usual "
@@ -768,13 +826,24 @@ class SyncPage(Page):
     def job(self):
         if not self.enable.isChecked():
             return None
-        if not self.w.state.get("git"):
-            return lambda wk: {"ok": False, "error": "Sync needs Git, which isn't installed on this PC. Untick "
-                                                     "this to skip it (everything else works without it), or "
-                                                     "install Git from git-scm.com and run setup again."}
         repo = self.repo.text().strip()
         python = self.w.python
-        return lambda wk: api(python, "sync_init", {"repo": repo}, timeout=900)
+        needs_git = not self.w.state.get("git")
+
+        def run(wk):
+            if needs_git:
+                git = find_git() or install_git(lambda m: log(m))
+                if not git:
+                    return {"ok": False, "error": "Git couldn't be installed. Untick this to skip sync, or install "
+                                                  "Git from https://git-scm.com/download/win and run setup again."}
+                put_on_path(git)
+            return api(python, "sync_init", {"repo": repo}, timeout=900)
+        return run
+
+    def busy_text(self) -> str:
+        if not self.w.state.get("git"):
+            return "Installing Git, then setting up sync (a minute or two)…"
+        return "Setting up sync…"
 
     def on_result(self, result):
         if result.get("ok"):
