@@ -250,7 +250,7 @@ def record_click(cfg: MyGeekyConfig, kind: str, item: dict[str, Any]) -> None:
             interests.record("repo", f"{name.replace('/', ' ')} {item.get('description') or ''} "
                                      f"{item.get('language') or ''}", topics=item.get("topics") or [],
                              source=name, cfg=cfg)
-        elif kind == "news":
+        elif kind in ("news", "paper"):
             interests.record("news", item.get("title", ""), topics=item.get("match") or [],
                              source=item.get("id", ""), cfg=cfg)
     except Exception:
@@ -274,7 +274,37 @@ def refresh_suggestions(cfg: MyGeekyConfig) -> dict[str, Any]:
 
 
 def get_contributions(cfg: MyGeekyConfig) -> list[dict[str, Any]]:
-    return last_contributions(cfg.contribute_max_returned)
+    from .. import papers
+    rows = last_contributions(cfg.contribute_max_returned)
+    return [{**r, "paper": r.get("paper") or papers.cached_paper(r.get("full_name", ""))} for r in rows]
+
+
+def get_trends(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """The saved research trends -- local only, no network."""
+    from .. import papers
+    return papers.load_trends()
+
+
+def trends_due(cfg: MyGeekyConfig) -> bool:
+    from .. import papers
+    return bool(cfg.github_username) and papers.trends_due(cfg, papers.load_trends())
+
+
+def refresh_trends(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    from .. import papers
+    try:
+        return papers.refresh_trends(cfg, force=force)
+    except Exception as exc:   # surfaced in the view, not a crash
+        from ..errors import describe
+        return {**papers.load_trends(), "error": f"Couldn't update the research trends: {describe(exc)}"}
+
+
+def repo_people(cfg: MyGeekyConfig, repo: str) -> list[dict[str, Any]]:
+    from .. import papers
+    try:
+        return papers.repo_people(_build_client(cfg), repo)
+    except Exception:
+        return []
 
 
 def refresh_contributions(cfg: MyGeekyConfig) -> list[dict[str, Any]] | dict[str, Any]:
@@ -414,7 +444,9 @@ def get_market(cfg: MyGeekyConfig) -> dict[str, Any]:
     from .. import producthunt
     from ..market import compute_board, load_state
     state = load_state()
-    return {"rows": compute_board(state), "updated_at": state.get("updated_at"),
+    from .. import papers
+    rows = [{**r, "paper": papers.cached_paper(r.get("repo", ""))} for r in compute_board(state)]
+    return {"rows": rows, "updated_at": state.get("updated_at"),
             "producthunt": producthunt.load_state().get("posts") or [],
             "producthunt_token": bool(cfg.github_username and auth.get_producthunt_token(cfg.github_username))}
 
@@ -559,7 +591,8 @@ def open_profile(url: str) -> bool:
 
 
 LINK_PREFIXES = ("https://github.com/", "https://www.producthunt.com/posts/", "https://arxiv.org/abs/",
-                 "https://www.biorxiv.org/content/", "https://news.ycombinator.com/item?id=")
+                 "https://www.biorxiv.org/content/", "https://news.ycombinator.com/item?id=",
+                 "https://doi.org/", "https://orcid.org/", "https://openalex.org/")
 
 
 def open_link(url: str) -> bool:

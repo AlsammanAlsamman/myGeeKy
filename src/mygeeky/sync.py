@@ -39,6 +39,8 @@ beacons_cache.json
 update_check.json
 token_check.json
 news.json
+trends.json
+papers_cache.json
 interest_seen.json
 *.token
 *.lock

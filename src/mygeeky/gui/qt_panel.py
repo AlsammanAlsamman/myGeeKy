@@ -784,6 +784,199 @@ class NewsCard(QFrame):
         self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
 
 
+PUBLISHED_GREEN = "#22c55e"
+
+
+def published_badge(paper: dict[str, Any], on_open: Callable[[str], bool]) -> QPushButton:
+    """The green [P]: this repo has a published paper. Click to open it."""
+    badge = QPushButton("P")
+    badge.setFixedSize(18, 18)
+    badge.setCursor(Qt.PointingHandCursor)
+    cited = paper.get("cited")
+    title = paper.get("title") or paper.get("doi") or "a paper"
+    year = (paper.get("date") or "")[:4]
+    badge.setToolTip(f"Published: {title}" + (f" ({year})" if year else "")
+                     + (f" · cited {cited} times" if cited else "") + "\nClick to open the paper.")
+    badge.setStyleSheet(f"QPushButton {{ background:{PUBLISHED_GREEN}; color:white; border:none; border-radius:4px; "
+                        f"font-size:10px; font-weight:800; padding:0; }}"
+                        f"QPushButton:hover {{ background:#16a34a; }}")
+    url = paper.get("url", "")
+    badge.clicked.connect(lambda: on_open(url))
+    return badge
+
+
+class ResearchCard(QFrame):
+    """A paper: why it's trending, title, venue and citations, lead authors,
+    and its GitHub repo. Clicking expands it: open the paper or the repo, and
+    see the people working on the repo (loaded on first expand)."""
+
+    def __init__(self, paper: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool],
+                 on_open_repo: Callable[[str], bool], on_people: Callable[["ResearchCard", str], None] | None,
+                 loader: "AvatarLoader | None" = None, kind: str = "rising") -> None:
+        super().__init__()
+        self.setObjectName("researchCard")
+        self.paper, self.theme, self.loader = paper, theme, loader
+        self._on_people, self._people_loaded = on_people, False
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(10, 8, 10, 8)
+        outer.setSpacing(3)
+
+        self.header = QWidget()
+        self.header.setCursor(Qt.PointingHandCursor)
+        head = QVBoxLayout(self.header)
+        head.setContentsMargins(0, 0, 0, 0)
+        head.setSpacing(3)
+        top = QHBoxLayout()
+        top.setSpacing(6)
+        v = paper.get("velocity", 0) or 0
+        per_month = round(v) if v >= 10 else round(v, 1)
+        trend = QLabel(f"🔥 {per_month}/month" if kind == "rising"
+                       else f"🛠️ {paper.get('cited', 0)} citations")
+        trend.setToolTip("Citations per month since it was published" if kind == "rising" else
+                         "A recent tool in your field, with a paper and its code on GitHub")
+        trend.setStyleSheet(f"color:{theme['text']}; background:{theme['section_btn']}; border-radius:7px; "
+                            f"padding:1px 6px; font-size:9.5px;")
+        trend.setFixedHeight(16)
+        top.addWidget(trend)
+        if paper.get("repos"):
+            top.addWidget(published_badge(paper, on_open))
+        if paper.get("explore"):
+            top.addWidget(_explore_chip(theme))
+        top.addStretch(1)
+        year = QLabel((paper.get("date") or "")[:4])
+        year.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        top.addWidget(year)
+        head.addLayout(top)
+        title = QLabel(paper.get("title", ""))
+        title.setTextFormat(Qt.PlainText)
+        title.setWordWrap(True)
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        title.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; font-weight:600; background:transparent;")
+        head.addWidget(title)
+        authors = paper.get("authors") or []
+        who = authors[0]["name"] if authors else ""
+        if len(authors) > 1:
+            who += f" … {authors[-1]['name']}"
+        meta_bits = [b for b in (paper.get("venue"), f"cited {paper.get('cited', 0)}", who) if b]
+        if paper.get("repos"):
+            meta_bits.append("code: " + paper["repos"][0])
+        meta = QLabel(" · ".join(meta_bits))
+        meta.setTextFormat(Qt.PlainText)
+        meta.setWordWrap(True)
+        meta.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        meta.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        head.addWidget(meta)
+        outer.addWidget(self.header)
+
+        self.body = QWidget()
+        body = QVBoxLayout(self.body)
+        body.setContentsMargins(0, 4, 0, 0)
+        body.setSpacing(4)
+        buttons = QHBoxLayout()
+        btn_style = (f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                     f"border-radius:7px; padding:4px 9px; font-size:10.5px; }}"
+                     f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+        paper_btn = QPushButton("Paper ↗")
+        paper_btn.setStyleSheet(btn_style)
+        paper_btn.setCursor(Qt.PointingHandCursor)
+        url = paper.get("url", "")
+        paper_btn.clicked.connect(lambda: on_open(url))
+        buttons.addWidget(paper_btn)
+        for repo in (paper.get("repos") or [])[:2]:
+            b = QPushButton(f"{repo} ↗")
+            b.setStyleSheet(btn_style)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked=False, r=repo: on_open_repo(f"https://github.com/{r}"))
+            buttons.addWidget(b)
+        buttons.addStretch(1)
+        body.addLayout(buttons)
+        self.people_box = QVBoxLayout()
+        self.people_box.setSpacing(3)
+        body.addLayout(self.people_box)
+        outer.addWidget(self.body)
+        self.body.setVisible(False)
+
+        self.setStyleSheet(f"QFrame#researchCard {{ background:{theme['card_bg']}; border-radius:10px; }}")
+        self.setToolTip(paper.get("abstract", ""))
+        self.header.mousePressEvent = lambda ev: self.toggle()  # noqa: ARG005
+
+    def toggle(self) -> None:
+        # isHidden(), not isVisible(): the latter is False whenever the window itself isn't shown
+        expanded = self.body.isHidden()
+        self.body.setVisible(expanded)
+        repos = self.paper.get("repos") or []
+        if expanded and repos and self._on_people and not self._people_loaded:
+            self._people_loaded = True
+            note = QLabel("Finding the people working on it…")
+            note.setStyleSheet(f"color:{self.theme['muted']}; font-size:10px; background:transparent;")
+            self.people_box.addWidget(note)
+            self._on_people(self, repos[0])
+
+    def set_people(self, people: list[dict[str, Any]], on_open: Callable[[str], bool]) -> None:
+        _clear_layout(self.people_box)
+        if not people:
+            note = QLabel("No one found on GitHub for this repo.")
+            note.setStyleSheet(f"color:{self.theme['muted']}; font-size:10px; background:transparent;")
+            self.people_box.addWidget(note)
+            return
+        head = QLabel("PEOPLE WORKING ON IT")
+        head.setStyleSheet(f"color:{self.theme['muted']}; font-size:9.5px; font-weight:700; background:transparent;")
+        self.people_box.addWidget(head)
+        for person in people:
+            row = QFrame()
+            row.setObjectName("personRow")
+            lay = QHBoxLayout(row)
+            lay.setContentsMargins(2, 2, 2, 2)
+            lay.setSpacing(6)
+            lay.addWidget(_avatar_widget(person["login"], person.get("avatar", ""), 20, self.loader))
+            name = QLabel(person["login"])
+            name.setTextFormat(Qt.PlainText)
+            name.setStyleSheet(f"color:{self.theme['text']}; font-size:10.5px; font-weight:600; background:transparent;")
+            lay.addWidget(name)
+            role = QLabel(person.get("role", ""))
+            role.setTextFormat(Qt.PlainText)
+            role.setStyleSheet(f"color:{self.theme['muted']}; font-size:10px; background:transparent;")
+            lay.addWidget(role)
+            lay.addStretch(1)
+            row.setCursor(Qt.PointingHandCursor)
+            row.setToolTip(f"Open {person['login']}'s GitHub profile")
+            row.setStyleSheet(f"QFrame#personRow {{ border-radius:6px; }}"
+                              f"QFrame#personRow:hover {{ background:{self.theme['btn_bg']}; }}")
+            login = person["login"]
+            row.mousePressEvent = lambda ev, u=login: on_open(f"https://github.com/{u}")  # noqa: ARG005
+            self.people_box.addWidget(row)
+
+
+class ResearcherRow(QFrame):
+    """Someone who keeps leading the trending papers; opens their ORCID or OpenAlex page."""
+
+    def __init__(self, person: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+        super().__init__()
+        self.setObjectName("researcherRow")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(8)
+        lay.addWidget(_avatar_label(person.get("name", "?"), 26))
+        box = QVBoxLayout()
+        box.setSpacing(1)
+        name = QLabel(person.get("name", ""))
+        name.setTextFormat(Qt.PlainText)
+        name.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; font-weight:600; background:transparent;")
+        box.addWidget(name)
+        n = person.get("papers", 0)
+        stats = QLabel(f"{n} trending paper{'s' if n != 1 else ''} · {person.get('citations', 0)} citations")
+        stats.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        box.addWidget(stats)
+        lay.addLayout(box, 1)
+        self.setStyleSheet(f"QFrame#researcherRow {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"QFrame#researcherRow:hover {{ background:{theme['btn_bg']}; }}")
+        url = person.get("url", "")
+        if url:
+            self.setCursor(Qt.PointingHandCursor)
+            self.setToolTip("Open their ORCID / OpenAlex profile")
+            self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
 class SuggestionCard(QFrame):
     """Clicking anywhere on the card opens the profile; the panel then drops
     the person from the suggestions (see MyGeekyPanel._on_suggestion_clicked)."""
@@ -1149,10 +1342,15 @@ class MarketRow(QFrame):
         body = QVBoxLayout()
         body.setSpacing(1)
         title = QLabel(f"<b>{name}</b> <span style='color:{theme['muted']}'>{owner}</span>")
+        title_line = QHBoxLayout()
+        title_line.setSpacing(5)
         title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         title.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
         title.setToolTip(row.get("description", ""))
-        body.addWidget(title)
+        title_line.addWidget(title, 1)
+        if row.get("paper"):
+            title_line.addWidget(published_badge(row["paper"], on_open))
+        body.addLayout(title_line)
 
         bits = [f"★ {_fmt_count(row.get('stars'))}"]
         stars_week = row.get("stars_week")
@@ -1283,6 +1481,8 @@ class RepoCard(QFrame):
         score_label = QLabel(f"{score:.2f}" if isinstance(score, (int, float)) else "")
         score_label.setStyleSheet(f"color:{theme['muted']}; font-size:12px; background:transparent;")
         title_row.addWidget(name_label, 1)
+        if item.get("paper"):
+            title_row.addWidget(published_badge(item["paper"], on_open))
         if item.get("explore"):
             title_row.addWidget(_explore_chip(theme))
         title_row.addWidget(score_label)
@@ -1805,6 +2005,8 @@ class MyGeekyPanel(QWidget):
         self._refresh_activity(force=False)
         self._load_model_history()
         self._load_market()
+        self._load_research()
+        self._style_market_switch()
         self._load_news()
         self._refresh_signals(force=False)
         self.ticker.start(int(self.cfg.gui_live_rotate_seconds * 1000))
@@ -2059,7 +2261,78 @@ class MyGeekyPanel(QWidget):
         page.setAutoFillBackground(False)
         return scroll
 
-    def _build_market_tab(self) -> QScrollArea:
+    def _build_market_tab(self) -> QWidget:
+        """Your field's pulse, two ways: repos ranked by momentum, and research
+        trends (rising papers, tools with papers, people behind them)."""
+        container = QWidget()
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(0, 4, 0, 0)
+        outer.setSpacing(6)
+        switch = QHBoxLayout()
+        switch.setSpacing(4)
+        self.market_mode_buttons: dict[str, QPushButton] = {}
+        for mode, label in (("repos", "Repos"), ("research", "Research")):
+            b = QPushButton(label)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked=False, m=mode: self._set_market_mode(m))
+            self.market_mode_buttons[mode] = b
+            switch.addWidget(b)
+        switch.addStretch(1)
+        outer.addLayout(switch)
+        self.market_stack = QStackedWidget()
+        self.market_stack.addWidget(self._build_market_repos())
+        self.market_stack.addWidget(self._build_research_view())
+        outer.addWidget(self.market_stack, 1)
+        self._market_mode = "repos"
+        return container
+
+    def _set_market_mode(self, mode: str) -> None:
+        self._market_mode = mode
+        self.market_stack.setCurrentIndex(0 if mode == "repos" else 1)
+        self._style_market_switch()
+        if mode == "research" and logic.trends_due(self.cfg):
+            self._refresh_research(force=False)
+
+    def _style_market_switch(self) -> None:
+        theme = THEMES[self._theme_name()]
+        for mode, b in self.market_mode_buttons.items():
+            active = mode == getattr(self, "_market_mode", "repos")
+            b.setStyleSheet(f"QPushButton {{ background:{theme['tab_active'] if active else theme['card_bg']}; "
+                            f"color:{theme['text']}; border:none; border-radius:8px; padding:4px 12px; "
+                            f"font-size:11px; font-weight:{'700' if active else '400'}; }}")
+
+    def _build_research_view(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 4, 0)
+        actions_row = QHBoxLayout()
+        self.research_updated_label = QLabel("")
+        self.refresh_research_btn = QPushButton("Refresh")
+        self.refresh_research_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_research_btn.clicked.connect(lambda: self._refresh_research(force=True))
+        actions_row.addWidget(self.research_updated_label, 1)
+        actions_row.addWidget(self.refresh_research_btn)
+        layout.addLayout(actions_row)
+        self.research_hint = QLabel("")
+        self.research_hint.setWordWrap(True)
+        layout.addWidget(self.research_hint)
+        container = QWidget()
+        self.research_area = QVBoxLayout(container)
+        self.research_area.setContentsMargins(0, 0, 0, 0)
+        self.research_area.setSpacing(6)
+        layout.addWidget(container)
+        layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        return scroll
+
+    def _build_market_repos(self) -> QScrollArea:
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 4, 4, 0)
@@ -2546,7 +2819,7 @@ class MyGeekyPanel(QWidget):
                 f"QPushButton {{ background:{SWATCH_GRADIENTS[name]}; border-radius:7px; border:{border}; }}"
             )
         for btn in (self.refresh_sugg_btn, self.refresh_repos_btn, self.refresh_market_btn, self.refresh_act_btn,
-                    self.refresh_signals_btn, self.refresh_news_btn):
+                    self.refresh_signals_btn, self.refresh_news_btn, self.refresh_research_btn):
             btn.setStyleSheet(
                 f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
                 f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
@@ -2924,6 +3197,74 @@ class MyGeekyPanel(QWidget):
     def _maybe_refresh_market(self) -> None:
         if logic.market_refresh_due(self.cfg):
             self._refresh_market(force=False)
+        if logic.trends_due(self.cfg):
+            self._refresh_research(force=False)
+
+    # ------------------------------------------------------------------ research trends
+    def _load_research(self) -> None:
+        self._render_research(logic.get_trends(self.cfg))
+
+    def _refresh_research(self, force: bool) -> None:
+        if getattr(self, "_research_running", False):
+            return
+        self._research_running = True
+        self.refresh_research_btn.setEnabled(False)
+        self.research_updated_label.setText("updating\u2026 (about a minute)")
+        self._run_async(lambda: logic.refresh_trends(self.cfg, force=force), self._on_research_ready)
+
+    def _on_research_ready(self, data: Any) -> None:
+        self._research_running = False
+        self.refresh_research_btn.setEnabled(True)
+        self._render_research(data if isinstance(data, dict) else {})
+
+    def _render_research(self, data: dict[str, Any]) -> None:
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.research_area)
+        topics = ", ".join(t["name"] for t in (data.get("topics") or [])[:4])
+        self.research_hint.setText(
+            "What's moving in research in your field, from OpenAlex: papers gaining citations fastest, new tools "
+            "with their code on GitHub, and who leads them. Click a paper for its repo and the people on it."
+            + (f"\nYour topics: {topics}." if topics else ""))
+
+        def header(text: str) -> None:
+            lbl = QLabel(text)
+            lbl.setStyleSheet("font-size:10.5px; font-weight:700; letter-spacing:0.5px; margin-top:6px; "
+                              f"color:{theme['text']}; background:transparent;")
+            self.research_area.addWidget(lbl)
+
+        if data.get("error") or not (data.get("rising") or data.get("tools")):
+            msg = QLabel(data.get("error") or "No research trends yet. They load in the background "
+                                              "(or click Refresh).")
+            msg.setWordWrap(True)
+            msg.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            self.research_area.addWidget(msg)
+        if data.get("rising"):
+            header("\U0001f525 RISING IN YOUR FIELD")
+            for p in data["rising"]:
+                self.research_area.addWidget(self._research_card(p, theme, "rising"))
+        if data.get("tools"):
+            header("\U0001f6e0\ufe0f TOOLS WITH PAPERS")
+            for p in data["tools"]:
+                self.research_area.addWidget(self._research_card(p, theme, "tool"))
+        if data.get("people"):
+            header("\U0001f469\u200d\U0001f52c PEOPLE BEHIND THE TRENDS")
+            for person in data["people"]:
+                self.research_area.addWidget(ResearcherRow(person, theme, logic.open_link))
+        updated = data.get("updated_at")
+        if not getattr(self, "_research_running", False):
+            self.research_updated_label.setText("updated " + _time_ago(updated) if updated else "")
+        for lbl in (self.research_hint, self.research_updated_label):
+            lbl.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+
+    def _research_card(self, paper: dict[str, Any], theme: dict[str, Any], kind: str) -> "ResearchCard":
+        repo_item = {"full_name": (paper.get("repos") or [""])[0], "description": paper.get("title", "")}
+        return ResearchCard(paper, theme, self._opener("news", paper), self._opener("repo", repo_item),
+                            self._on_research_people, self.avatar_loader, kind=kind)
+
+    def _on_research_people(self, card: "ResearchCard", repo: str) -> None:
+        self._run_async(lambda: logic.repo_people(self.cfg, repo),
+                        lambda people: card.set_people(people if isinstance(people, list) else [],
+                                                       self._opener("person", {"username": repo})))
 
     def _refresh_market(self, force: bool) -> None:
         if self._market_running:

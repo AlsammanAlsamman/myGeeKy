@@ -55,7 +55,8 @@ Google Scholar papers) powers everything:
 |---|---|---|---|
 | 👥 **People** | Who shares your research and is likely to follow back, plus domain experts who rarely follow anyone | `mygeeky run` | Suggestions |
 | 🛠️ **Projects** | Repos in your field you could improve: open starter issues, maintainers who merge outside PRs | `mygeeky contribute` | Repos |
-| 📈 **Pulse** | Your field's popular repos ranked by momentum (stars gained, commits, PyPI downloads), plus new Product Hunt launches in your field | `mygeeky market` | Market |
+| 📈 **Pulse** | Your field's popular repos ranked by momentum (stars gained, commits, PyPI downloads), plus new Product Hunt launches in your field | `mygeeky market` | Market → Repos |
+| 🔬 **Research trends** <sup>new</sup> | Papers in your field gaining citations fastest, new tools with their code on GitHub, and the people behind them. A green **P** marks repos with a published paper | `mygeeky trends` | Market → Research |
 | 🗞️ **News** <sup>new</sup> | New papers and discussions about your interests, from arXiv, bioRxiv and Hacker News | `mygeeky news` | News |
 | 📰 **Activity** | What the people you follow, and your best matches, are doing right now | (in the panel) | Activity · Live |
 | 👋 **Signals** | Emoji-only signals between myGeeKy users, and a 🤝 handshake when it's mutual | `mygeeky beacon` | Signals |
@@ -473,6 +474,41 @@ history and training data. `mygeeky pipeline` (the weekly job) then does
   retrained locally from the synced training data instead.
 - `.jsonl` logs use git's `union` merge, so two machines in the same week merge cleanly.
 - Git uses your own `gh`/git credentials. myGeeKy's API client stays read-only.
+
+## Research trends, and the papers behind repos (`mygeeky trends`)
+
+<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/research.png" width="280" align="right" alt="Research trends">
+
+Tools in research live in two places: papers and GitHub. myGeeKy connects
+them, using [OpenAlex](https://openalex.org), a free, open index of the
+world's papers that's updated daily.
+
+In the panel, it's the **Market** tab's **Research** switch:
+
+- **🔥 Rising in your field:** recent papers ranked by **citations per month**,
+  so a hot three-month-old paper beats an old classic. *Your field* comes from
+  your OpenAlex research topics (from your ORCID papers), your Google Scholar
+  interests and your topics, and it follows what you've been engaging with lately.
+- **🛠️ Tools with papers:** new tools in your field whose paper links their
+  code on GitHub.
+- **👩‍🔬 People behind the trends:** who leads them (first and senior authors),
+  linked to their ORCID or OpenAlex profiles.
+
+**Click a paper** to open it, open its **GitHub repo**, and see **the people
+working on it** (the repo's owner and top contributors).
+
+**The green P.** Any repo with a published paper gets a green **P**, in
+Repos, the Market and Research. myGeeKy finds the paper through the repo's
+`CITATION.cff` or a DOI in its README. Hover it for the paper and its citation
+count; click it to open the paper. For example, fastp → *fastp 1.0* (253
+citations) and scanpy → *SCANPY* (10,000+ citations).
+
+```bash
+mygeeky trends              # rising papers, tools with papers, people
+mygeeky trends --refresh    # ask OpenAlex again now (otherwise daily)
+```
+
+<br clear="right">
 
 ## News for your field (`mygeeky news`)
 
@@ -910,6 +946,7 @@ mygeeky config reset
 | `beacon_refresh_minutes` / `beacon_max_users` | minimum minutes between re-reading beacons / beacons read per refresh | `30` / `60` |
 | `interest_learning` / `interest_half_life_days` | learn from your clicks, follows, stars and forks / days until an action counts half | `true` / `30` |
 | `explore_share` | share of every list kept for 🔭 new territory outside your interests | `0.2` |
+| `trends_months` / `trends_size` / `trends_refresh_hours` | how recent a trending paper must be, papers per section, how often to refresh | `18` / `15` / `24` |
 | `news_sources` / `news_size` / `news_refresh_hours` / `news_days` | where news comes from, how many items, how often to refresh, how far back | `arxiv, biorxiv, hackernews` / `25` / `6` / `7` |
 | `check_for_updates` | check PyPI once a day and offer an **Update** button when a new version is out | `true` |
 | `sync_repo` / `sync_auto` | private data repo (set by `sync init`) / whether `pipeline` pulls+pushes | `""` / `true` |
@@ -945,6 +982,9 @@ mygeeky config reset
 - **Token fallback to the GitHub CLI.** If no keyring token or env var is
   set, myGeeKy uses `gh auth token` when `gh` is logged in. This is still only
   used for GET requests.
+- **Research trends** send only your topic ids, search terms and DOIs to
+  OpenAlex (public and read-only); finding a repo's paper reads its public
+  `CITATION.cff`/README.
 - **News** sends only your search terms to arXiv, bioRxiv and Hacker News
   (public, read-only APIs). What you click is learned **locally**, as a few
   terms per action, and only syncs to your own private data repo.

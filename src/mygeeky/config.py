@@ -38,6 +38,8 @@ TOKEN_CHECK_FILE = DATA_DIR / "token_check.json"     # tokens' expiry dates (nev
 INTEREST_EVENTS_FILE = DATA_DIR / "interest_events.jsonl"   # terms from what you click/follow/star (synced)
 INTEREST_SEEN_FILE = DATA_DIR / "interest_seen.json"        # your stars/forks already learned from
 NEWS_FILE = DATA_DIR / "news.json"
+TRENDS_FILE = DATA_DIR / "trends.json"                 # research trends from OpenAlex
+PAPERS_CACHE_FILE = DATA_DIR / "papers_cache.json"     # repo -> its published paper (the [P] badge)
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
@@ -171,6 +173,11 @@ class MyGeekyConfig:
     news_size: int = 25
     news_refresh_hours: float = 6.0
     news_days: int = 7                     # how far back to look
+
+    # Research trends (Market tab -> Research): rising papers, tools with papers, people (OpenAlex)
+    trends_months: int = 18                # how recent a paper must be
+    trends_size: int = 15                  # papers per section
+    trends_refresh_hours: float = 24.0
 
     # Updates: check PyPI for a newer myGeeKy once a day (one read-only request)
     check_for_updates: bool = True

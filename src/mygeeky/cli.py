@@ -974,8 +974,22 @@ def _run_contribute(cfg: MyGeekyConfig) -> list[dict]:
     results = suggest_repositories(client, cfg, self_profile, vocabulary,
                                    keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()),
                                    log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    _annotate_papers(client, results, "full_name")
     log_contributions(results)
     return results
+
+
+def _annotate_papers(client: GitHubClient, rows: list[dict], key: str) -> None:
+    """The green [P]: attach each repo's published paper, if it has one."""
+    from . import papers
+    try:
+        found = papers.annotate_repos(client, [r[key] for r in rows if r.get(key)])
+    except Exception as exc:   # a paper lookup must never sink the list itself
+        click.echo(f"[mygeeky] paper lookup skipped: {exc}", err=True)
+        return
+    for r in rows:
+        if r.get(key) in found:
+            r["paper"] = found[r[key]]
 
 
 def _print_contributions(results: list[dict], as_json: bool) -> None:
@@ -1029,7 +1043,9 @@ def _run_market(cfg: MyGeekyConfig, force: bool = False, log=lambda m: None) -> 
     client = _client_for(cfg)
     state = refresh_market(client, cfg, lambda: _market_terms(client, cfg), force=force, log=log)
     _refresh_producthunt(cfg, client, force=force, log=log)
-    return compute_board(state)
+    board = compute_board(state)
+    _annotate_papers(client, board, "repo")
+    return board
 
 
 def _refresh_producthunt(cfg: MyGeekyConfig, client: GitHubClient, force: bool = False,
@@ -1093,6 +1109,37 @@ def _print_producthunt(cfg: MyGeekyConfig) -> None:
         mark = "*" if p.get("match") else " "
         click.echo(f" {mark} {p['votes']:>5} ▲  {p['name']} - {p['tagline'][:70]}")
         click.echo(f"           {p['url']}")
+
+
+# --------------------------------------------------------------------------- research trends
+@main.command()
+@click.option("--refresh", is_flag=True, help="Ask OpenAlex again now instead of using the saved trends.")
+@click.option("--json", "as_json", is_flag=True)
+def trends(refresh: bool, as_json: bool) -> None:
+    """Research trends in your field: rising papers, tools with papers, and who leads them."""
+    from . import papers
+    cfg = load_config()
+    state = papers.refresh_trends(cfg, force=refresh, log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    if as_json:
+        click.echo(json.dumps(state, indent=2))
+        return
+    if state.get("topics"):
+        click.echo("Your topics: " + ", ".join(t["name"] for t in state["topics"]) + "\n")
+    if state.get("rising"):
+        click.echo("Rising in your field (citations per month):")
+        for p in state["rising"]:
+            tag = " [new territory]" if p.get("explore") else ""
+            code = f"  code: {p['repos'][0]}" if p.get("repos") else ""
+            click.echo(f"  {p.get('velocity', 0):6.1f}/mo  {p['title'][:90]}{tag}")
+            click.echo(f"            {p['url']}{code}")
+    if state.get("tools"):
+        click.echo("\nTools with papers (code on GitHub):")
+        for p in state["tools"]:
+            click.echo(f"  [P] {', '.join(p['repos'][:2]):<40} {p['title'][:70]}")
+    if state.get("people"):
+        click.echo("\nPeople behind the trends:")
+        for a in state["people"]:
+            click.echo(f"  {a['name']:<32} {a['papers']} trending paper(s), {a['citations']} citations  {a['url']}")
 
 
 # --------------------------------------------------------------------------- news & interests
