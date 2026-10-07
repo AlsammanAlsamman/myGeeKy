@@ -550,7 +550,7 @@ class Page(QWizardPage):
 class WelcomePage(Page):
     def __init__(self) -> None:
         super().__init__("Welcome to myGeeKy",
-                         "Find GitHub people who share your research, and will actually follow you back.")
+                         "Your corner of GitHub, for research: the people, projects, papers and pulse of your field.")
         row = QHBoxLayout()
         icon = QLabel()
         if (ASSETS / "icon_128.png").exists():

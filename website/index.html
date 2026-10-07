@@ -3,162 +3,260 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>myGeeKy · the people, projects and pulse of your field</title>
-<meta name="description" content="myGeeKy turns your CV, repos, ORCID and Google Scholar papers into your GitHub circle: who to follow, what to contribute to, what's rising in your field. Free and open source.">
+<title>myGeeKy · your corner of GitHub, for research</title>
+<meta name="description" content="myGeeKy turns your CV, repos, ORCID and Google Scholar papers into your GitHub circle: people to follow, projects to contribute to, rising papers and tools, and news from your field. Free and open source.">
 <meta property="og:title" content="myGeeKy">
-<meta property="og:description" content="Your corner of GitHub: the people, projects and pulse of your field.">
+<meta property="og:description" content="Your corner of GitHub, for research: the people, projects, papers and pulse of your field.">
 <meta property="og:image" content="https://mygeeky.org/img/og.png">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#12121c">
 <link rel="icon" type="image/png" href="img/icon_64.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #12121c;
-    --bg2: #1a1830;
-    --card: rgba(255, 255, 255, 0.05);
-    --card-border: rgba(255, 255, 255, 0.10);
-    --text: #f0f0f5;
-    --muted: rgba(240, 240, 245, 0.68);
+    --bg: #0f0f1a;
+    --card: rgba(255, 255, 255, 0.045);
+    --card-hi: rgba(255, 255, 255, 0.08);
+    --line: rgba(255, 255, 255, 0.10);
+    --text: #f2f2f7;
+    --muted: rgba(242, 242, 247, 0.66);
     --pink: #ff6fd8;
     --violet: #7a5cff;
     --cyan: #7fd8ff;
     --green: #34d399;
     --amber: #ffc457;
     --red: #f87171;
-    --grad: linear-gradient(90deg, var(--pink), var(--violet));
-    --radius: 18px;
+    --grad: linear-gradient(100deg, var(--pink), var(--violet) 55%, var(--cyan));
+    --radius: 20px;
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
-  body {
-    margin: 0;
-    background: radial-gradient(1200px 600px at 80% -10%, rgba(122, 92, 255, 0.22), transparent 60%),
-                radial-gradient(900px 500px at -10% 20%, rgba(255, 111, 216, 0.14), transparent 60%),
-                var(--bg);
-    color: var(--text);
-    font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
+  body { margin: 0; background: var(--bg); color: var(--text); overflow-x: hidden;
+         font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
   a { color: var(--cyan); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
   img { max-width: 100%; display: block; }
+  .wrap { max-width: 1140px; margin: 0 auto; padding: 0 16px; }
+  code, pre, .mono { font-family: "JetBrains Mono", Consolas, monospace; }
+
+  /* the living background: drifting aurora + a starfield canvas */
+  #sky { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; }
+  .aurora { position: fixed; inset: -20%; z-index: -3; filter: blur(90px); opacity: .55;
+            background: radial-gradient(40% 35% at 20% 25%, rgba(255,111,216,.35), transparent 70%),
+                        radial-gradient(35% 30% at 80% 20%, rgba(122,92,255,.40), transparent 70%),
+                        radial-gradient(40% 35% at 60% 85%, rgba(127,216,255,.22), transparent 70%);
+            animation: drift 28s ease-in-out infinite alternate; }
+  @keyframes drift { to { transform: translate3d(4%, -3%, 0) rotate(8deg) scale(1.08); } }
 
   /* nav */
-  nav { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px);
-        background: rgba(18, 18, 28, 0.72); border-bottom: 1px solid var(--card-border); }
-  nav .wrap { display: flex; align-items: center; gap: 20px; height: 60px; }
+  nav { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(14px) saturate(140%);
+        background: rgba(15, 15, 26, 0.66); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 20px; height: 62px; }
   .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; color: var(--text); }
+  .brand:hover { text-decoration: none; }
   .brand img { width: 30px; height: 30px; }
-  nav .links { margin-left: auto; display: flex; gap: 22px; font-size: 14.5px; }
+  nav .links { margin-left: auto; display: flex; gap: 22px; font-size: 14.5px; align-items: center; }
   nav .links a { color: var(--muted); }
   nav .links a:hover { color: var(--text); text-decoration: none; }
+  nav .links .btn { padding: 8px 14px; font-size: 13.5px; color: var(--text); }
 
   /* buttons */
-  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 12px;
-         font-weight: 600; font-size: 15px; color: var(--text); border: 1px solid var(--card-border);
-         background: var(--card); transition: transform .15s, background .15s; }
-  .btn:hover { text-decoration: none; transform: translateY(-1px); background: rgba(255, 255, 255, 0.09); }
-  .btn.primary { background: var(--grad); border: none; box-shadow: 0 8px 30px rgba(255, 111, 216, 0.25); }
-  .btn.primary:hover { background: var(--grad); filter: brightness(1.08); }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 14px;
+         font-weight: 650; font-size: 15px; color: var(--text); border: 1px solid var(--line);
+         background: var(--card); transition: transform .2s, background .2s, box-shadow .2s; }
+  .btn:hover { text-decoration: none; transform: translateY(-2px); background: var(--card-hi); }
+  .btn.primary { background: var(--grad); background-size: 200% 100%; border: none;
+                 box-shadow: 0 10px 40px rgba(255, 111, 216, 0.30); animation: shimmer 6s linear infinite; }
+  .btn.primary:hover { box-shadow: 0 14px 50px rgba(255, 111, 216, 0.45); }
+  @keyframes shimmer { to { background-position: 200% 0; } }
 
   /* hero */
-  .hero { padding: 76px 0 40px; text-align: center; }
-  .hero .logo { width: 104px; height: 104px; margin: 0 auto 22px; filter: drop-shadow(0 10px 30px rgba(255,111,216,.35)); }
-  h1 { font-size: clamp(34px, 5.4vw, 60px); line-height: 1.08; margin: 0 auto 18px; max-width: 900px;
-       font-weight: 800; letter-spacing: -0.02em; }
-  h1 .g { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .lead { font-size: clamp(17px, 2vw, 20px); color: var(--muted); max-width: 720px; margin: 0 auto 30px; }
+  .hero { padding: 84px 0 30px; text-align: center; position: relative; }
+  .hero .logo { width: 112px; height: 112px; margin: 0 auto 26px; animation: float 6s ease-in-out infinite;
+                filter: drop-shadow(0 12px 36px rgba(255,111,216,.45)); }
+  @keyframes float { 50% { transform: translateY(-10px) rotate(-2deg); } }
+  .pill { display: inline-flex; gap: 8px; align-items: center; padding: 6px 14px; border-radius: 99px;
+          border: 1px solid var(--line); background: var(--card); font-size: 13.5px; color: var(--muted); margin-bottom: 22px; }
+  .pill b { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h1 { font-size: clamp(38px, 6.2vw, 72px); line-height: 1.04; margin: 0 auto 20px; max-width: 980px;
+       font-weight: 900; letter-spacing: -0.035em; }
+  .g { background: var(--grad); background-size: 200% 100%; -webkit-background-clip: text; background-clip: text;
+       color: transparent; animation: shimmer 8s linear infinite; }
+  .rotator { display: inline-block; min-width: 4.6ch; text-align: left; }
+  .lead { font-size: clamp(17px, 2vw, 20.5px); color: var(--muted); max-width: 740px; margin: 0 auto 32px; }
   .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
   .pip { margin: 22px auto 0; display: inline-flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px;
-         border-radius: 12px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--card-border);
-         font: 14.5px/1 "JetBrains Mono", Consolas, monospace; color: var(--text); max-width: 100%; }
-  .pip code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+         border-radius: 12px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line); font-size: 14.5px; max-width: 100%; }
+  .pip .dollar { color: var(--pink); }
   .pip button { cursor: pointer; border: none; border-radius: 8px; padding: 6px 10px; color: var(--text);
                 background: rgba(255,255,255,.1); font: 600 12.5px Inter, sans-serif; }
   .note { font-size: 13px; color: var(--muted); margin-top: 12px; }
-  .shot-hero { margin: 54px auto 0; max-width: 1060px; }
-  .shot-hero img { border-radius: 20px; }
+  .hero-shot { margin: 60px auto 0; max-width: 1080px; perspective: 1600px; }
+  .hero-shot img { border-radius: 22px; transform: rotateX(10deg) scale(.96); transform-origin: 50% 0;
+                   transition: transform 1.2s cubic-bezier(.2,.8,.2,1); box-shadow: 0 50px 120px rgba(0,0,0,.6); }
+  .hero-shot.in img { transform: none; }
+
+  /* stats */
+  .stats { display: flex; justify-content: center; gap: clamp(20px, 6vw, 70px); flex-wrap: wrap; margin-top: 54px; }
+  .stat b { display: block; font-size: clamp(26px, 3.4vw, 38px); font-weight: 800; letter-spacing: -.02em; }
+  .stat span { color: var(--muted); font-size: 13.5px; }
 
   /* sections */
-  section { padding: 72px 0; }
-  .eyebrow { color: var(--pink); font-weight: 700; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
-  h2 { font-size: clamp(28px, 3.6vw, 40px); line-height: 1.15; margin: 8px 0 14px; letter-spacing: -0.01em; }
-  .sub { color: var(--muted); max-width: 680px; margin: 0 0 36px; font-size: 17.5px; }
+  section { padding: 84px 0; position: relative; }
+  .eyebrow { color: var(--pink); font-weight: 700; font-size: 12.5px; letter-spacing: .14em; text-transform: uppercase; }
+  h2 { font-size: clamp(30px, 4vw, 46px); line-height: 1.1; margin: 10px 0 14px; letter-spacing: -0.025em; font-weight: 800; }
+  .sub { color: var(--muted); max-width: 690px; margin: 0 0 40px; font-size: 17.5px; }
   .center { text-align: center; }
   .center .sub { margin-left: auto; margin-right: auto; }
+  .tag-new { display: inline-block; background: var(--grad); color: #fff; font-size: 11px; font-weight: 800;
+             padding: 3px 9px; border-radius: 99px; letter-spacing: .08em; vertical-align: middle; margin-left: 6px; }
 
-  /* pillars */
-  .grid { display: grid; gap: 18px; grid-template-columns: repeat(3, 1fr); }
-  .card { background: var(--card); border: 1px solid var(--card-border); border-radius: var(--radius); padding: 24px; }
-  .card .bar { width: 44px; height: 5px; border-radius: 3px; margin-bottom: 16px; }
-  .card h3 { margin: 0 0 8px; font-size: 19px; display: flex; align-items: center; gap: 8px; }
-  .card p { margin: 0; color: var(--muted); font-size: 15px; }
-  .card .cmd { margin-top: 14px; font: 13px Consolas, monospace; color: var(--cyan); }
+  /* reveal on scroll */
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s ease, transform .8s cubic-bezier(.2,.8,.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* bento grid of what it does */
+  .bento { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); }
+  .tile { position: relative; overflow: hidden; background: var(--card); border: 1px solid var(--line);
+          border-radius: var(--radius); padding: 24px; transition: transform .3s, border-color .3s, background .3s; }
+  .tile:hover { transform: translateY(-4px); border-color: rgba(255,255,255,.22); background: var(--card-hi); }
+  .tile::after { content: ""; position: absolute; inset: auto -40% -60% auto; width: 220px; height: 220px; border-radius: 50%;
+                 background: var(--c, var(--pink)); opacity: .14; filter: blur(50px); transition: opacity .3s; }
+  .tile:hover::after { opacity: .3; }
+  .tile.wide { grid-column: span 2; }
+  .tile .ico { font-size: 30px; margin-bottom: 10px; }
+  .tile h3 { margin: 0 0 6px; font-size: 19px; }
+  .tile p { margin: 0; color: var(--muted); font-size: 15px; }
+  .tile .cmd { margin-top: 14px; font-size: 13px; color: var(--c, var(--cyan)); }
+
+  /* interactive tab showcase */
+  .show { display: grid; grid-template-columns: 1fr 400px; gap: 56px; align-items: center; }
+  .tabs { display: flex; flex-direction: column; gap: 8px; }
+  .tabbtn { text-align: left; cursor: pointer; border: 1px solid transparent; background: transparent; color: var(--text);
+            border-radius: 16px; padding: 14px 18px; font: inherit; transition: background .25s, border-color .25s; position: relative; overflow: hidden; }
+  .tabbtn b { font-size: 16.5px; }
+  .tabbtn span { display: block; color: var(--muted); font-size: 14px; max-height: 0; overflow: hidden; transition: max-height .4s; }
+  .tabbtn.on { background: var(--card-hi); border-color: var(--line); }
+  .tabbtn.on span { max-height: 90px; }
+  .tabbtn .prog { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--grad); }
+  .tabbtn.on .prog { animation: prog var(--dur, 6s) linear forwards; }
+  @keyframes prog { to { width: 100%; } }
+  .frame { position: relative; aspect-ratio: 760 / 870; }
+  .frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 26px;
+               opacity: 0; transform: scale(.97) translateY(10px); transition: opacity .6s, transform .6s; }
+  .frame img.on { opacity: 1; transform: none; }
+  .frame::before { content: ""; position: absolute; inset: 8% -8%; background: var(--grad); filter: blur(80px); opacity: .22; z-index: -1; }
 
   /* feature rows */
-  .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+  .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
   .feature.flip .copy { order: 2; }
-  .feature .pic { display: flex; justify-content: center; }
-  .feature .pic img { max-width: 380px; width: 100%; border-radius: 22px;
-                      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45); }
-  .feature ul { padding-left: 20px; color: var(--muted); }
-  .feature li { margin: 6px 0; }
-  .tag-new { display: inline-block; background: var(--grad); color: #fff; font-size: 11.5px; font-weight: 700;
-             padding: 3px 9px; border-radius: 99px; letter-spacing: .06em; vertical-align: middle; margin-left: 6px; }
-  .emoji-row { font-size: 30px; letter-spacing: 8px; margin: 6px 0 14px; }
+  .feature .pic { display: flex; justify-content: center; position: relative; }
+  .feature .pic img { max-width: 380px; width: 100%; border-radius: 24px; box-shadow: 0 40px 100px rgba(0,0,0,.55); }
+  .ticks { list-style: none; padding: 0; margin: 0; }
+  .ticks li { padding: 8px 0 8px 32px; position: relative; color: var(--muted); }
+  .ticks li::before { content: "✦"; position: absolute; left: 6px; color: var(--pink); }
+  .emoji-row { font-size: 34px; letter-spacing: 10px; margin: 6px 0 16px; }
+  .emoji-row span { display: inline-block; animation: bob 2.4s ease-in-out infinite; }
+  .emoji-row span:nth-child(2) { animation-delay: .2s } .emoji-row span:nth-child(3) { animation-delay: .4s }
+  .emoji-row span:nth-child(4) { animation-delay: .6s } .emoji-row span:nth-child(5) { animation-delay: .8s }
+  @keyframes bob { 50% { transform: translateY(-8px); } }
+  .badge-p { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: var(--green);
+             color: #06281c; font-weight: 900; font-size: 13px; vertical-align: -4px; }
 
-  /* gallery strip */
-  .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  .strip figure { margin: 0; }
-  .strip img { border-radius: 16px; border: 1px solid var(--card-border); }
-  .strip figcaption { text-align: center; color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+  /* the live interest map */
+  .mapcard { background: var(--card); border: 1px solid var(--line); border-radius: 28px; padding: 10px; }
+  #map { width: 100%; aspect-ratio: 1 / 1; display: block; }
+  .legend { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); padding: 4px 0 12px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
 
-  /* trust */
-  .trust { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-  .trust .card h3 { font-size: 17px; }
+  /* video */
+  .video { position: relative; max-width: 920px; margin: 0 auto; aspect-ratio: 16 / 9; border-radius: 22px; overflow: hidden;
+           border: 1px solid var(--line); box-shadow: 0 40px 120px rgba(122,92,255,.25); background: #000; cursor: pointer; }
+  .video img { width: 100%; height: 100%; object-fit: cover; transition: transform .6s, filter .6s; }
+  .video:hover img { transform: scale(1.03); filter: brightness(1.1); }
+  .video .play { position: absolute; inset: 0; margin: auto; width: 92px; height: 92px; border-radius: 50%; border: none;
+                 background: var(--grad); box-shadow: 0 0 0 0 rgba(255,111,216,.6); animation: pulse 2.2s infinite; cursor: pointer; }
+  .video .play::after { content: ""; position: absolute; left: 37px; top: 29px; border-style: solid; border-width: 17px 0 17px 28px;
+                        border-color: transparent transparent transparent #fff; }
+  @keyframes pulse { 70% { box-shadow: 0 0 0 26px rgba(255,111,216,0); } 100% { box-shadow: 0 0 0 0 rgba(255,111,216,0); } }
+  .video iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
-  /* steps */
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: s; }
-  .steps .card { position: relative; padding-top: 54px; }
-  .steps .card::before { counter-increment: s; content: counter(s); position: absolute; top: 18px; left: 24px;
-                         width: 26px; height: 26px; border-radius: 50%; background: var(--grad);
-                         display: grid; place-items: center; font-weight: 700; font-size: 14px; }
-  pre { margin: 12px 0 0; padding: 12px 14px; border-radius: 10px; background: rgba(0, 0, 0, 0.35);
-        border: 1px solid var(--card-border); overflow-x: auto; font: 13.5px/1.55 Consolas, monospace; color: var(--text); }
+  /* tokens */
+  .tokens { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .tok { border-radius: var(--radius); padding: 26px; border: 1px solid var(--line); background: var(--card); }
+  .tok h3 { margin: 0 0 4px; font-size: 20px; }
+  .tok .role { color: var(--muted); font-size: 14.5px; margin-bottom: 14px; }
+  .tok dl { margin: 0; display: grid; grid-template-columns: 130px 1fr; gap: 8px 14px; font-size: 14.5px; }
+  .tok dt { color: var(--muted); }
+  .tok dd { margin: 0; }
+  .tok .no { color: var(--red); }
+  .tok.read { box-shadow: inset 0 3px 0 var(--cyan); }
+  .tok.write { box-shadow: inset 0 3px 0 var(--pink); }
 
-  footer { border-top: 1px solid var(--card-border); padding: 36px 0 56px; color: var(--muted); font-size: 14px; }
+  /* trust + steps */
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+  .card h3 { margin: 0 0 8px; font-size: 17.5px; }
+  .card p { margin: 0; color: var(--muted); font-size: 15px; }
+  .steps { counter-reset: s; }
+  .steps .card { position: relative; padding-top: 60px; }
+  .steps .card::before { counter-increment: s; content: counter(s); position: absolute; top: 20px; left: 24px; width: 28px; height: 28px;
+                         border-radius: 50%; background: var(--grad); display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+  pre { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line);
+        overflow-x: auto; font-size: 13.5px; line-height: 1.55; color: var(--text); }
+  pre .c { color: var(--muted); }
+
+  /* ideas */
+  .ideas { display: flex; gap: 28px; align-items: center; justify-content: center; flex-wrap: wrap; text-align: left;
+           background: linear-gradient(120deg, rgba(255,196,87,.10), rgba(255,111,216,.08)); border: 1px solid var(--line);
+           border-radius: 28px; padding: 34px; }
+  .lamp { font-size: 64px; animation: glow 3s ease-in-out infinite; }
+  @keyframes glow { 50% { filter: drop-shadow(0 0 22px rgba(255,196,87,.9)); transform: rotate(-6deg); } }
+
+  .final { text-align: center; padding: 100px 0 110px; }
+  footer { border-top: 1px solid var(--line); padding: 36px 0 56px; color: var(--muted); font-size: 14px; }
   footer .wrap { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
-  footer .links { margin-left: auto; display: flex; gap: 18px; }
+  footer .links { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
 
-  @media (max-width: 900px) {
-    .grid, .trust, .steps { grid-template-columns: 1fr 1fr; }
-    .strip { grid-template-columns: 1fr 1fr; }
-    .feature { grid-template-columns: 1fr; gap: 28px; }
+  @media (max-width: 960px) {
+    .bento { grid-template-columns: 1fr 1fr; }
+    .show, .feature { grid-template-columns: 1fr; gap: 34px; }
+    .show .frame { max-width: 400px; width: 100%; margin: 0 auto; }
     .feature.flip .copy { order: 0; }
+    .three, .tokens { grid-template-columns: 1fr; }
   }
   @media (max-width: 600px) {
-    nav .links { display: none; }
-    .grid, .trust, .steps { grid-template-columns: 1fr; }
-    .hero { padding-top: 48px; }
-    section { padding: 52px 0; }
+    nav .links a:not(.btn) { display: none; }
+    .bento { grid-template-columns: 1fr; }
+    .tile.wide { grid-column: auto; }
+    .hero { padding-top: 52px; }
+    section { padding: 60px 0; }
+    .tok dl { grid-template-columns: 1fr; gap: 2px; }
+    .tok dd { margin-bottom: 8px; }
     footer .links { margin-left: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
   }
 </style>
 </head>
 <body>
+<div class="aurora" aria-hidden="true"></div>
+<canvas id="sky" aria-hidden="true"></canvas>
 
 <nav>
   <div class="wrap">
     <a class="brand" href="#"><img src="img/icon_64.png" alt="">myGeeKy</a>
     <div class="links">
-      <a href="#inside">What's inside</a>
-      <a href="#signals">Signals</a>
-      <a href="#trust">Privacy</a>
+      <a href="#tour">Tour</a>
+      <a href="#learns">How it learns</a>
+      <a href="#tokens">Privacy</a>
       <a href="#start">Get started</a>
       <a href="https://github.com/AlsammanAlsamman/myGeeKy">GitHub</a>
+      <a class="btn primary" href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest/download/MyGeeKySetup-{{VERSION}}.exe">Download</a>
     </div>
   </div>
 </nav>
@@ -166,146 +264,217 @@
 <header class="hero">
   <div class="wrap">
     <img class="logo" src="img/icon_256.png" alt="myGeeKy icon: two geeks hugging inside a heart">
-    <h1>Your corner of GitHub:<br><span class="g">the people, projects and pulse of your field.</span></h1>
-    <p class="lead">myGeeKy reads your CV, your repos and your ORCID &amp; Google Scholar papers, then shows you
-      who to follow, what to contribute to and what's rising in your field, in one small panel on the edge
-      of your screen. It only suggests. It never acts for you.</p>
+    <div class="pill">✨ <b>New in {{VERSION}}</b> · see what myGeeKy knows about you · send ideas with 💡</div>
+    <h1>Your corner of GitHub,<br>for <span class="g rotator" id="rot">research</span>.</h1>
+    <p class="lead">myGeeKy reads your CV, your repos and your ORCID &amp; Google Scholar papers, then shows you the
+      <b>people</b>, <b>projects</b>, <b>papers</b> and <b>pulse</b> of your field, in one small glass panel on the edge of
+      your screen. It only suggests. It never acts for you.</p>
     <div class="ctas">
       <a class="btn primary" href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest/download/MyGeeKySetup-{{VERSION}}.exe">⬇ Download for Windows</a>
-      <a class="btn" href="https://github.com/AlsammanAlsamman/myGeeKy">★ View on GitHub</a>
+      <a class="btn" href="#video">▶ Watch the video</a>
+      <a class="btn" href="https://github.com/AlsammanAlsamman/myGeeKy">★ GitHub</a>
     </div>
-    <div class="pip"><code id="pip">pip install mygeeky</code><button type="button" id="copy">Copy</button></div>
+    <div class="pip mono"><span class="dollar">$</span><code id="pip">pip install mygeeky</code><button type="button" id="copy">Copy</button></div>
     <p class="note">Free and open source (MIT) · v{{VERSION}} · Windows installer, or pip on Windows, Linux and macOS</p>
-    <div class="shot-hero"><img src="img/hero.png" alt="The myGeeKy panel's Live, Suggestions and Repos tabs" width="1188" height="431"></div>
+    <div class="hero-shot" id="heroShot"><img src="img/hero.png" alt="Three myGeeKy panel tabs: People, what myGeeKy knows about you, and research rising in your field" width="1400" height="560"></div>
+    <div class="stats">
+      <div class="stat"><b data-count="9">0</b><span>tabs, one profile</span></div>
+      <div class="stat"><b data-count="6">0</b><span>open data sources</span></div>
+      <div class="stat"><b data-count="0" data-final="0">0</b><span>auto-follows, ever</span></div>
+      <div class="stat"><b data-count="0" data-final="0">0</b><span>servers or trackers</span></div>
+    </div>
   </div>
 </header>
 
 <section id="inside">
-  <div class="wrap center">
-    <div class="eyebrow">What's inside</div>
-    <h2>One profile. Your whole field.</h2>
-    <p class="sub">Your CV, repos, ORCID/OpenAlex and Google Scholar papers power everything, so it's
-      matched to <em>your</em> research, not a generic popularity list.</p>
+  <div class="wrap center reveal">
+    <div class="eyebrow">What it does</div>
+    <h2>One profile. <span class="g">Your whole field.</span></h2>
+    <p class="sub">Your CV, repos, ORCID/OpenAlex and Google Scholar papers power everything, so it's matched to
+      <em>your</em> research, not a generic popularity list.</p>
   </div>
-  <div class="wrap grid">
-    <div class="card"><div class="bar" style="background:var(--cyan)"></div><h3>👥 People</h3>
-      <p>Who shares your research and is likely to follow you back, plus domain experts who rarely follow anyone.</p>
-      <div class="cmd">mygeeky run</div></div>
-    <div class="card"><div class="bar" style="background:var(--green)"></div><h3>🛠️ Projects</h3>
-      <p>Repos in your field you could improve: open starter issues, maintainers who actually merge outside PRs.</p>
-      <div class="cmd">mygeeky contribute</div></div>
-    <div class="card"><div class="bar" style="background:var(--amber)"></div><h3>📈 Pulse</h3>
-      <p>Your field's repos as a daily stock race: stars gained, commits, PyPI downloads, and who moved up.</p>
-      <div class="cmd">mygeeky market</div></div>
-    <div class="card"><div class="bar" style="background:var(--violet)"></div><h3>📰 Activity</h3>
-      <p>What the people you follow, and your best matches, are building right now.</p>
-      <div class="cmd">in the panel</div></div>
-    <div class="card"><div class="bar" style="background:var(--pink)"></div><h3>👋 Signals</h3>
-      <p>Emoji-only hellos between myGeeKy users, and a handshake when it's mutual.</p>
-      <div class="cmd">mygeeky beacon</div></div>
-    <div class="card"><div class="bar" style="background:var(--red)"></div><h3>🧠 Learning</h3>
-      <p>A small model retrains on who actually follows <em>you</em> back, getting sharper every week.</p>
-      <div class="cmd">mygeeky learn</div></div>
+  <div class="wrap bento">
+    <div class="tile wide reveal" style="--c:var(--cyan)"><div class="ico">👥</div><h3>People worth following</h3>
+      <p>Researchers who share your work and are likely to follow you back, plus domain experts who rarely follow anyone.
+        Celebrities, mass-followers and dormant accounts are skipped.</p><div class="cmd mono">mygeeky run</div></div>
+    <div class="tile reveal" style="--c:var(--green)"><div class="ico">🛠️</div><h3>Projects that want you</h3>
+      <p>Starter issues, and maintainers who merge outside PRs.</p><div class="cmd mono">mygeeky contribute</div></div>
+    <div class="tile reveal" style="--c:var(--amber)"><div class="ico">📈</div><h3>The pulse</h3>
+      <p>Your field's repos as a daily stock race.</p><div class="cmd mono">mygeeky market</div></div>
+    <div class="tile reveal" style="--c:var(--green)"><div class="ico">🔬</div><h3>Research trends <span class="tag-new">NEW</span></h3>
+      <p>Papers gaining citations fastest, and the code behind them.</p><div class="cmd mono">mygeeky trends</div></div>
+    <div class="tile reveal" style="--c:var(--red)"><div class="ico">🗞️</div><h3>News <span class="tag-new">NEW</span></h3>
+      <p>arXiv, bioRxiv and Hacker News about your topics.</p><div class="cmd mono">mygeeky news</div></div>
+    <div class="tile wide reveal" style="--c:var(--violet)"><div class="ico">🧠</div><h3>It learns what you're into <span class="tag-new">NEW</span></h3>
+      <p>Every click, follow, star and fork tunes every list, and 🔭 20% always stays open for new territory, so you
+        never end up in a bubble.</p><div class="cmd mono">mygeeky interests</div></div>
+    <div class="tile wide reveal" style="--c:var(--pink)"><div class="ico">👋</div><h3>Signals, without words</h3>
+      <p>Wave, say "I learn from your work", or offer to collaborate, with emoji only and no server. A 🤝 handshake when it's mutual.</p>
+      <div class="cmd mono">mygeeky beacon</div></div>
+    <div class="tile reveal" style="--c:var(--cyan)"><div class="ico">📰</div><h3>Activity</h3>
+      <p>What your people are building, live.</p><div class="cmd mono">in the panel</div></div>
+    <div class="tile reveal" style="--c:var(--violet)"><div class="ico">☁️</div><h3>On every computer</h3>
+      <p>Sync through a private repo you own.</p><div class="cmd mono">mygeeky sync</div></div>
+  </div>
+</section>
+
+<section id="tour">
+  <div class="wrap center reveal">
+    <div class="eyebrow">Take the tour</div>
+    <h2>Lives quietly on the <span class="g">edge of your screen</span></h2>
+    <p class="sub">Always on top, in three glass themes. Click a tab, or just watch.</p>
+  </div>
+  <div class="wrap show reveal">
+    <div class="tabs" id="tabs"></div>
+    <div class="frame" id="frame"></div>
   </div>
 </section>
 
 <section>
   <div class="wrap feature">
-    <div class="copy">
-      <div class="eyebrow">People</div>
-      <h2>People worth following, not just famous ones</h2>
-      <p class="sub">GitHub discovery mostly shows accounts that will never notice you. myGeeKy finds people through
-        the repos in your field that they own and contribute to.</p>
-      <ul>
-        <li>Skips celebrities, mass-followers, organizations and dormant accounts</li>
-        <li>A second list surfaces domain experts a follow-back score would bury</li>
-        <li>Click someone to open their profile. You follow by hand, always.</li>
+    <div class="copy reveal">
+      <div class="eyebrow">Research <span class="tag-new">NEW</span></div>
+      <h2>The papers behind the code, and the people behind the papers</h2>
+      <p class="sub">From OpenAlex, matched to your own research topics.</p>
+      <ul class="ticks">
+        <li>Papers in your field gaining citations fastest, measured in citations per month</li>
+        <li>New tools whose code is on GitHub. Click a paper to see its repo and the people working on it</li>
+        <li>A green <span class="badge-p">P</span> on any repo that has a published paper</li>
       </ul>
     </div>
-    <div class="pic"><img src="img/suggestions.png" alt="Suggestions tab" loading="lazy"></div>
+    <div class="pic reveal"><img src="img/research.png" alt="Research view: papers rising in your field" loading="lazy"></div>
   </div>
 </section>
 
 <section>
   <div class="wrap feature flip">
-    <div class="copy">
-      <div class="eyebrow">Projects &amp; pulse</div>
-      <h2>Where your work is welcome, and where the field is moving</h2>
-      <p class="sub">Contribute to the tools you actually use, and watch what's rising.</p>
-      <ul>
-        <li>Active repos with open starter issues, ranked by how often maintainers merge outside PRs</li>
-        <li>A daily momentum board: stars gained, commits, PyPI downloads, and who moved up</li>
+    <div class="copy reveal">
+      <div class="eyebrow">News <span class="tag-new">NEW</span></div>
+      <h2>What's new in your field, not everyone's</h2>
+      <p class="sub">Fresh items from arXiv, bioRxiv and Hacker News, kept only when they genuinely match your
+        interests: two of your terms, or one exact phrase.</p>
+      <ul class="ticks">
+        <li>Each item says why it's there ("matches gwas, fine mapping")</li>
+        <li>🔭 items from outside your bubble are marked, on purpose</li>
       </ul>
     </div>
-    <div class="pic"><img src="img/market.png" alt="Market tab" loading="lazy"></div>
+    <div class="pic reveal"><img src="img/news.png" alt="News tab" loading="lazy"></div>
+  </div>
+</section>
+
+<section id="learns">
+  <div class="wrap feature">
+    <div class="copy reveal">
+      <div class="eyebrow">How it learns</div>
+      <h2>See <span class="g">what myGeeKy knows</span> about you</h2>
+      <p class="sub">The Model tab draws it as a living map: you in the middle, your research field around you, what
+        you've been into lately pulsing further out, and today's new territory on the edge.</p>
+      <ul class="ticks">
+        <li>Clicks teach it a little, stars and forks more, follows the most</li>
+        <li>Interests fade with a 30-day half-life, so it follows you as you change</li>
+        <li>A separate model learns who follows <em>you</em> back</li>
+      </ul>
+    </div>
+    <div class="reveal">
+      <div class="mapcard"><canvas id="map" width="600" height="600" aria-label="An animated interest map"></canvas>
+        <div class="legend"><span><i style="background:var(--cyan)"></i>your field</span><span><i style="background:var(--pink)"></i>lately into</span><span><i style="border:2px dashed var(--violet)"></i>new territory</span></div></div>
+    </div>
   </div>
 </section>
 
 <section id="signals">
-  <div class="wrap feature">
-    <div class="copy">
-      <div class="eyebrow">Signals <span class="tag-new">NEW</span></div>
+  <div class="wrap feature flip">
+    <div class="copy reveal">
+      <div class="eyebrow">Signals</div>
       <h2>Say hi without words</h2>
-      <div class="emoji-row">👋 📚 🤝 👀 🔥</div>
-      <p class="sub">Wave, say "I learn from your work", offer to collaborate, or give kudos to a repo. Signals
-        travel through a small public repo on your own GitHub, so there's no server, no text and nothing to
-        moderate. When it's mutual, you get a 🤝 handshake.</p>
-      <ul>
-        <li>Emoji only, from a fixed set, so no spam and no harassment</li>
-        <li>Fully public and transparent, and you can block anyone</li>
+      <div class="emoji-row"><span>👋</span><span>📚</span><span>🤝</span><span>👀</span><span>🔥</span></div>
+      <p class="sub">Signals travel through a small public repo on your own GitHub, so there's no server, no text and
+        nothing to moderate. When it's mutual, you get a 🤝 handshake.</p>
+      <ul class="ticks">
+        <li>Emoji only, from a fixed set: no spam, no harassment</li>
+        <li>Public and transparent, and you can block anyone</li>
         <li>Opt-in, with its own token that can write to one repo only</li>
       </ul>
     </div>
-    <div class="pic"><img src="img/signals.png" alt="Signals tab (example data)" loading="lazy"></div>
+    <div class="pic reveal"><img src="img/signals.png" alt="Signals tab (example people)" loading="lazy"></div>
   </div>
 </section>
 
-<section>
-  <div class="wrap center">
-    <div class="eyebrow">The panel</div>
-    <h2>Lives quietly on the edge of your screen</h2>
-    <p class="sub">Always on top, three glass themes. Folded, it's a small icon that now and then lets out a few
-      floating hearts. 💕</p>
+<section id="video">
+  <div class="wrap center reveal">
+    <div class="eyebrow">Watch</div>
+    <h2>Install, set up, and a tour</h2>
+    <p class="sub">From a fresh Windows PC to your first suggestions.</p>
   </div>
-  <div class="wrap strip">
-    <figure><img src="img/live.png" alt="Live tab" loading="lazy"><figcaption>Live</figcaption></figure>
-    <figure><img src="img/activity.png" alt="Activity tab" loading="lazy"><figcaption>Activity</figcaption></figure>
-    <figure><img src="img/repos.png" alt="Repos tab" loading="lazy"><figcaption>Repos</figcaption></figure>
-    <figure><img src="img/model.png" alt="Model tab" loading="lazy"><figcaption>Model</figcaption></figure>
+  <div class="wrap reveal">
+    <div class="video" id="yt" role="button" tabindex="0" aria-label="Play the myGeeKy video">
+      <img src="img/video-thumbnail.png" alt="" loading="lazy"><button class="play" aria-label="Play"></button>
+    </div>
   </div>
 </section>
 
-<section id="trust">
-  <div class="wrap center">
+<section id="tokens">
+  <div class="wrap center reveal">
     <div class="eyebrow">Privacy &amp; trust</div>
     <h2>Suggest-only, by design</h2>
-    <p class="sub">myGeeKy has no follow, star or fork code at all. You look, you click, you decide.</p>
+    <p class="sub">There is no follow, star or fork code in myGeeKy at all. And it uses two GitHub tokens with very
+      different powers. <b>Setup checks what each can actually do</b>, and refuses one that doesn't fit its job.</p>
   </div>
-  <div class="wrap trust">
-    <div class="card"><h3>🔒 Read-only token</h3><p>Your GitHub token only needs read access and lives in your OS
-      keyring (Windows Credential Locker, macOS Keychain, Linux Secret Service), never in a file.</p></div>
-    <div class="card"><h3>🏠 Your data stays yours</h3><p>No server, no account, no telemetry. Your CV and history
-      stay on your machine, or in a private GitHub repo you own if you turn on sync.</p></div>
-    <div class="card"><h3>📖 Open source</h3><p>MIT-licensed and on GitHub, with tests. Read exactly what it does,
-      and change it if you like.</p></div>
+  <div class="wrap tokens">
+    <div class="tok read reveal"><h3>🔍 Token 1 · read-only</h3><div class="role">Reads public profiles, repos and followers.</div>
+      <dl><dt>Repositories</dt><dd>Public repositories</dd><dt>Permissions</dt><dd>Followers: Read-only</dd>
+        <dt>Refused if</dt><dd class="no">it can write to any repo, can follow people, or is your Signals token</dd></dl></div>
+    <div class="tok write reveal"><h3>✍️ Token 2 · Signals <span style="color:var(--muted);font-weight:500;font-size:15px">(optional)</span></h3>
+      <div class="role">Writes your <code>mygeeky-beacon</code> repo, and nothing else.</div>
+      <dl><dt>Repositories</dt><dd>Only <code>mygeeky-beacon</code></dd><dt>Permissions</dt><dd>Contents: Read and write</dd>
+        <dt>Refused if</dt><dd class="no">it can't write to the beacon, or is token 1 again</dd></dl></div>
+  </div>
+  <div class="wrap three" style="margin-top:18px">
+    <div class="card reveal"><h3>🔑 Keyring only</h3><p>Tokens live in your OS keyring (Credential Locker, Keychain,
+      Secret Service), never in a file, never logged.</p></div>
+    <div class="card reveal"><h3>🏠 Your data stays yours</h3><p>No server, no account, no telemetry. Sync, if you
+      want it, goes to a private GitHub repo you own.</p></div>
+    <div class="card reveal"><h3>📖 Open source</h3><p>MIT-licensed and on GitHub, with tests. Read exactly what it
+      does, and change it if you like.</p></div>
   </div>
 </section>
 
 <section id="start">
-  <div class="wrap center">
+  <div class="wrap center reveal">
     <div class="eyebrow">Get started</div>
     <h2>Up and running in two minutes</h2>
   </div>
-  <div class="wrap steps">
-    <div class="card"><h3>Install</h3><p>On Windows, run the installer and click Next → Next → Finish. Anywhere else:</p>
-      <pre>pip install mygeeky</pre></div>
-    <div class="card"><h3>Tell it who you are</h3><p>Your GitHub username, plus your CV, ORCID or Scholar profile if you like.</p>
-      <pre>mygeeky init</pre></div>
-    <div class="card"><h3>Open the panel</h3><p>Suggestions, repos, your field's pulse and signals, all live. The first run sets up the GUI by itself.</p>
+  <div class="wrap three steps">
+    <div class="card reveal"><h3>Install</h3><p>On Windows, run the installer: Next → Next → Finish. It sets up Python and Git
+      if you don't have them. Anywhere else:</p><pre>pip install mygeeky</pre></div>
+    <div class="card reveal"><h3>Tell it who you are</h3><p>Your GitHub username, plus your CV, ORCID or Scholar profile
+      if you like, and token 1.</p><pre>mygeeky init</pre></div>
+    <div class="card reveal"><h3>Open the panel</h3><p>Everything, live. The first run sets up the GUI by itself.</p>
       <pre>mygeeky gui</pre></div>
   </div>
-  <div class="wrap center" style="margin-top:34px">
-    <a class="btn primary" href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest/download/MyGeeKySetup-{{VERSION}}.exe">⬇ Download for Windows</a>
+</section>
+
+<section>
+  <div class="wrap reveal">
+    <div class="ideas">
+      <div class="lamp">💡</div>
+      <div><h2 style="margin:0 0 6px;font-size:clamp(24px,3vw,32px)">Got an idea? A problem?</h2>
+        <p style="margin:0;color:var(--muted);max-width:560px">Click 💡 in the panel. Your browser opens a ready-to-send
+          issue in <a href="https://github.com/AlsammanAlsamman/myGeeKy-ideas">myGeeKy-ideas</a>, and you press Submit.
+          Nothing is sent until you do.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap reveal">
+    <img src="img/icon_256.png" alt="" style="width:84px;margin:0 auto 20px">
+    <h2>Find <span class="g">your people.</span></h2>
+    <p class="sub" style="margin:0 auto 30px">Free, open source, and yours.</p>
+    <div class="ctas">
+      <a class="btn primary" href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest/download/MyGeeKySetup-{{VERSION}}.exe">⬇ Download for Windows</a>
+      <a class="btn" href="https://pypi.org/project/mygeeky/">🐍 pip install mygeeky</a>
+    </div>
     <p class="note">The installer isn't code-signed yet. If Windows warns you, click <em>More info → Run anyway</em>.</p>
   </div>
 </section>
@@ -315,21 +484,141 @@
     <span>© myGeeKy · MIT License · made by a bioinformatician who doesn't have Facebook</span>
     <div class="links">
       <a href="https://github.com/AlsammanAlsamman/myGeeKy">GitHub</a>
+      <a href="https://github.com/AlsammanAlsamman/myGeeKy/blob/main/docs/GUIDE.md">Guide</a>
       <a href="https://pypi.org/project/mygeeky/">PyPI</a>
-      <a href="https://github.com/AlsammanAlsamman/myGeeKy/releases">Releases</a>
-      <a href="https://github.com/AlsammanAlsamman/myGeeKy/issues">Feedback</a>
+      <a href="https://youtu.be/64uug0YHVUY">Video</a>
+      <a href="https://github.com/AlsammanAlsamman/myGeeKy-ideas">Ideas</a>
     </div>
   </div>
 </footer>
 
 <script>
+(() => {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // copy pip command
   document.getElementById("copy").addEventListener("click", async (e) => {
-    try {
-      await navigator.clipboard.writeText(document.getElementById("pip").textContent);
-      e.target.textContent = "Copied";
-      setTimeout(() => (e.target.textContent = "Copy"), 1500);
-    } catch (_) { /* clipboard blocked: the text is still selectable */ }
+    try { await navigator.clipboard.writeText(document.getElementById("pip").textContent);
+          e.target.textContent = "Copied"; setTimeout(() => (e.target.textContent = "Copy"), 1500); } catch (_) {}
   });
+
+  // rotating word in the headline
+  const words = ["research", "geeks", "your field", "your lab", "science"];
+  const rot = document.getElementById("rot");
+  let wi = 0;
+  if (!still) setInterval(() => {
+    rot.style.transition = "opacity .35s"; rot.style.opacity = 0;
+    setTimeout(() => { wi = (wi + 1) % words.length; rot.textContent = words[wi]; rot.style.opacity = 1; }, 350);
+  }, 2600);
+
+  // reveal on scroll, hero tilt, counters
+  const io = new IntersectionObserver((es) => es.forEach((e) => {
+    if (!e.isIntersecting) return;
+    e.target.classList.add("in"); io.unobserve(e.target);
+  }), { threshold: 0.12 });
+  document.querySelectorAll(".reveal, #heroShot").forEach((el) => io.observe(el));
+  document.querySelectorAll("[data-count]").forEach((el) => {
+    const end = +el.dataset.count; if (!end) { el.textContent = "0"; return; }
+    let n = 0; const step = () => { n++; el.textContent = n; if (n < end) setTimeout(step, 90); };
+    setTimeout(step, 500);
+  });
+
+  // starfield
+  const sky = document.getElementById("sky"), sx = sky.getContext("2d");
+  let stars = [];
+  const size = () => { sky.width = innerWidth * devicePixelRatio; sky.height = innerHeight * devicePixelRatio;
+    stars = Array.from({ length: Math.min(160, innerWidth / 8) }, () => ({ x: Math.random(), y: Math.random(),
+      r: Math.random() * 1.3 + .2, p: Math.random() * 6.28, s: Math.random() * .0002 + .00005 })); };
+  size(); addEventListener("resize", size);
+  const twinkle = (t) => {
+    sx.clearRect(0, 0, sky.width, sky.height);
+    for (const s of stars) {
+      const a = .25 + .35 * Math.sin(t / 900 + s.p);
+      sx.fillStyle = `rgba(255,255,255,${a})`;
+      sx.beginPath(); sx.arc(s.x * sky.width, ((s.y + t * s.s) % 1) * sky.height, s.r * devicePixelRatio, 0, 6.28); sx.fill();
+    }
+    if (!still) requestAnimationFrame(twinkle);
+  };
+  requestAnimationFrame(twinkle);
+
+  // tab showcase
+  const TABS = [
+    ["live", "Live", "Your circle's activity and top suggestions, scrolling live."],
+    ["suggestions", "People", "Likely to follow you back, plus domain experts. You follow by hand."],
+    ["repos", "Repos", "Projects in your field with starter issues and maintainers who merge."],
+    ["market", "Market", "Your field's repos as a stock race: stars, commits, downloads."],
+    ["research", "Research", "Rising papers, the code behind them, and the people."],
+    ["news", "News", "arXiv, bioRxiv and Hacker News about your interests."],
+    ["activity", "Activity", "One card per person: what they're building right now."],
+    ["signals", "Signals", "👋 📚 🤝 👀 from fellow users (example people)."],
+    ["model", "Model", "What myGeeKy knows about you, drawn as a living map."],
+  ];
+  const tabs = document.getElementById("tabs"), frame = document.getElementById("frame");
+  let cur = 0, timer;
+  TABS.forEach(([key, name, text], i) => {
+    const b = document.createElement("button"); b.className = "tabbtn"; b.type = "button";
+    b.innerHTML = `<b>${name}</b><span>${text}</span><i class="prog"></i>`;
+    b.addEventListener("click", () => go(i, true)); tabs.appendChild(b);
+    const im = document.createElement("img"); im.src = `img/${key}.png`; im.alt = `${name} tab`; im.loading = "lazy";
+    frame.appendChild(im);
+  });
+  const go = (i, user) => {
+    cur = i;
+    [...tabs.children].forEach((b, k) => { b.classList.toggle("on", k === i); const p = b.querySelector(".prog");
+      p.style.animation = "none"; void p.offsetWidth; p.style.animation = ""; });
+    [...frame.children].forEach((im, k) => im.classList.toggle("on", k === i));
+    clearTimeout(timer);
+    if (!still) timer = setTimeout(() => go((cur + 1) % TABS.length), user ? 12000 : 6000);
+    tabs.style.setProperty("--dur", user ? "12s" : "6s");
+  };
+  go(0);
+
+  // the interest map, drawn live
+  const cv = document.getElementById("map"), c = cv.getContext("2d");
+  const field = ["genomics", "population genetics", "GWAS", "plant biology", "bioinformatics", "phylogenetics"];
+  const lately = [["single cell", 1], ["fine mapping", .8], ["snakemake", .65], ["spatial omics", .55], ["rust", .4]];
+  const explore = ["climate", "education", "accessibility"];
+  const nodes = [
+    ...field.map((l, i) => ({ l, ring: 0, a: i / field.length * 6.283, s: 9, col: "#7fd8ff" })),
+    ...lately.map(([l, w], i) => ({ l, ring: 1, a: i / lately.length * 6.283 + .6, s: 6 + 10 * w, col: "#ff6fd8" })),
+    ...explore.map((l, i) => ({ l, ring: 2, a: i / explore.length * 6.283 + 1.1, s: 7, col: "#9b87ff" })),
+  ];
+  const R = [0.24, 0.36, 0.46], speed = [0.00006, -0.00004, 0.00003];
+  const draw = (t) => {
+    const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2;
+    c.clearRect(0, 0, W, H);
+    R.forEach((r, k) => { c.beginPath(); c.setLineDash(k === 2 ? [6, 8] : []); c.strokeStyle = "rgba(255,255,255,.10)";
+      c.arc(cx, cy, r * W, 0, 6.283); c.stroke(); });
+    c.setLineDash([]);
+    c.font = "500 15px Inter, sans-serif"; c.textBaseline = "middle";
+    const pos = nodes.map((n) => { const a = n.a + t * speed[n.ring]; return [cx + Math.cos(a) * R[n.ring] * W, cy + Math.sin(a) * R[n.ring] * H]; });
+    nodes.forEach((n, i) => { const [x, y] = pos[i]; c.strokeStyle = n.col + "33"; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(cx, cy); c.lineTo(x, y); c.stroke(); });
+    nodes.forEach((n, i) => {
+      const [x, y] = pos[i];
+      const s = n.ring === 1 ? n.s * (1 + .12 * Math.sin(t / 500 + i)) : n.s;
+      const g = c.createRadialGradient(x, y, 0, x, y, s * 3); g.addColorStop(0, n.col + "77"); g.addColorStop(1, n.col + "00");
+      c.fillStyle = g; c.beginPath(); c.arc(x, y, s * 3, 0, 6.283); c.fill();
+      if (n.ring === 2) { c.setLineDash([4, 4]); c.strokeStyle = n.col; c.lineWidth = 2; c.beginPath(); c.arc(x, y, s, 0, 6.283); c.stroke(); c.setLineDash([]); }
+      else { c.fillStyle = n.col; c.beginPath(); c.arc(x, y, s, 0, 6.283); c.fill(); }
+      c.fillStyle = n.ring === 2 ? n.col : "rgba(242,242,247,.9)";
+      const left = x < cx; c.textAlign = left ? "right" : "left"; c.fillText(n.l, x + (left ? -s - 7 : s + 7), y);
+    });
+    const halo = c.createRadialGradient(cx, cy, 0, cx, cy, 70); halo.addColorStop(0, "rgba(255,111,216,.5)"); halo.addColorStop(1, "rgba(255,111,216,0)");
+    c.fillStyle = halo; c.beginPath(); c.arc(cx, cy, 70, 0, 6.283); c.fill();
+    const core = c.createLinearGradient(cx - 30, cy - 30, cx + 30, cy + 30); core.addColorStop(0, "#ff6fd8"); core.addColorStop(1, "#7a5cff");
+    c.fillStyle = core; c.beginPath(); c.arc(cx, cy, 30, 0, 6.283); c.fill();
+    c.fillStyle = "#fff"; c.font = "800 18px Inter, sans-serif"; c.textAlign = "center"; c.fillText("you", cx, cy + 1);
+    if (!still) requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+
+  // video: load YouTube only on click
+  const yt = document.getElementById("yt");
+  const play = () => { yt.innerHTML = '<iframe src="https://www.youtube-nocookie.com/embed/64uug0YHVUY?autoplay=1&rel=0" title="myGeeKy video" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>'; };
+  yt.addEventListener("click", play, { once: true });
+  yt.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); play(); } });
+})();
 </script>
 </body>
 </html>

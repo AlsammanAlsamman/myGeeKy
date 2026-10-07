@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mygeeky"
-version = "0.7.1"
+version = "0.7.2"
 description = "Your corner of GitHub: the people, projects and pulse of your field, from your CV, repos and papers. Suggests only; never follows anyone for you."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -57,7 +57,10 @@ mygeeky-gui = "mygeeky.gui.app:main"
 mygeeky-setup = "mygeeky.gui.bootstrap:setup_main"
 
 [project.urls]
-Homepage = "https://github.com/AlsammanAlsamman/myGeeKy"
+Homepage = "https://mygeeky.org"
+Source = "https://github.com/AlsammanAlsamman/myGeeKy"
+Documentation = "https://github.com/AlsammanAlsamman/myGeeKy/blob/main/docs/GUIDE.md"
+Ideas = "https://github.com/AlsammanAlsamman/myGeeKy-ideas"
 Issues = "https://github.com/AlsammanAlsamman/myGeeKy/issues"
 
 [tool.setuptools.packages.find]

@@ -327,7 +327,7 @@ def s_reveal(t: float) -> Image.Image:
     hearts(im, t, (W / 2, 380 - size / 2.4), 0.9, n=9, rise=300)
     paste(im, img(ASSETS / "icon_256.png"), (W / 2, 380), size, alpha=k, shadow=False)
     text_center(im, "myGeeKy", 560, font(130, bold=True), TEXT, ease((t - 1.0) / 0.7))
-    gradient_text(im, "the people, projects and pulse of your field", 730, font(54, bold=True), ease((t - 1.8) / 0.7))
+    gradient_text(im, "the people, projects, papers and pulse of your field", 730, font(54, bold=True), ease((t - 1.8) / 0.7))
     text_center(im, "for developers and researchers on GitHub", 820, font(38), MUTED, ease((t - 2.6) / 0.7))
     return im
 
@@ -336,9 +336,12 @@ PILLARS = [
     ("👥", "People", "who share your research and will follow you back", CYAN),
     ("🛠️", "Projects", "repos in your field that welcome your pull requests", GREEN),
     ("📈", "Pulse", "what's rising in your field, every day", AMBER),
+    ("🔬", "Research", "papers gaining citations fastest, and their code", GREEN),
+    ("🗞️", "News", "arXiv, bioRxiv and Hacker News, for your topics", RED),
     ("📰", "Activity", "what your people are building right now", VIOLET),
     ("👋", "Signals", "say hi to fellow geeks, without words", PINK),
-    ("🧠", "Learning", "it learns who actually follows you back", RED),
+    ("🧠", "Learning", "learns what you're into, keeps room to explore", VIOLET),
+    ("💡", "Ideas", "send ideas and problems straight to the maker", AMBER),
 ]
 
 
@@ -347,33 +350,33 @@ def s_pillars(t: float) -> Image.Image:
     a = ease(t / 0.6) * ease((16 - t) / 0.6)
     text_center(im, "One profile. Your whole field.", 90, font(76, bold=True), TEXT, a)
     text_center(im, "from your CV, your repos, and your ORCID & Google Scholar papers", 195, font(36), MUTED, a)
-    tw, th, gx, gy = 520, 270, 40, 40
+    tw, th, gx, gy = 540, 200, 36, 28
     x0 = (W - (3 * tw + 2 * gx)) / 2
     for i, (em, name, line, col) in enumerate(PILLARS):
-        appear = ease((t - 1.2 - i * 1.4) / 0.6) * a
+        appear = ease((t - 1.2 - i * 1.05) / 0.6) * a
         if appear <= 0:
             continue
         x = x0 + (i % 3) * (tw + gx)
-        y = 300 + (i // 3) * (th + gy) + (1 - appear) * 40
+        y = 330 + (i // 3) * (th + gy) + (1 - appear) * 40
         card = Image.new("RGBA", im.size, (0, 0, 0, 0))
         cd = ImageDraw.Draw(card)
         cd.rounded_rectangle((x, y, x + tw, y + th), 26, fill=(255, 255, 255, int(16 * appear)),
                              outline=(255, 255, 255, int(45 * appear)))
-        cd.rounded_rectangle((x + 34, y + 34, x + 94, y + 41), 4, fill=col + (int(255 * appear),))
+        cd.rounded_rectangle((x + 30, y + 26, x + 90, y + 32), 4, fill=col + (int(255 * appear),))
         im.alpha_composite(card)
-        emoji(im, em, (x + 34, y + 66), 54, appear)
-        text_at(im, name, (x + 104, y + 66), font(50, bold=True), col, appear)
+        emoji(im, em, (x + 30, y + 48), 46, appear)
+        text_at(im, name, (x + 92, y + 48), font(44, bold=True), col, appear)
         words, lines, cur = line.split(), [], ""
         for wd in words:
             test = (cur + " " + wd).strip()
-            if ImageDraw.Draw(im).textlength(test, font=font(32)) > tw - 68:
+            if ImageDraw.Draw(im).textlength(test, font=font(29)) > tw - 60:
                 lines.append(cur)
                 cur = wd
             else:
                 cur = test
         lines.append(cur)
         for j, ln in enumerate(lines):
-            text_at(im, ln, (x + 34, y + 152 + j * 44), font(32), (225, 228, 240), appear)
+            text_at(im, ln, (x + 30, y + 112 + j * 38), font(29), (225, 228, 240), appear)
     return im
 
 
@@ -384,8 +387,9 @@ def s_install(t: float) -> Image.Image:
         return im
     t -= 3.6
     pages = ["setup-welcome.png", "setup-github.png", "setup-signals.png", "setup-finish.png"]
-    labels = ["Download MyGeeKySetup.exe and open it", "Your read-only GitHub token, safely in the keyring",
-              "Signals: clear step-by-step instructions", "Start menu, startup, and you're done"]
+    labels = ["Download MyGeeKySetup.exe: it installs Python and Git if needed",
+              "Token 1: checked to be truly read-only, kept in your keyring",
+              "Signals: token 2 is checked to write to one repo only", "Start menu, startup, and you're done"]
     seg = 3.4
     for i, p in enumerate(pages):
         a = fade(t, i * seg, (i + 1) * seg + 0.4, 0.5)
@@ -434,7 +438,9 @@ TOUR = [
     ("market.png", "The pulse of your field", "stars, commits and downloads: who's rising this week"),
     ("signals.png", "Say hi without words", "👋 wave · 📚 learn from you · 🤝 collaborate  (example data)"),
     ("activity.png", "What your people are building, live", "one card per person, right on your screen edge"),
-    ("model.png", "It learns who follows you back", "and gets sharper every week"),
+    ("research.png", "The papers behind the code", "rising papers, their repos, and the people behind them"),
+    ("news.png", "News from your field, not everyone's", "arXiv, bioRxiv and Hacker News, matched to you"),
+    ("model.png", "See what myGeeKy knows about you", "your field, what you're into lately, and new territory"),
 ]
 
 
@@ -489,13 +495,13 @@ def s_close(t: float) -> Image.Image:
                                            fill=(0, 0, 0, int(120 * pa)), outline=(255, 255, 255, int(50 * pa)))
     im.alpha_composite(pill)
     text_center(im, "pip install mygeeky", 718, font(46, mono=True), CYAN, pa)
-    text_center(im, "github.com/AlsammanAlsamman/myGeeKy", 860, font(44, bold=True), TEXT, ease((t - 2.6) / 0.7))
-    text_center(im, "Windows installer on the Releases page", 930, font(32), MUTED, ease((t - 3.0) / 0.7))
+    text_center(im, "mygeeky.org", 840, font(54, bold=True), TEXT, ease((t - 2.6) / 0.7))
+    text_center(im, "github.com/AlsammanAlsamman/myGeeKy  ·  ideas welcome", 920, font(32), MUTED, ease((t - 3.0) / 0.7))
     return im
 
 
 SCENES = [(s_hook, 13.0), (s_reveal, 6.0), (s_pillars, 16.5), (s_install, 23.6), (s_configure, 21.0),
-          (s_signals, 16.2), (s_tour, 34.0), (s_close, 8.0)]
+          (s_signals, 16.2), (s_tour, 44.0), (s_close, 8.0)]
 
 
 def frame_at(t: float) -> Image.Image:

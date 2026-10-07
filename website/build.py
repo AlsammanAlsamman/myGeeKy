@@ -24,6 +24,9 @@ IMAGES = {
     "activity.png": ROOT / "docs/screenshots/activity.png",
     "repos.png": ROOT / "docs/screenshots/repos.png",
     "model.png": ROOT / "docs/screenshots/model.png",
+    "research.png": ROOT / "docs/screenshots/research.png",
+    "news.png": ROOT / "docs/screenshots/news.png",
+    "video-thumbnail.png": ROOT / "docs/video-thumbnail.png",
     "icon_64.png": ROOT / "src/mygeeky/gui/assets/icon_64.png",
     "icon_256.png": ROOT / "src/mygeeky/gui/assets/icon_256.png",
     "og.png": ROOT / "launch/producthunt/gallery-1-hero.png",   # link-preview image

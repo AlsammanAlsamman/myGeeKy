@@ -1108,6 +1108,7 @@ class InterestMap(QWidget):
         font = painter.font()
         font.setPointSizeF(7.6)
         painter.setFont(font)
+        dots = []
         for n in self._nodes:
             p = self._pos(n)
             size = n["size"] * (1 + 0.12 * math.sin(self._phase * 2.2 + n["angle"] * 3)) if n["ring"] == 1 else n["size"]
@@ -1129,13 +1130,31 @@ class InterestMap(QWidget):
             else:
                 painter.setBrush(core)
             painter.drawEllipse(p, size, size)
+            dots.append((n, p, size))
+        # labels last, so none collides with another label or a point: lately-into first, then
+        # new territory, then your field; each tries outward, inward, above, below -- and a label
+        # with no free spot is left to the hover tooltip rather than drawn on top of another
+        fm = painter.fontMetrics()
+        taken = [QRectF(p.x() - sz, p.y() - sz, 2 * sz, 2 * sz) for _, p, sz in dots]
+        taken.append(QRectF(cx - 24, cy - 24, 48, 48))
+        for n, p, size in sorted(dots, key=lambda d: (1, 2, 0).index(d[0]["ring"])):
             label = n["label"] if len(n["label"]) <= 20 else n["label"][:19] + "…"
-            painter.setPen(self._text if n["ring"] < 2 else QColor(n["color"]))
-            dx = p.x() - cx
-            tw = painter.fontMetrics().horizontalAdvance(label)
-            tx = p.x() + size + 4 if dx >= 0 else p.x() - size - 4 - tw
-            tx = max(2, min(self.width() - tw - 2, tx))
-            painter.drawText(QPointF(tx, p.y() + 3), label)
+            tw, th = fm.horizontalAdvance(label), fm.height()
+            out_x = p.x() + size + 4 if p.x() >= cx else p.x() - size - 4 - tw
+            in_x = p.x() - size - 4 - tw if p.x() >= cx else p.x() + size + 4
+            spots = [(out_x, p.y() - th / 2), (in_x, p.y() - th / 2),
+                     (p.x() - tw / 2, p.y() - size - th - 1), (p.x() - tw / 2, p.y() + size + 1)]
+            own = QRectF(p.x() - size, p.y() - size, 2 * size, 2 * size)
+            for x, y in spots:
+                rect = QRectF(x, y, tw, th)
+                if rect.left() < 1 or rect.right() > self.width() - 1 or rect.top() < 0                         or rect.bottom() > self.height():
+                    continue
+                if any(rect.intersects(r.adjusted(-2, -1, 2, 1)) for r in taken if r != own):
+                    continue
+                taken.append(rect)
+                painter.setPen(self._text if n["ring"] < 2 else QColor(n["color"]))
+                painter.drawText(rect, Qt.AlignLeft | Qt.AlignVCenter, label)
+                break
         # you
         halo = QRadialGradient(QPointF(cx, cy), 34)
         halo.setColorAt(0, QColor(255, 111, 216, 120))
