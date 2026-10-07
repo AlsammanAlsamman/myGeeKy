@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import (
+    QRect,
     QUrl,
     QEasingCurve,
     QEvent,
@@ -64,6 +65,7 @@ from .app import THEME_NAMES, THEMES
 from ..config import AVATAR_CACHE_DIR, MyGeekyConfig
 
 ASSETS_DIR = Path(__file__).parent / "assets"
+DOCK_GUARD_MS = 3000   # how often the panel checks it is still docked where it belongs
 ICON_WINDOW = ASSETS_DIR / "icon_64.png"
 ICON_HEADER = ASSETS_DIR / "icon_32.png"
 ICON_FOLDED = ASSETS_DIR / "icon_128.png"   # drawn at ~58px: start large so it downscales crisply
@@ -2403,7 +2405,9 @@ class MyGeekyPanel(QWidget):
 
         self._build_ui()
         self._apply_theme()
+        self._screen_name = ""          # the monitor the panel lives on, remembered across sleep/unplug
         self._dock(folded=False)
+        self._watch_screens()
 
         self._load_status()
         self._load_live_stats()
@@ -3454,19 +3458,65 @@ class MyGeekyPanel(QWidget):
         self._refresh_signals(force=False)  # cached unless due: just re-renders
 
     # ------------------------------------------------------------------ fold/unfold/dock
-    def _dock(self, folded: bool) -> None:
-        # the screen the panel is on now (it stays there when folded/unfolded)
-        screen = self.screen() or QGuiApplication.primaryScreen()
+    def _home_screen(self):
+        """The monitor the panel belongs on: the one it was docked to, if it's
+        connected (again); otherwise wherever it is now, or the primary one."""
+        for screen in QGuiApplication.screens():
+            if self._screen_name and screen.name() == self._screen_name:
+                return screen
+        return self.screen() or QGuiApplication.primaryScreen()
+
+    def _docked_geometry(self, folded: bool, screen) -> QRect:
         rect = screen.availableGeometry()  # excludes the taskbar
-        self.panel_frame.setVisible(not folded)
-        self.folded_widget.setVisible(folded)
         # the folded tab is sized purely by config; the full panel can't go
         # below what its content needs, so position it by that real size
         need = QSize(0, 0) if folded else self.panel_frame.minimumSizeHint()
-        x, y, w, h = logic._panel_geometry(self.cfg, folded, rect, need.width(), need.height())
+        return QRect(*logic._panel_geometry(self.cfg, folded, rect, need.width(), need.height()))
+
+    def _dock(self, folded: bool) -> None:
+        screen = self._home_screen()
+        self._screen_name = screen.name()
+        self.panel_frame.setVisible(not folded)
+        self.folded_widget.setVisible(folded)
         self.setMinimumSize(0, 0)
-        self.setGeometry(x, y, w, h)
+        self.setGeometry(self._docked_geometry(folded, screen))
         self.setWindowOpacity(self.cfg.gui_folded_opacity if folded else self.cfg.gui_opacity)
+
+    # The panel has no drag handle: it always belongs docked to its edge. But
+    # Windows moves windows on its own -- when a monitor sleeps or is
+    # unplugged, the PC locks or resumes, the resolution or scaling changes, a
+    # remote-desktop session connects, or Explorer restarts -- and often parks
+    # them in the middle of the main screen. So whenever screens change, and
+    # every few seconds as a backstop, put it back where it belongs.
+    def _watch_screens(self) -> None:
+        app = QGuiApplication.instance()
+        app.screenAdded.connect(self._on_screen_added)
+        app.screenRemoved.connect(lambda s: self._redock_soon())
+        app.primaryScreenChanged.connect(lambda s: self._redock_soon())
+        for screen in QGuiApplication.screens():
+            self._on_screen_added(screen)
+        self._dock_guard = QTimer(self)
+        self._dock_guard.timeout.connect(self._ensure_docked)
+        self._dock_guard.start(DOCK_GUARD_MS)
+
+    def _on_screen_added(self, screen) -> None:
+        screen.availableGeometryChanged.connect(lambda r: self._redock_soon())
+        screen.geometryChanged.connect(lambda r: self._redock_soon())
+        self._redock_soon()
+
+    def _redock_soon(self) -> None:
+        # Windows finishes rearranging windows a moment after the screen event
+        for delay in (400, 2500):
+            QTimer.singleShot(delay, self._ensure_docked)
+
+    def _ensure_docked(self) -> None:
+        if not self.isVisible() or self.isMinimized():
+            return
+        folded = self.folded_widget.isVisible()
+        want = self._docked_geometry(folded, self._home_screen())
+        have = self.geometry()
+        if abs(have.x() - want.x()) > 2 or abs(have.y() - want.y()) > 2                 or abs(have.width() - want.width()) > 2 or abs(have.height() - want.height()) > 2:
+            self._dock(folded)
 
     def eventFilter(self, obj, event) -> bool:  # noqa: N802 -- Qt's own naming convention
         if obj is self.folded_widget and self.folded_widget.isVisible():

@@ -119,3 +119,43 @@ def test_admin_tab_only_for_the_maker(monkeypatch, user, has_tab):
             w.wait(2000)
         panel.close()
         panel.deleteLater()
+
+
+def test_panel_returns_to_its_edge_after_windows_moves_it(monkeypatch):
+    pytest.importorskip("PySide6")
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+
+    for name, value in (("get_contributions", lambda cfg: []),
+                        ("get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []}),
+                        ("get_activity", lambda cfg, force=False: {"events": []}),
+                        ("get_model_history", lambda: []),
+                        ("get_friend_stats", lambda cfg: {"total_friends": 0, "new_this_week": 0,
+                                                          "follow_back_rate": None, "total_labeled": 0})):
+        monkeypatch.setattr(logic, name, value)
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="someone"))
+    try:
+        panel.show()
+        for folded in (False, True):
+            panel._dock(folded)
+            home = panel.geometry()
+            panel.move(home.x() - 500, home.y() + 120)              # what Windows does after sleep/unplug
+            assert panel.geometry() != home
+            panel._ensure_docked()
+            assert panel.geometry() == home
+            panel._ensure_docked()                                     # already home: nothing changes
+            assert panel.geometry() == home
+        assert panel._dock_guard.isActive()
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(2000)
+        panel.close()
+        panel.deleteLater()
