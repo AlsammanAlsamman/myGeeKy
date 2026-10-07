@@ -46,6 +46,8 @@ one-click installer on the releases page.
 
 GitHub: https://github.com/AlsammanAlsamman/myGeeKy
 
+Video (2.5 min, install + tour): https://youtu.be/VeaHkWyzLK4
+
 It's early, and I'd really value feedback from people here: are the matches
 from your publications any good for your subfield, and what would make the
 "repos to contribute to" list more useful?

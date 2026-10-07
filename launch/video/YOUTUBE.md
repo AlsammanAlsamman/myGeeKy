@@ -1,5 +1,7 @@
 # YouTube upload
 
+**Published:** https://youtu.be/VeaHkWyzLK4 (replaces the first video, https://youtu.be/64uug0YHVUY)
+
 **File:** `launch/video/mygeeky-intro.mp4` (re-render: `python launch/video/make_video.py`)
 **Thumbnail:** `launch/video/youtube-thumbnail.png` (1280×720)
 
