@@ -137,17 +137,32 @@ def check_token(req: dict[str, Any]) -> dict[str, Any]:
 
 
 def store_token(req: dict[str, Any]) -> dict[str, Any]:
+    """Token 1: stored only if it's yours and truly read-only (can't write, can't follow)."""
     import keyring
-    from . import auth
+    from . import auth, token_check
     from .config import load_config
     user = load_config().github_username
-    checked = check_token(req)
-    if not checked["ok"]:
-        return checked
-    if user and checked["login"].lower() != user.lower():
-        return {"ok": False, "error": f"That token belongs to {checked['login']}, not {user}."}
-    keyring.set_password(auth.SERVICE_NAME, user, str(req["token"]).strip())
-    return {"ok": True, "login": checked["login"], "expiry": _expiry_note("read")}
+    token = str(req.get("token") or "").strip()
+    if not token:
+        return {"ok": False, "error": "Paste token 1 first."}
+    verdict = token_check.check("read", token, user, other_token=auth.get_beacon_token(user) if user else None)
+    if not verdict["ok"]:
+        return {"ok": False, "error": "\n".join(verdict["errors"])}
+    keyring.set_password(auth.SERVICE_NAME, user, token)
+    return {"ok": True, "login": user, "expiry": _expiry_note("read"),
+            "notes": [f"Token 1 ✓ {verdict['summary']}"] + verdict["warnings"]}
+
+
+def token_report(req: dict[str, Any]) -> dict[str, Any]:
+    """What each stored token can do, and anything wrong with it (nothing is changed)."""
+    from . import auth, token_check
+    from .config import load_config
+    user = load_config().github_username
+    t1, t2 = auth.get_token(user), auth.get_beacon_token(user)
+    out: dict[str, Any] = {"ok": True}
+    for role, token, other in (("read", t1, t2), ("beacon", t2, t1)):
+        out[role] = token_check.check(role, token, user, other_token=other) if token else None
+    return out
 
 
 def sync_init(req: dict[str, Any]) -> dict[str, Any]:
@@ -179,11 +194,18 @@ def beacon_init(req: dict[str, Any]) -> dict[str, Any]:
     token = new_token or auth.get_beacon_token(user)
     if not token:
         return {"ok": False, "error": "Paste the Step 2 token first."}
+    warnings: list[str] = []
+    if new_token:   # is this really token 2, and not token 1 pasted again?
+        from . import token_check
+        verdict = token_check.check("beacon", new_token, user, other_token=auth.get_token(user))
+        if not verdict["ok"]:
+            return {"ok": False, "error": "\n".join(verdict["errors"])}
+        warnings = [f"Token 2 ✓ {verdict['summary']}"] + verdict["warnings"]
     notes = beacon.ensure_repo(cfg, GitHubClient(auth.get_token(user), rate_limit_sleep=0), create=True)
     beacon.go_live(cfg, beacon.BeaconWriter(token, user))   # the real test: publish with it
     if new_token:  # stored only once it has proven it can write
         keyring.set_password(auth.BEACON_SERVICE_NAME, user, new_token)
-    return {"ok": True, "notes": notes + [_expiry_note("beacon")],
+    return {"ok": True, "notes": notes + warnings + [_expiry_note("beacon")],
             "url": f"https://github.com/{user}/{beacon.BEACON_REPO}"}
 
 
@@ -226,6 +248,7 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "save_profile": save_profile,
     "check_token": check_token,
     "store_token": store_token,
+    "token_report": token_report,
     "sync_init": sync_init,
     "beacon_init": beacon_init,
     "beacon_check": beacon_check,

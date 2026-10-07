@@ -748,10 +748,11 @@ class ProfilePage(Page):
 
 class TokenPage(Page):
     def __init__(self) -> None:
-        super().__init__("Connect GitHub: token 1 of 2",
+        super().__init__("Connect GitHub: token 1 of 2 (read-only)",
                          "myGeeKy reads public profiles, repos and followers, so this token is read-only "
-                         "and can never follow anyone. (Signals, on a later page and optional, uses a "
-                         "separate second token.)")
+                         "and can never follow anyone. Setup checks that: a token that can write to your "
+                         "repos or follow people is refused here. (Signals, on a later page and optional, "
+                         "uses a separate second token that can write to one repo only.)")
         self.keep = QRadioButton("")
         self.paste = QRadioButton("Paste a read-only token")
         self.add(self.keep)
@@ -784,6 +785,7 @@ class TokenPage(Page):
     def on_result(self, result):
         if result.get("ok"):
             self.token.clear()  # don't keep it in memory longer than needed
+            self.w.notes += result.get("notes") or []
             if result.get("expiry"):
                 self.w.notes.append(result["expiry"])
             self.w.refresh_state()
@@ -975,8 +977,9 @@ class SignalsPage(Page):
             "<li><b>Repository access</b> → <b>Only select repositories</b> → pick <b>mygeeky-beacon</b>.</li>"
             "<li><b>Add permissions</b> (under <i>Repositories</i>) → <b>Contents</b> → <b>Read and write</b>. "
             "<i>Metadata: Read-only</i> is added by itself.</li>"
-            "<li>Nothing else. <b>Generate token</b>, copy it, paste it below. Setup tests it by "
-            "publishing your beacon.</li></ol>")
+            "<li>Nothing else. <b>Generate token</b>, copy it, paste it below. Setup checks it can write "
+            "to mygeeky-beacon (and warns if it can write anywhere else), then publishes your beacon.</li></ol>"
+            "<i>Don't paste token 1 here: it's read-only, so it can't publish.</i>")
         if s.get("beacon_token"):
             self.token.setPlaceholderText("Leave empty to use the token already saved, or paste a new one")
 

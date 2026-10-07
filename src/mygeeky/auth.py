@@ -111,6 +111,12 @@ def prompt_and_store_token(username: str) -> None:
     token = getpass.getpass("Paste your GitHub token (input hidden): ").strip()
     if not token:
         raise ValueError("Empty token, nothing stored.")
+    from . import token_check
+    verdict = token_check.check("read", token, username, other_token=get_beacon_token(username))
+    if not verdict["ok"]:
+        raise ValueError("Not stored:\n  " + "\n  ".join(verdict["errors"]))
+    for msg in verdict["warnings"]:
+        print(f"Note: {msg}")
     try:
         keyring.set_password(SERVICE_NAME, username, token)
     except Exception as exc:

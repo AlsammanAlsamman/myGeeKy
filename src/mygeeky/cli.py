@@ -392,9 +392,21 @@ def auth_status() -> None:
     """Show where (if anywhere) your token is coming from -- never prints the token itself."""
     from . import tokens
     cfg = load_config()
-    click.echo(f"Token source: {auth.token_source(cfg.github_username)}")
+    from . import token_check
+    user = cfg.github_username
+    click.echo(f"Token source: {auth.token_source(user)}")
     for t in tokens.status(cfg, force=True):
         click.secho(f"  {'!' if t['warn'] else '-'} {t['message']}", fg="yellow" if t["warn"] else None)
+    t1, t2 = auth.get_token(user), auth.get_beacon_token(user)
+    for role, label, token, other in (("read", "Token 1 (read-only)", t1, t2), ("beacon", "Token 2 (Signals)", t2, t1)):
+        if not token:
+            continue
+        v = token_check.check(role, token, user, other_token=other)
+        click.secho(f"  {'✓' if v['ok'] else '✗'} {label}: {v['summary']}", fg=None if v["ok"] else "red")
+        for msg in v["errors"]:
+            click.secho(f"      ✗ {msg}", fg="red")
+        for msg in v["warnings"]:
+            click.secho(f"      ! {msg}", fg="yellow")
     click.echo(f"Product Hunt token: {'set' if auth.get_producthunt_token(cfg.github_username) else 'not set'}")
     click.echo(f"Renew tokens at {tokens.SETTINGS_URL} (open a token, then 'Regenerate token').")
 
@@ -1387,6 +1399,15 @@ def beacon_init() -> None:
             if attempt == 0 and click.confirm("Open that page in your browser now?", default=True):
                 click.launch(bc.TOKEN_URL)
             token = click.prompt("\nPaste the token (input hidden)", hide_input=True).strip()
+        from . import token_check
+        verdict = token_check.check("beacon", token, user, other_token=auth.get_token(user))
+        for msg in verdict["warnings"]:
+            click.secho(f"  ! {msg}", fg="yellow")
+        if not verdict["ok"]:
+            for msg in verdict["errors"]:
+                click.secho(f"  ✗ {msg}", fg="red")
+            token = None
+            continue
         try:
             bc.go_live(cfg, bc.BeaconWriter(token, user))
         except bc.BeaconError as exc:

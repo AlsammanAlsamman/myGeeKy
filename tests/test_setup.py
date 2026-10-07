@@ -17,7 +17,9 @@ def test_save_profile_validates_and_saves():
 
 def test_store_token_refuses_someone_elses_token(monkeypatch):
     save_config(MyGeekyConfig(github_username="me"))
-    monkeypatch.setattr(setup_api, "check_token", lambda req: {"ok": True, "login": "other"})
+    from mygeeky import token_check
+    monkeypatch.setattr(token_check, "capabilities", lambda token, user, **kw: {"valid": True, "login": "other",
+                                                                               "kind": "fine-grained"})
     stored = []
     import keyring
     monkeypatch.setattr(keyring, "set_password", lambda *a: stored.append(a))

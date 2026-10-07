@@ -248,6 +248,9 @@ def test_beacon_init_walks_through_repo_and_token_and_retries_a_bad_token(monkey
     from mygeeky.config import save_config
 
     save_config(MyGeekyConfig(github_username="me"))
+    from mygeeky import token_check
+    monkeypatch.setattr(token_check, "check", lambda *a, **kw: {"ok": True, "errors": [], "warnings": [],
+                                                                "summary": ""})
     repo_exists = iter([None, None, {"private": False, "topics": []}])
 
     class Client:
