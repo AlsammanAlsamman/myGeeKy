@@ -552,6 +552,7 @@ def repo_steps(user: str) -> list[str]:
 
 def token_steps(user: str) -> list[str]:
     return [
+        "This is a SECOND token, separate from your read-only one, and it needs the repo from step 1.",
         f"Open {TOKEN_URL}",
         f"Token name: mygeeky-beacon. Resource owner: {user}. Pick any expiration.",
         "Repository access: choose 'Only select repositories', then pick mygeeky-beacon.",

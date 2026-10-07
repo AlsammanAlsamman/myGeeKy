@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -78,6 +79,10 @@ QCheckBox::indicator, QRadioButton::indicator { width: 15px; height: 15px; borde
 QCheckBox::indicator { border-radius: 4px; }
 QRadioButton::indicator { border-radius: 8px; }
 QCheckBox::indicator:checked, QRadioButton::indicator:checked { background: #7a5cff; border-color: #7fd8ff; }
+QFrame#stepCard { background: #1c1c29; border: 1px solid #2f2f45; border-radius: 10px; }
+QFrame#stepCard:disabled { background: #17171f; border-color: #24243a; }
+QLabel#stepTitle { font-size: 14px; font-weight: 700; }
+QLabel:disabled { color: #6b6b80; }
 QProgressBar { background: #1f1f2c; border: none; border-radius: 4px; height: 8px; }
 QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff6fd8, stop:1 #7a5cff);
     border-radius: 4px; }
@@ -682,9 +687,10 @@ class ProfilePage(Page):
 
 class TokenPage(Page):
     def __init__(self) -> None:
-        super().__init__("Connect GitHub",
-                         "myGeeKy reads public profiles, repos and followers. It needs a token with "
-                         "read access only, and never anything that could follow someone.")
+        super().__init__("Connect GitHub: token 1 of 2",
+                         "myGeeKy reads public profiles, repos and followers, so this token is read-only "
+                         "and can never follow anyone. (Signals, on a later page and optional, uses a "
+                         "separate second token.)")
         self.keep = QRadioButton("")
         self.paste = QRadioButton("Paste a read-only token")
         self.add(self.keep)
@@ -764,7 +770,7 @@ class SyncPage(Page):
 LINK = 'style="color:#7fd8ff"'
 
 READ_TOKEN_STEPS = (
-    "<b>To create a read-only token:</b><ol style='margin:2px 0 0 -20px'>"
+    "<b>To create token 1 (read-only):</b><ol style='margin:2px 0 0 -20px'>"
     f"<li>Open <a {LINK} href='{READ_TOKEN_URL}'>github.com → new fine-grained token ↗</a>. "
     "Name it <b>mygeeky</b>.</li>"
     "<li><b>Repository access</b> → choose <b>Public repositories</b>.</li>"
@@ -778,113 +784,178 @@ NEW_BEACON_REPO_URL = ("https://github.com/new?name=mygeeky-beacon&visibility=pu
 OL = "<ol style='margin:2px 0 6px -20px'>"
 
 
-def beacon_steps(user: str, has_gh: bool, repo_exists: bool = False) -> str:
-    """The same steps as beacon.repo_steps/token_steps (kept in sync by hand:
-    this file can't import myGeeKy, which may not be installed yet)."""
-    repo = (f"✓ Done: <b>{user}/mygeeky-beacon</b> already exists." if repo_exists else
-            f"Setup creates the public repo <b>{user}/mygeeky-beacon</b> for you." if has_gh else
-            OL + "<li>Click <b>Open github.com/new</b> below. The name <b>mygeeky-beacon</b> and "
-            f"<b>Public</b> are already filled in.</li><li>Check the owner is <b>{user}</b>, then click "
-            "<b>Create repository</b>. Leave it empty; myGeeKy writes the files.</li></ol>")
-    return (
-        f"Your signals live in a public repo, <b>{user}/mygeeky-beacon</b>, written with a token that can "
-        "touch only that repo. Do these in order:"
-        f"<p style='margin:8px 0 2px'><b>Step 1: create the repo</b></p>{repo}"
-        "<p style='margin:8px 0 2px'><b>Step 2: create a token that can write to it</b></p>" + OL +
-        f"<li>Click <b>Open token page</b> below. Name it <b>mygeeky-beacon</b>, owner <b>{user}</b>.</li>"
-        "<li><b>Repository access</b> → <b>Only select repositories</b> → pick <b>mygeeky-beacon</b>. "
-        "(The permission list only appears after you pick the repo, so do Step 1 first.)</li>"
-        "<li>Under <i>Repositories</i>, click <b>Add permissions</b> → <b>Contents</b> "
-        "(older page: <b>Repository permissions</b> → <b>Contents</b>). Set it to <b>Read and write</b>. "
-        "<i>Metadata: Read-only</i> is added by itself; that's fine.</li>"
-        "<li>Nothing else. Click <b>Generate token</b>, copy it (starts with github_pat_), paste it below "
-        "and click Next. Setup tests it by publishing your beacon.</li></ol>")
+def _card(title: str) -> tuple[QFrame, QVBoxLayout]:
+    card = QFrame()
+    card.setObjectName("stepCard")
+    lay = QVBoxLayout(card)
+    lay.setContentsMargins(14, 10, 14, 12)
+    lay.setSpacing(6)
+    head = QLabel(title)
+    head.setObjectName("stepTitle")
+    lay.addWidget(head)
+    return card, lay
 
 
 class SignalsPage(Page):
+    """Two steps, in an order GitHub forces: the repo must exist before a token
+    can be limited to it. Step 2 stays locked until Step 1 is verified on GitHub."""
+
     def __init__(self) -> None:
         super().__init__("Signals (optional)",
                          "Send other myGeeKy users emoji signals (👋 wave · 📚 learn from you · "
                          "🤝 collaborate · 👀 following your work) and see theirs. No text, ever.")
-        self._stage = "none"
+        self._stage = "none"            # none | partial | live | checking
         self.enable = QCheckBox("Join Signals. I understand my signals are public.")
         self.add(self.enable)
-        self.steps = _label("", "muted")
-        self.steps.setTextFormat(Qt.RichText)
-        self.add(self.steps)
-        buttons = QHBoxLayout()
+        self.summary = _label("", "muted")
+        self.summary.setTextFormat(Qt.RichText)
+        self.add(self.summary)
+
+        # Step 1: the public repo
+        self.step1, lay1 = _card("Step 1 · Create your public beacon repo on GitHub")
+        self.step1_text = _label("", "muted")
+        self.step1_text.setTextFormat(Qt.RichText)
+        lay1.addWidget(self.step1_text)
+        self.step1_status = _label("")
+        lay1.addWidget(self.step1_status)
+        row1 = QHBoxLayout()
         self.open_repo = QPushButton("Open github.com/new ↗")
         self.open_repo.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(NEW_BEACON_REPO_URL)))
+        self.create_repo = QPushButton("Create it for me")
+        self.create_repo.clicked.connect(self._create_repo)
+        self.check_repo = QPushButton("I've created it: check ✓")
+        self.check_repo.clicked.connect(self._recheck)
+        for b in (self.open_repo, self.create_repo, self.check_repo):
+            row1.addWidget(b)
+        row1.addStretch(1)
+        lay1.addLayout(row1)
+        self.add(self.step1)
+
+        # Step 2: a second token, for that repo only
+        self.step2, lay2 = _card("Step 2 · Create token 2 of 2: write access to that repo only")
+        self.step2_text = _label("", "muted")
+        self.step2_text.setTextFormat(Qt.RichText)
+        lay2.addWidget(self.step2_text)
+        row2 = QHBoxLayout()
         self.open_token = QPushButton("Open token page ↗")
         self.open_token.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(READ_TOKEN_URL)))
-        buttons.addWidget(self.open_repo)
-        buttons.addWidget(self.open_token)
-        buttons.addStretch(1)
-        self.buttons = QWidget()
-        self.buttons.setLayout(buttons)
-        self.add(self.buttons)
+        row2.addWidget(self.open_token)
+        row2.addStretch(1)
+        lay2.addLayout(row2)
         self.token = QLineEdit()
         self.token.setEchoMode(QLineEdit.Password)
-        self.token.setPlaceholderText("Step 2 token (github_pat_…)")
-        self.add(self.token)
-        self.enable.toggled.connect(self._toggle)
+        self.token.setPlaceholderText("Token 2 (github_pat_…), then click Next")
+        lay2.addWidget(self.token)
+        self.add(self.step2)
+
+        self.enable.toggled.connect(lambda on: self._render())
         self.finish_layout()
 
-    def _toggle(self, on: bool) -> None:
+    # ---- state -> widgets
+    def _render(self) -> None:
         s = self.w.state
-        setting_up = on and not s.get("beacon_enabled")
-        live = self._stage == "live"
-        setting_up = on and not (live and s.get("beacon_enabled") and s.get("beacon_token"))
-        self.steps.setVisible(True)   # read what joining involves before deciding
-        self.buttons.setVisible(setting_up and not live)
-        self.open_repo.setVisible(setting_up and self._stage == "none" and not s.get("gh"))
-        self.token.setVisible(setting_up and not (live and s.get("beacon_token")))
+        user = s.get("github_username", "you")
+        on = self.enable.isChecked()
+        stage = self._stage
+        repo_exists = stage in ("partial", "live")
+        done = stage == "live" and s.get("beacon_enabled") and s.get("beacon_token")
+        self.step1.setVisible(on and not done)
+        self.step2.setVisible(on and not done)
+        if stage == "checking":
+            self.step1_status.setText("Checking GitHub…")
+        elif repo_exists:
+            self.step1_status.setText(f"✓ {user}/mygeeky-beacon exists and is public. Step 1 is done.")
+        else:
+            self.step1_status.setText(f"✗ {user}/mygeeky-beacon doesn't exist yet.")
+        self.step1_status.setObjectName("ok" if repo_exists else "muted")
+        self.step1_status.style().unpolish(self.step1_status)
+        self.step1_status.style().polish(self.step1_status)
+        self.step1_text.setText(
+            f"Click <b>Open github.com/new</b>: the name <b>mygeeky-beacon</b> and <b>Public</b> are filled "
+            f"in. Check the owner is <b>{user}</b>, click <b>Create repository</b>, and leave it empty. "
+            "Then come back and click <b>I've created it</b>.")
+        for b in (self.open_repo, self.check_repo):
+            b.setVisible(not repo_exists)
+        self.create_repo.setVisible(not repo_exists and bool(s.get("gh")))
+        self.check_repo.setEnabled(stage != "checking")
+
+        self.step2.setEnabled(repo_exists)
+        self.step2_text.setText(
+            ("<i>Finish Step 1 first: GitHub only lets a token be limited to a repo that already exists.</i><br>"
+             if not repo_exists else "") +
+            "This is a <b>second</b> token, separate from your read-only one. "
+            f"Name it <b>mygeeky-beacon</b>, owner <b>{user}</b>, then:" + OL +
+            "<li><b>Repository access</b> → <b>Only select repositories</b> → pick <b>mygeeky-beacon</b>.</li>"
+            "<li><b>Add permissions</b> (under <i>Repositories</i>) → <b>Contents</b> → <b>Read and write</b>. "
+            "<i>Metadata: Read-only</i> is added by itself.</li>"
+            "<li>Nothing else. <b>Generate token</b>, copy it, paste it below. Setup tests it by "
+            "publishing your beacon.</li></ol>")
         if s.get("beacon_token"):
             self.token.setPlaceholderText("Leave empty to use the token already saved, or paste a new one")
 
     def initializePage(self) -> None:  # noqa: N802
         super().initializePage()
-        self._stage = "checking"
-        self.steps.setText("Checking your Signals setup on GitHub…")
         self.enable.setChecked(bool(self.w.state.get("beacon_enabled")))
-        self._toggle(self.enable.isChecked())
+        self._recheck()
+
+    def _recheck(self) -> None:
+        self._stage = "checking"
+        self.summary.setText("Checking your Signals setup on GitHub…")
+        self._render()
         python = self.w.python
         self._checker = Worker(lambda wk: api(python, "beacon_check", timeout=60))
         self._checker.done.connect(self._checked)
         self._checker.start()
 
+    def _create_repo(self) -> None:
+        self.create_repo.setEnabled(False)
+        self.step1_status.setText("Creating it with the GitHub CLI…")
+        python = self.w.python
+        self._creator = Worker(lambda wk: api(python, "beacon_create_repo", timeout=120))
+        self._creator.done.connect(lambda r: (self.create_repo.setEnabled(True),
+                                              self.say(r.get("error"), "err") if not r.get("ok") else None,
+                                              self._recheck()))
+        self._creator.start()
+
     def _checked(self, result: Any) -> None:
         """Tick the box for anyone who already has a beacon on GitHub (from
-        another computer, or a setup that stopped halfway), and say exactly
-        where they stand. A brand-new user stays unticked: joining makes your
-        signals public, so it must be their own choice."""
+        another computer, or a setup that stopped halfway), and say where
+        they stand. A brand-new user stays unticked: joining makes signals
+        public, so it must be their own choice."""
         s = self.w.state
         user = s.get("github_username", "you")
         result = result if isinstance(result, dict) else {}
         self._stage = result.get("stage", "none") if result.get("ok") else "none"
-        lines = "".join(f"<br>{'✓' if ok else '✗'} {msg}" for ok, msg in result.get("results") or [])
         repo_link = f"<a {LINK} href='https://github.com/{user}/mygeeky-beacon'>{user}/mygeeky-beacon ↗</a>"
         if self._stage == "live":
             self.enable.setChecked(True)
-            extra = ("" if s.get("beacon_token") else
-                     "<br><br>To send signals from <b>this</b> computer, paste a token made with Step 2 below "
-                     "(or the one you used before).")
-            self.steps.setText(f"<b>You're on Signals:</b> {repo_link}{lines}{extra}")
+            if s.get("beacon_enabled") and s.get("beacon_token"):
+                self.summary.setText(f"<b>✓ You're on Signals:</b> {repo_link}. Nothing to do here.")
+            else:
+                self.summary.setText(f"<b>Your beacon is live</b> ({repo_link}). To send signals from this "
+                                     "computer, paste a token made with Step 2.")
         elif self._stage == "partial":
             self.enable.setChecked(True)
-            self.steps.setText(f"<b>Your Signals setup isn't finished yet</b> ({repo_link}):{lines}"
-                               "<br><br>" + beacon_steps(user, has_gh=True, repo_exists=True))
+            missing = [msg for ok, msg in result.get("results") or [] if not ok]
+            self.summary.setText(f"<b>Your Signals setup isn't finished yet</b> ({repo_link}). "
+                                 + (f"Still missing: {missing[-1]}" if missing else ""))
         else:
-            self.steps.setText(beacon_steps(user, has_gh=bool(s.get("gh"))))
-        self._toggle(self.enable.isChecked())
+            self.summary.setText("It takes two steps on github.com, in this order. Setup checks each one.")
+        self._render()
 
+    # ---- Next
     def job(self):
         s = self.w.state
         if not self.enable.isChecked():
             return None
         if self._stage == "live" and s.get("beacon_enabled") and s.get("beacon_token"):
             return None
+        if self._stage not in ("partial", "live"):
+            return lambda wk: {"ok": False, "error": "Do Step 1 first: create the mygeeky-beacon repo on GitHub, "
+                                                     "then click \"I've created it\". Or untick Join Signals."}
         token = self.token.text().strip()
+        if not token and not s.get("beacon_token"):
+            return lambda wk: {"ok": False, "error": "Paste token 2 (Step 2) first, or untick Join Signals."}
         python = self.w.python
         return lambda wk: api(python, "beacon_init", {"token": token})
 

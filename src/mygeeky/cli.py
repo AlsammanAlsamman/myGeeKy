@@ -1176,7 +1176,7 @@ def beacon_init() -> None:
     click.secho(f"  ✓ {repo} exists and is public.", fg="green")
 
     # Step 2: a token that can write to that one repo, tested by really publishing
-    click.secho("\nStep 2 of 3: a token that can write to that repo only", bold=True)
+    click.secho("\nStep 2 of 3: a second token, that can write to that repo only", bold=True)
     token = auth.get_beacon_token(user)
     for attempt in range(3):
         if not token:

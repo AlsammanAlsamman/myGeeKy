@@ -190,6 +190,18 @@ def beacon_check(req: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "stage": stage, "results": [[ok, msg] for ok, msg in results]}
 
 
+def beacon_create_repo(req: dict[str, Any]) -> dict[str, Any]:
+    """Step 1 done for the user, when the GitHub CLI is installed and logged in."""
+    from . import auth, beacon
+    from .config import load_config
+    from .github_client import GitHubClient
+    _ensure_gh_on_path()
+    cfg = load_config()
+    notes = beacon.ensure_repo(cfg, GitHubClient(auth.get_token(cfg.github_username), rate_limit_sleep=0),
+                               create=True)
+    return {"ok": True, "notes": notes}
+
+
 def schedule(req: dict[str, Any]) -> dict[str, Any]:
     from . import scheduler
     message = scheduler.install(confirmed=True)
@@ -204,6 +216,7 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "sync_init": sync_init,
     "beacon_init": beacon_init,
     "beacon_check": beacon_check,
+    "beacon_create_repo": beacon_create_repo,
     "schedule": schedule,
 }
 

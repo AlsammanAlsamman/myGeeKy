@@ -221,8 +221,13 @@ mygeeky market        # what's rising in your field
 mygeeky beacon init
 ```
 
-It walks you through two things on github.com (a public `mygeeky-beacon` repo
-and a token that can write only to it), checking each step. Details in
+It walks you through two things on github.com, **in this order**:
+1. create a public repo named `mygeeky-beacon`;
+2. create a **second** token (separate from your read-only one) that can write
+   to that repo only. It can only be made once the repo exists.
+
+It checks each step before going on. The Windows installer does the same on its
+*Signals* page, where Step 2 unlocks once Step 1 is verified. Details in
 [Join Signals, step by step](#join-signals-step-by-step).
 
 <details>
@@ -487,7 +492,10 @@ each step worked before going on.
    empty; myGeeKy writes the files. (If the GitHub CLI `gh` is installed and
    logged in, myGeeKy creates the repo for you instead.)
 
-**Step 2: create a token that can write to that one repo.**
+**Step 2: create a second token, one that can write to that repo only.**
+This is separate from the read-only token you made when you set myGeeKy up,
+and it can only be made **after** Step 1: GitHub only lets a token be limited
+to a repo that already exists.
 1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
    Name it `mygeeky-beacon`, with **Resource owner** set to you.
 2. **Repository access** → **Only select repositories** → pick `mygeeky-beacon`.
