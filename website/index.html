@@ -227,8 +227,40 @@
     .feature.flip .copy { order: 0; }
     .three, .tokens { grid-template-columns: 1fr; }
   }
+  .tabcap { display: none; }
+  @media (max-width: 960px) {
+    /* the tour: a swipeable row of chips above the picture, its caption below */
+    .tabs { flex-direction: row; overflow-x: auto; scroll-snap-type: x proximity; gap: 6px; padding: 2px 2px 10px;
+            scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent);
+            mask-image: linear-gradient(90deg, #000 85%, transparent); }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabbtn { flex: 0 0 auto; padding: 8px 14px; border-radius: 99px; border-color: var(--line); scroll-snap-align: center; }
+    .tabbtn b { font-size: 14.5px; }
+    .tabbtn span { display: none; }
+    .tabcap { display: block; text-align: center; color: var(--muted); margin: 14px auto 0; max-width: 400px; font-size: 15px; }
+  }
   @media (max-width: 600px) {
+    html, body { overflow-x: clip; }
     nav .links a:not(.btn) { display: none; }
+    nav .wrap { height: 56px; }
+    h1 { font-size: clamp(32px, 10vw, 44px); }
+    .lead { font-size: 16.5px; }
+    .pill { font-size: 12.5px; padding: 6px 12px; }
+    .pill .long { display: none; }
+    .ctas .btn { flex: 1 1 130px; justify-content: center; padding: 12px 10px; font-size: 14.5px; white-space: nowrap; }
+    .ctas .btn.primary { flex-basis: 100%; }
+    .hero-shot { margin-top: 40px; max-width: 340px; }
+    .hero-shot img { transform: none; border-radius: 22px; }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 36px; }
+    h2 { font-size: clamp(26px, 8vw, 34px); }
+    .sub { font-size: 16px; margin-bottom: 28px; }
+    .tile { padding: 20px; }
+    .feature .pic img { max-width: 320px; }
+    .video .play { width: 72px; height: 72px; }
+    .video .play::after { left: 29px; top: 22px; border-width: 14px 0 14px 22px; }
+    .ideas { padding: 24px; gap: 14px; text-align: center; }
+    .lamp { font-size: 52px; }
+    .final { padding: 70px 0 80px; }
     .bento { grid-template-columns: 1fr; }
     .tile.wide { grid-column: auto; }
     .hero { padding-top: 52px; }
@@ -264,7 +296,7 @@
 <header class="hero">
   <div class="wrap">
     <img class="logo" src="img/icon_256.png" alt="myGeeKy icon: two geeks hugging inside a heart">
-    <div class="pill">✨ <b>New in {{VERSION}}</b> · see what myGeeKy knows about you · send ideas with 💡</div>
+    <div class="pill">✨ <b>New in {{VERSION}}</b><span class="long"> · see what myGeeKy knows about you · send ideas with 💡</span></div>
     <h1>Your corner of GitHub,<br>for <span class="g rotator" id="rot">research</span>.</h1>
     <p class="lead">myGeeKy reads your CV, your repos and your ORCID &amp; Google Scholar papers, then shows you the
       <b>people</b>, <b>projects</b>, <b>papers</b> and <b>pulse</b> of your field, in one small glass panel on the edge of
@@ -276,7 +308,10 @@
     </div>
     <div class="pip mono"><span class="dollar">$</span><code id="pip">pip install mygeeky</code><button type="button" id="copy">Copy</button></div>
     <p class="note">Free and open source (MIT) · v{{VERSION}} · Windows installer, or pip on Windows, Linux and macOS</p>
-    <div class="hero-shot" id="heroShot"><img src="img/hero.png" alt="Three myGeeKy panel tabs: People, what myGeeKy knows about you, and research rising in your field" width="1400" height="560"></div>
+    <div class="hero-shot" id="heroShot"><picture>
+      <source media="(max-width: 600px)" srcset="img/model.png">
+      <img src="img/hero.png" alt="myGeeKy panel tabs: People, what myGeeKy knows about you, and research rising in your field" width="1400" height="560">
+    </picture></div>
     <div class="stats">
       <div class="stat"><b data-count="9">0</b><span>tabs, one profile</span></div>
       <div class="stat"><b data-count="6">0</b><span>open data sources</span></div>
@@ -326,7 +361,7 @@
   </div>
   <div class="wrap show reveal">
     <div class="tabs" id="tabs"></div>
-    <div class="frame" id="frame"></div>
+    <div><div class="frame" id="frame"></div><p class="tabcap" id="tabcap"></p></div>
   </div>
 </section>
 
@@ -567,6 +602,11 @@
     [...tabs.children].forEach((b, k) => { b.classList.toggle("on", k === i); const p = b.querySelector(".prog");
       p.style.animation = "none"; void p.offsetWidth; p.style.animation = ""; });
     [...frame.children].forEach((im, k) => im.classList.toggle("on", k === i));
+    document.getElementById("tabcap").textContent = TABS[i][2];
+    if (tabs.scrollWidth > tabs.clientWidth + 4) {   // phones: keep the active chip in view
+      const b = tabs.children[i];
+      tabs.scrollTo({ left: b.offsetLeft - tabs.clientWidth / 2 + b.offsetWidth / 2, behavior: still ? "auto" : "smooth" });
+    }
     clearTimeout(timer);
     if (!still) timer = setTimeout(() => go((cur + 1) % TABS.length), user ? 12000 : 6000);
     tabs.style.setProperty("--dur", user ? "12s" : "6s");
@@ -583,32 +623,64 @@
     ...lately.map(([l, w], i) => ({ l, ring: 1, a: i / lately.length * 6.283 + .6, s: 6 + 10 * w, col: "#ff6fd8" })),
     ...explore.map((l, i) => ({ l, ring: 2, a: i / explore.length * 6.283 + 1.1, s: 7, col: "#9b87ff" })),
   ];
-  const R = [0.24, 0.36, 0.46], speed = [0.00006, -0.00004, 0.00003];
+  const speed = [0.00006, -0.00004, 0.00003];
+  let W = 600, H = 600, R = [0.24, 0.36, 0.46], fs = 15, k = 1;
+  const fit = () => {   // draw at the real on-screen size (sharp on phones), with text that stays readable
+    const css = cv.clientWidth || 600, dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = cv.height = Math.round(css * dpr);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    W = H = css;
+    const small = css < 460;
+    R = small ? [0.17, 0.27, 0.36] : [0.24, 0.36, 0.46];
+    k = small ? 0.7 : 1;
+    fs = Math.max(11, Math.min(15, css / 34));
+  };
+  fit(); addEventListener("resize", fit);
   const draw = (t) => {
-    const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2;
+    const cx = W / 2, cy = H / 2;
     c.clearRect(0, 0, W, H);
     R.forEach((r, k) => { c.beginPath(); c.setLineDash(k === 2 ? [6, 8] : []); c.strokeStyle = "rgba(255,255,255,.10)";
       c.arc(cx, cy, r * W, 0, 6.283); c.stroke(); });
     c.setLineDash([]);
-    c.font = "500 15px Inter, sans-serif"; c.textBaseline = "middle";
+    c.font = `500 ${fs}px Inter, sans-serif`; c.textBaseline = "middle";
     const pos = nodes.map((n) => { const a = n.a + t * speed[n.ring]; return [cx + Math.cos(a) * R[n.ring] * W, cy + Math.sin(a) * R[n.ring] * H]; });
     nodes.forEach((n, i) => { const [x, y] = pos[i]; c.strokeStyle = n.col + "33"; c.lineWidth = 1.2;
       c.beginPath(); c.moveTo(cx, cy); c.lineTo(x, y); c.stroke(); });
+    const dots = [];
     nodes.forEach((n, i) => {
       const [x, y] = pos[i];
-      const s = n.ring === 1 ? n.s * (1 + .12 * Math.sin(t / 500 + i)) : n.s;
+      const s = (n.ring === 1 ? n.s * (1 + .12 * Math.sin(t / 500 + i)) : n.s) * k;
       const g = c.createRadialGradient(x, y, 0, x, y, s * 3); g.addColorStop(0, n.col + "77"); g.addColorStop(1, n.col + "00");
       c.fillStyle = g; c.beginPath(); c.arc(x, y, s * 3, 0, 6.283); c.fill();
       if (n.ring === 2) { c.setLineDash([4, 4]); c.strokeStyle = n.col; c.lineWidth = 2; c.beginPath(); c.arc(x, y, s, 0, 6.283); c.stroke(); c.setLineDash([]); }
       else { c.fillStyle = n.col; c.beginPath(); c.arc(x, y, s, 0, 6.283); c.fill(); }
-      c.fillStyle = n.ring === 2 ? n.col : "rgba(242,242,247,.9)";
-      const left = x < cx; c.textAlign = left ? "right" : "left"; c.fillText(n.l, x + (left ? -s - 7 : s + 7), y);
+      dots.push([n, x, y, s]);
     });
-    const halo = c.createRadialGradient(cx, cy, 0, cx, cy, 70); halo.addColorStop(0, "rgba(255,111,216,.5)"); halo.addColorStop(1, "rgba(255,111,216,0)");
-    c.fillStyle = halo; c.beginPath(); c.arc(cx, cy, 70, 0, 6.283); c.fill();
-    const core = c.createLinearGradient(cx - 30, cy - 30, cx + 30, cy + 30); core.addColorStop(0, "#ff6fd8"); core.addColorStop(1, "#7a5cff");
-    c.fillStyle = core; c.beginPath(); c.arc(cx, cy, 30, 0, 6.283); c.fill();
-    c.fillStyle = "#fff"; c.font = "800 18px Inter, sans-serif"; c.textAlign = "center"; c.fillText("you", cx, cy + 1);
+    const you0 = 30 * k * 1.2;
+    const taken = dots.map(([, x, y, s]) => [x - s, y - s, x + s, y + s]);
+    taken.push([cx - you0, cy - you0, cx + you0, cy + you0]);
+    const hits = (a, b) => a[0] < b[2] + 2 && a[2] > b[0] - 2 && a[1] < b[3] + 1 && a[3] > b[1] - 1;
+    c.textAlign = "left";
+    [...dots].sort((a, b) => [1, 2, 0].indexOf(a[0].ring) - [1, 2, 0].indexOf(b[0].ring)).forEach(([n, x, y, s]) => {
+      const tw = c.measureText(n.l).width, th = fs + 2;
+      const out = x < cx ? x - s - 6 - tw : x + s + 6, inn = x < cx ? x + s + 6 : x - s - 6 - tw;
+      const spots = [[out, y - th / 2], [inn, y - th / 2], [x - tw / 2, y - s - th - 1], [x - tw / 2, y + s + 1]];
+      for (const [sx, sy] of spots) {
+        const r = [sx, sy, sx + tw, sy + th];
+        if (r[0] < 2 || r[2] > W - 2 || r[1] < 0 || r[3] > H) continue;
+        if (taken.some((t) => !(t[0] === x - s && t[1] === y - s) && hits(r, t))) continue;
+        taken.push(r);
+        c.fillStyle = n.ring === 2 ? n.col : "rgba(242,242,247,.9)";
+        c.fillText(n.l, sx, sy + th / 2);
+        break;
+      }
+    });
+    const you = 30 * k;
+    const halo = c.createRadialGradient(cx, cy, 0, cx, cy, you * 2.3); halo.addColorStop(0, "rgba(255,111,216,.5)"); halo.addColorStop(1, "rgba(255,111,216,0)");
+    c.fillStyle = halo; c.beginPath(); c.arc(cx, cy, you * 2.3, 0, 6.283); c.fill();
+    const core = c.createLinearGradient(cx - you, cy - you, cx + you, cy + you); core.addColorStop(0, "#ff6fd8"); core.addColorStop(1, "#7a5cff");
+    c.fillStyle = core; c.beginPath(); c.arc(cx, cy, you, 0, 6.283); c.fill();
+    c.fillStyle = "#fff"; c.font = `800 ${fs + 3}px Inter, sans-serif`; c.textAlign = "center"; c.fillText("you", cx, cy + 1);
     if (!still) requestAnimationFrame(draw);
   };
   requestAnimationFrame(draw);
