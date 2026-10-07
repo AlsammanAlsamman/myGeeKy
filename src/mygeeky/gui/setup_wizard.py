@@ -280,6 +280,8 @@ def api(python: str, action: str, payload: dict[str, Any] | None = None, timeout
             continue
         if not result.get("ok"):
             log(f"step '{action}' failed: {result.get('error')}")
+            if result.get("details"):
+                log("  details:\n" + result["details"].rstrip())
         return result
     # no JSON answer: myGeeKy itself crashed; its last line usually says why
     output = (r.stderr or r.stdout).strip()
@@ -746,18 +748,30 @@ class SyncPage(Page):
         s = self.w.state
         self.repo.setText(s.get("sync_repo") or f"{s.get('github_username', 'you')}/mygeeky-data")
         already = bool(s.get("sync_repo") and s.get("sync_initialized"))
-        self.enable.setChecked(True)
+        self.note.setTextFormat(Qt.RichText)
+        # optional: on by default only where it can actually work
+        self.enable.setChecked(already or bool(s.get("git") and s.get("gh")))
         if already:
             self.note.setText(f"✓ Already syncing with {s['sync_repo']}. Next re-connects and pulls the latest.")
+        elif not s.get("git"):
+            self.note.setText("<b>Optional, and skipped for now:</b> sync needs <b>Git</b>, which isn't on this PC. "
+                              "Everything else works without it. To use it later, install "
+                              f"<a {LINK} href='https://git-scm.com/download/win'>Git for Windows ↗</a> "
+                              "and run <code>mygeeky sync init</code>.")
         elif not s.get("gh"):
-            self.note.setText("Creating a new repo needs the GitHub CLI (`gh`, from cli.github.com, then "
-                              "`gh auth login`). An existing private repo works with your usual git login.")
+            self.note.setText("Creating a new repo needs the GitHub CLI (<code>gh</code>, from cli.github.com, "
+                              "then <code>gh auth login</code>). An existing private repo works with your usual "
+                              "git login.")
         else:
             self.note.setText("It's created as private if it doesn't exist. Tokens are never synced.")
 
     def job(self):
         if not self.enable.isChecked():
             return None
+        if not self.w.state.get("git"):
+            return lambda wk: {"ok": False, "error": "Sync needs Git, which isn't installed on this PC. Untick "
+                                                     "this to skip it (everything else works without it), or "
+                                                     "install Git from git-scm.com and run setup again."}
         repo = self.repo.text().strip()
         python = self.w.python
         return lambda wk: api(python, "sync_init", {"repo": repo}, timeout=900)

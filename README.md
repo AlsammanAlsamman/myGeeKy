@@ -448,7 +448,9 @@ mygeeky profile show        # what myGeeKy knows about you (no network)
 ## Use it from any computer (`mygeeky sync`)
 
 Your myGeeKy data can live in a **private** GitHub repo, so the model keeps
-learning no matter which machine you run it on:
+learning no matter which machine you run it on. It's optional, and it needs
+**Git** ([Git for Windows](https://git-scm.com/download/win) on Windows); the
+installer skips it when Git isn't there.
 
 ```bash
 mygeeky sync init                      # creates <you>/mygeeky-data (private) and pushes

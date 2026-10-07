@@ -63,6 +63,16 @@ class SyncError(RuntimeError):
     pass
 
 
+GIT_MISSING = ("Sync needs Git, which isn't installed on this computer. Install Git for Windows from "
+               "https://git-scm.com/download/win (the default options are fine), open a new terminal, and "
+               "try again. Everything else in myGeeKy works without it.")
+
+
+def _require_git() -> None:
+    if shutil.which("git") is None:
+        raise SyncError(GIT_MISSING)
+
+
 def _has_gh() -> bool:
     return shutil.which("gh") is not None
 
@@ -164,6 +174,7 @@ def init(repo: str) -> str:
     creating the repo (private) if it doesn't exist yet."""
     if "/" not in repo:
         raise SyncError("Give the repo as owner/name, e.g. octocat/mygeeky-data.")
+    _require_git()
     ensure_dirs()
     messages = []
 
@@ -210,6 +221,7 @@ def init(repo: str) -> str:
 
 
 def pull() -> str:
+    _require_git()
     if not is_initialized():
         raise SyncError("Sync isn't set up on this machine -- run `mygeeky sync init --repo owner/name`.")
     _commit_local(f"myGeeKy sync from {_stamp()}")
@@ -226,6 +238,7 @@ def pull() -> str:
 
 
 def push() -> str:
+    _require_git()
     if not is_initialized():
         raise SyncError("Sync isn't set up on this machine -- run `mygeeky sync init --repo owner/name`.")
     committed = _commit_local(f"myGeeKy sync from {_stamp()}")

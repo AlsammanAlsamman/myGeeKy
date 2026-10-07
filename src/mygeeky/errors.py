@@ -45,6 +45,8 @@ def failed_program(exc: BaseException) -> str | None:
 
 def describe(exc: BaseException) -> str:
     """One sentence that says what went wrong, naming the file or program."""
+    if type(exc).__module__.startswith("mygeeky.") and not isinstance(exc, OSError) and str(exc):
+        return str(exc)   # our own errors (SyncError, BeaconError, ...) already say what to do
     if isinstance(exc, FileNotFoundError):
         if exc.filename:
             return f"A file myGeeKy needed wasn't found: {exc.filename}"

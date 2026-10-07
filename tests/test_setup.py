@@ -57,3 +57,48 @@ def test_wizard_helpers():
     assert sw.wheel_version(None) is None
     paths = sw.shortcut_paths()
     assert paths["startup"].parent.name == "Startup" and paths["start_menu"].name == "myGeeKy.lnk"
+
+
+def test_sync_without_git_says_so(monkeypatch):
+    from mygeeky import sync
+    monkeypatch.setattr(sync.shutil, "which", lambda name: None)
+    with pytest.raises(sync.SyncError, match="git-scm.com"):
+        sync.init("me/mygeeky-data")
+    with pytest.raises(sync.SyncError, match="needs Git"):
+        sync.push()
+
+
+def test_setup_api_relays_a_clear_error_and_details(monkeypatch, capsys):
+    import io
+    from mygeeky import sync
+
+    def missing_git(req):
+        raise FileNotFoundError(2, "The system cannot find the file specified")
+    monkeypatch.setitem(setup_api.ACTIONS, "sync_init", missing_git)
+    monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
+    setup_api.main(["sync_init"])
+    out = json.loads(capsys.readouterr().out)
+    assert out["ok"] is False and "details" in out and "Traceback" in out["details"]
+    monkeypatch.setitem(setup_api.ACTIONS, "sync_init", lambda req: (_ for _ in ()).throw(sync.SyncError("Sync needs Git.")))
+    monkeypatch.setattr("sys.stdin", io.StringIO("{}"))
+    setup_api.main(["sync_init"])
+    assert json.loads(capsys.readouterr().out)["error"] == "Sync needs Git."   # our own message, unchanged
+
+
+def test_installer_sync_page_is_off_and_explained_without_git():
+    pytest.importorskip("PySide6")
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.gui import setup_wizard as sw
+    w = sw.SetupWizard()
+    w.state = {"github_username": "me", "git": False, "gh": False, "sync_repo": "", "sync_initialized": False}
+    page = w.page(w.pageIds()[4])
+    page.initializePage()
+    assert not page.enable.isChecked() and "Git" in page.note.text()
+    page.enable.setChecked(True)
+    assert "Untick" in page.job()(None)["error"]
+    w.state.update(git=True, gh=True)
+    page.initializePage()
+    assert page.enable.isChecked()
