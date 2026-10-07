@@ -263,7 +263,7 @@ It checks each step before going on. The Windows installer does the same on its
 </tr>
 <tr>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="240" alt="Activity tab"><br><sub><b>Activity</b> — one card per person; click to expand</sub></td>
-<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — how good it is, what it learned, and the trend</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="240" alt="Model tab"><br><sub><b>Model</b> — what myGeeKy knows about you: your interest map, what teaches it, room to explore, and who follows back</sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="240" alt="Market tab"><br><sub><b>Market</b> — your field's repos as a stock race</sub></td>
 </tr>
 <tr>
@@ -565,7 +565,12 @@ mygeeky interests          # what it has learned, and today's new territory
 mygeeky interests --reset  # forget it (your CV, papers and topics stay)
 ```
 
-The Model tab shows it too, under *What you're into lately*. Turn learning
+The **Model** tab shows all of it as *What myGeeKy knows about you*: an
+animated **interest map** (you in the middle, your research field on the inner
+ring, what you've been into lately pulsing on the middle ring, today's 🔭 new
+territory on the outer ring; hover any point), **what teaches it** (your
+clicks, follows, stars and forks over the last 30 days), **room to explore**,
+and **who follows you back** (the follow-back model). Turn learning
 off with `mygeeky config set interest_learning false`, or exploration with
 `mygeeky config set explore_share 0`.
 

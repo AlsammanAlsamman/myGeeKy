@@ -214,3 +214,58 @@ def test_news_tab_renders_and_clicks_teach(monkeypatch):
             w.wait(2000)
         panel.close()
         panel.deleteLater()
+
+
+def test_brain_summarizes_every_model(monkeypatch):
+    from mygeeky.gui import app as logic
+    from mygeeky import papers
+    monkeypatch.setattr(papers, "load_trends", lambda: {"topics": [{"id": "T1", "name": "Plant genomics"}]})
+    cfg = _cfg(explore_share=0.2)
+    for _ in range(3):
+        interests.record("fork", "single cell atlas", topics=["single-cell"], cfg=cfg)
+    interests.record("follow", "protein design", cfg=cfg)
+    interests.record("repo", "gwas toolkit", topics=["gwas"], cfg=cfg)
+    brain = logic.get_brain(cfg)
+    assert brain["field"] == ["Plant genomics"]
+    assert brain["learned"][0][0] == "single cell"
+    assert brain["taught"] == {"clicks": 1, "follows": 1, "stars": 0, "forks": 3}
+    assert len(brain["explore"]) == 3 and brain["explore_share"] == 0.2
+
+
+def test_model_tab_shows_the_interest_map(monkeypatch):
+    pytest.importorskip("PySide6")
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+
+    brain = {"user": "me", "field": ["Genetic Mapping and Diversity in Plants"], "learned": [("gwas", 3.0)],
+             "explore": ["climate"], "explore_share": 0.2, "taught": {"clicks": 5, "follows": 1, "stars": 0,
+                                                                     "forks": 2}, "learning": True, "half_life": 30}
+    for name, value in (("get_contributions", lambda cfg: []),
+                        ("get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []}),
+                        ("get_activity", lambda cfg, force=False: {"events": []}),
+                        ("get_model_history", lambda: []),
+                        ("get_friend_stats", lambda cfg: {"total_friends": 0, "new_this_week": 0,
+                                                          "follow_back_rate": None, "total_labeled": 0}),
+                        ("get_brain", lambda cfg: brain)):
+        monkeypatch.setattr(logic, name, value)
+    panel = MyGeekyPanel(_cfg())
+    try:
+        panel._switch_tab("model")
+        labels = [n["label"] for n in panel.interest_map._nodes]
+        assert labels == ["Genetic Mapping", "gwas", "climate"]          # field shortened; full name in the tooltip
+        assert [n["ring"] for n in panel.interest_map._nodes] == [0, 1, 2]
+        assert panel.teach_tiles["forks"]._target == 2 and panel.explore_donut._share == 0.2
+        assert "20%" in panel.explore_label.text() and "climate" in panel.explore_label.text()
+        panel.interest_map.grab()                                          # paints without error
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(2000)
+        panel.close()
+        panel.deleteLater()

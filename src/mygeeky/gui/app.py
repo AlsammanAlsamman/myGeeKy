@@ -434,6 +434,36 @@ def refresh_news(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
         return {**news.load_state(), "error": f"Couldn't update the news: {describe(exc)}"}
 
 
+def get_brain(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Everything myGeeKy has learned about you, for the Model tab -- local only."""
+    from datetime import timedelta
+    from .. import interests, papers, scholar
+    field = [t["name"] for t in (papers.load_trends().get("topics") or [])]
+    if not field:
+        field = list(cfg.topics) + scholar.scholar_topics(scholar.load_scholar_profile())
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+    taught = {"clicks": 0, "follows": 0, "stars": 0, "forks": 0}
+    for ev in interests.load_events():
+        try:
+            if datetime.fromisoformat(ev["at"]) < since:
+                continue
+        except (KeyError, ValueError, TypeError):
+            continue
+        kind = ev.get("kind")
+        key = {"follow": "follows", "star": "stars", "fork": "forks"}.get(kind, "clicks")
+        taught[key] += 1
+    return {
+        "user": cfg.github_username,
+        "field": field[:6],
+        "learned": interests.learned_terms(cfg, 10) if cfg.interest_learning else [],
+        "explore": interests.explore_terms(cfg, 3) if cfg.explore_share > 0 else [],
+        "explore_share": cfg.explore_share,
+        "taught": taught,
+        "learning": cfg.interest_learning,
+        "half_life": cfg.interest_half_life_days,
+    }
+
+
 def get_learned_interests(cfg: MyGeekyConfig) -> list[tuple[str, float]]:
     from .. import interests
     return interests.learned_terms(cfg, 10)

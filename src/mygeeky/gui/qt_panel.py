@@ -977,6 +977,225 @@ class ResearcherRow(QFrame):
             self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
 
 
+MAP_FIELD = "#7fd8ff"      # your research field
+MAP_LEARNED = "#ff6fd8"    # what you're into lately
+MAP_EXPLORE = "#9b87ff"    # today's new territory
+
+
+class InterestMap(QWidget):
+    """Your interests as a slowly turning constellation: you in the middle,
+    your research field on the inner ring, what you've been into lately on
+    the middle ring (bigger = stronger, gently pulsing), and today's new
+    territory drifting on a dashed outer ring. Hover a point for what it is."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedHeight(300)
+        self.setMouseTracking(True)
+        self._center = "you"
+        self._nodes: list[dict[str, Any]] = []
+        self._phase = 0.0
+        self._intro = 1.0
+        self._text = QColor("#f0f0f5")
+        self._timer = QTimer(self)
+        self._timer.setInterval(33)
+        self._timer.timeout.connect(self._tick)
+        self._intro_anim = _grow_animation(self, self._set_intro, 1400)
+
+    def set_theme_colors(self, text_color: str) -> None:
+        self._text = QColor(text_color)
+        self.update()
+
+    def set_data(self, center: str, field: list[str], learned: list[tuple[str, float]], explore: list[str]) -> None:
+        self._center = center or "you"
+        top = max((w for _, w in learned), default=1.0) or 1.0
+        def short(topic: str) -> str:   # "Genetic Mapping and Diversity in ..." -> "Genetic Mapping"
+            words = [w for w in topic.split() if w.lower() not in ("and", "in", "of", "the", "for")]
+            return " ".join(words[:2])
+        nodes = [{"ring": 0, "label": short(t), "size": 8.0, "color": MAP_FIELD,
+                  "tip": f"{t}\nYour research field (OpenAlex topics, Scholar interests, your topics)"}
+                 for t in field[:6]]
+        nodes += [{"ring": 1, "label": t, "size": 5.0 + 9.0 * (w / top), "color": MAP_LEARNED,
+                   "tip": f"{t}\nWhat you're into lately: strength {w:g}, learned from your clicks, follows, "
+                          "stars and forks"} for t, w in learned[:10]]
+        nodes += [{"ring": 2, "label": t, "size": 6.0, "color": MAP_EXPLORE,
+                   "tip": f"{t}\nNew territory today: outside your usual interests, on purpose"}
+                  for t in explore[:4]]
+        for ring in (0, 1, 2):
+            members = [n for n in nodes if n["ring"] == ring]
+            step = 2 * math.pi / max(len(members), 1)
+            for i, n in enumerate(members):
+                # each ring starts half a step further round, so labels fall between, not on top
+                n["angle"] = step * i + ring * step / 2 + ring * 0.35
+        self._nodes = nodes
+        self.update()
+
+    def play(self) -> None:
+        self._intro_anim.stop()
+        self._intro_anim.start()
+
+    def _set_intro(self, v: float) -> None:
+        self._intro = v
+        self.update()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._timer.start()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self._timer.stop()
+
+    def _tick(self) -> None:
+        self._phase += 0.033
+        self.update()
+
+    def _geometry(self) -> tuple[float, float, list[float]]:
+        w, h = self.width(), self.height()
+        r = min(w, h) / 2 - 18
+        return w / 2, h / 2, [r * 0.38, r * 0.72, r * 0.98]
+
+    def _pos(self, n: dict[str, Any]) -> QPointF:
+        cx, cy, radii = self._geometry()
+        speed = (0.05, -0.035, 0.022)[n["ring"]]
+        a = n["angle"] + self._phase * speed
+        rr = radii[n["ring"]] * self._intro
+        return QPointF(cx + math.cos(a) * rr, cy + math.sin(a) * rr * 0.86)
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        from PySide6.QtWidgets import QToolTip
+        pos = event.position()
+        best, best_d = None, 18.0
+        for n in self._nodes:
+            p = self._pos(n)
+            d = math.hypot(p.x() - pos.x(), p.y() - pos.y())
+            if d < best_d:
+                best, best_d = n, d
+        if best:
+            QToolTip.showText(event.globalPosition().toPoint(), best["tip"], self)
+        else:
+            QToolTip.hideText()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        cx, cy, radii = self._geometry()
+        # rings
+        for i, r in enumerate(radii):
+            pen = QPen(QColor(255, 255, 255, 26 if i < 2 else 34), 1)
+            if i == 2:
+                pen.setStyle(Qt.DashLine)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(cx, cy), r * self._intro, r * 0.86 * self._intro)
+        # threads from you to each point
+        for n in self._nodes:
+            p = self._pos(n)
+            c = QColor(n["color"])
+            c.setAlpha(40 if n["ring"] < 2 else 28)
+            pen = QPen(c, 1)
+            if n["ring"] == 2:
+                pen.setStyle(Qt.DotLine)
+            painter.setPen(pen)
+            painter.drawLine(QPointF(cx, cy), p)
+        # the points: a soft glow, a core, a label
+        font = painter.font()
+        font.setPointSizeF(7.6)
+        painter.setFont(font)
+        for n in self._nodes:
+            p = self._pos(n)
+            size = n["size"] * (1 + 0.12 * math.sin(self._phase * 2.2 + n["angle"] * 3)) if n["ring"] == 1 else n["size"]
+            glow = QRadialGradient(p, size * 2.6)
+            c = QColor(n["color"])
+            c.setAlpha(110)
+            glow.setColorAt(0, c)
+            c.setAlpha(0)
+            glow.setColorAt(1, c)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QBrush(glow))
+            painter.drawEllipse(p, size * 2.6, size * 2.6)
+            core = QColor(n["color"])
+            if n["ring"] == 2:
+                painter.setBrush(Qt.NoBrush)
+                pen = QPen(core, 1.4)
+                pen.setStyle(Qt.DashLine)
+                painter.setPen(pen)
+            else:
+                painter.setBrush(core)
+            painter.drawEllipse(p, size, size)
+            label = n["label"] if len(n["label"]) <= 20 else n["label"][:19] + "…"
+            painter.setPen(self._text if n["ring"] < 2 else QColor(n["color"]))
+            dx = p.x() - cx
+            tw = painter.fontMetrics().horizontalAdvance(label)
+            tx = p.x() + size + 4 if dx >= 0 else p.x() - size - 4 - tw
+            tx = max(2, min(self.width() - tw - 2, tx))
+            painter.drawText(QPointF(tx, p.y() + 3), label)
+        # you
+        halo = QRadialGradient(QPointF(cx, cy), 34)
+        halo.setColorAt(0, QColor(255, 111, 216, 120))
+        halo.setColorAt(1, QColor(255, 111, 216, 0))
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QBrush(halo))
+        painter.drawEllipse(QPointF(cx, cy), 34, 34)
+        grad = QLinearGradient(cx - 16, cy - 16, cx + 16, cy + 16)
+        grad.setColorAt(0, QColor("#ff6fd8"))
+        grad.setColorAt(1, QColor("#7a5cff"))
+        painter.setBrush(QBrush(grad))
+        painter.drawEllipse(QPointF(cx, cy), 16, 16)
+        font.setPointSizeF(8.5)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("white"))
+        initials = "".join(w[0] for w in self._center.replace("-", " ").split()[:2]).upper() or "Y"
+        painter.drawText(QRectF(cx - 16, cy - 16, 32, 32), Qt.AlignCenter, initials[:2])
+        painter.end()
+
+
+class ExploreDonut(QWidget):
+    """How much of every list is kept for new territory."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedSize(84, 84)
+        self._share = 0.0
+        self._shown = 0.0
+        self._text = QColor("#f0f0f5")
+        self._anim = _grow_animation(self, self._set, 1100)
+
+    def set_theme_colors(self, text_color: str) -> None:
+        self._text = QColor(text_color)
+        self.update()
+
+    def set_share(self, share: float) -> None:
+        self._share = max(0.0, min(share, 1.0))
+        self._shown = self._share
+        self.update()
+
+    def play(self) -> None:
+        self._anim.stop()
+        self._anim.start()
+
+    def _set(self, v: float) -> None:
+        self._shown = self._share * v
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        rect = QRectF(8, 8, self.width() - 16, self.height() - 16)
+        painter.setPen(QPen(QColor(255, 255, 255, 30), 9, Qt.SolidLine, Qt.RoundCap))
+        painter.drawArc(rect, 0, 360 * 16)
+        painter.setPen(QPen(QColor(MAP_EXPLORE), 9, Qt.SolidLine, Qt.RoundCap))
+        painter.drawArc(rect, 90 * 16, -int(360 * 16 * self._shown))
+        painter.setPen(self._text)
+        font = painter.font()
+        font.setPointSizeF(11)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.drawText(rect, Qt.AlignCenter, f"{round(self._shown * 100)}%")
+        painter.end()
+
+
 class SuggestionCard(QFrame):
     """Clicking anywhere on the card opens the profile; the panel then drops
     the person from the suggestions (see MyGeekyPanel._on_suggestion_clicked)."""
@@ -2692,6 +2911,47 @@ class MyGeekyPanel(QWidget):
         layout.setContentsMargins(0, 4, 4, 4)
         layout.setSpacing(10)
 
+        self.brain_title = QLabel("What myGeeKy knows about you")
+        layout.addWidget(self.brain_title)
+        self.brain_intro = QLabel("")
+        self.brain_intro.setWordWrap(True)
+        layout.addWidget(self.brain_intro)
+
+        self.map_header = QLabel("\U0001f9ed YOUR INTEREST MAP")
+        layout.addWidget(self.map_header)
+        self.interest_map = InterestMap()
+        layout.addWidget(self.interest_map)
+        self.map_legend = QLabel("")
+        self.map_legend.setWordWrap(True)
+        self.map_legend.setTextFormat(Qt.RichText)
+        layout.addWidget(self.map_legend)
+
+        self.teach_header = QLabel("\U0001f9e0 WHAT TEACHES IT (LAST 30 DAYS)")
+        layout.addWidget(self.teach_header)
+        teach = QHBoxLayout()
+        teach.setSpacing(6)
+        self.teach_tiles = {key: StatTile(caption) for key, caption in (
+            ("clicks", "clicks"), ("follows", "follows"), ("stars", "stars"), ("forks", "forks"))}
+        for tile in self.teach_tiles.values():
+            teach.addWidget(tile, 1)
+        layout.addLayout(teach)
+        self.teach_hint = QLabel("")
+        self.teach_hint.setWordWrap(True)
+        layout.addWidget(self.teach_hint)
+
+        self.explore_header = QLabel("\U0001f52d ROOM TO EXPLORE")
+        layout.addWidget(self.explore_header)
+        explore_row = QHBoxLayout()
+        explore_row.setSpacing(10)
+        self.explore_donut = ExploreDonut()
+        explore_row.addWidget(self.explore_donut)
+        self.explore_label = QLabel("")
+        self.explore_label.setWordWrap(True)
+        explore_row.addWidget(self.explore_label, 1)
+        layout.addLayout(explore_row)
+
+        self.followback_header = QLabel("\U0001f465 WHO FOLLOWS YOU BACK")
+        layout.addWidget(self.followback_header)
         hero = QHBoxLayout()
         hero.setSpacing(12)
         self.auc_gauge = AucGauge()
@@ -2729,14 +2989,6 @@ class MyGeekyPanel(QWidget):
         layout.addWidget(self.model_section_labels[1])
         self.chart = TrendChart()
         layout.addWidget(self.chart)
-        self.interests_header = QLabel("WHAT YOU'RE INTO LATELY")
-        self.interests_header.setStyleSheet("font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
-                                            "margin-top:6px; background:transparent;")
-        layout.addWidget(self.interests_header)
-        self.interests_label = QLabel("")
-        self.interests_label.setWordWrap(True)
-        self.interests_label.setTextFormat(Qt.PlainText)
-        layout.addWidget(self.interests_label)
         self.model_footer_label = QLabel("")
         self.model_footer_label.setWordWrap(True)
         layout.addWidget(self.model_footer_label)
@@ -2851,6 +3103,7 @@ class MyGeekyPanel(QWidget):
     def _on_theme_clicked(self, name: str) -> None:
         if logic.set_theme(self.cfg, name):
             self._apply_theme()
+            self._render_brain()
             self._render_suggestions_from_cache()
             self._load_market()
 
@@ -3359,13 +3612,7 @@ class MyGeekyPanel(QWidget):
         self.model_tiles["retrains"].set_value(len(history))
 
         self.weight_bars.set_weights(logic.get_model_weights())
-        learned = logic.get_learned_interests(self.cfg)
-        share = int(round(self.cfg.explore_share * 100))
-        self.interests_label.setText(
-            ("  ·  ".join(t for t, _ in learned) if learned else
-             "Nothing yet. As you click people, repos and news, follow, star or fork, myGeeKy learns "
-             "what you're into and tunes People, Repos, the Market and News to it.")
-            + (f"\n🔭 {share}% of every list stays open for new territory." if share else ""))
+        self._render_brain()
         self.chart.set_history(history)
         if latest.get("timestamp"):
             self.model_footer_label.setText(
@@ -3374,13 +3621,50 @@ class MyGeekyPanel(QWidget):
         else:
             self.model_footer_label.setText("No retrains yet -- run mygeeky bootstrap, then mygeeky learn.")
 
+    def _render_brain(self) -> None:
+        brain = logic.get_brain(self.cfg)
+        theme = THEMES[self._theme_name()]
+        self.interest_map.set_data(brain["user"], brain["field"], brain["learned"], brain["explore"])
+        self.brain_intro.setText("Four models shape what you see: your research field, what you've been into "
+                                 "lately, room to explore, and who's likely to follow you back.")
+        dot = lambda c: f"<span style='color:{c}; font-size:13px'>\u25cf</span>"  # noqa: E731
+        ring = f"<span style='color:{MAP_EXPLORE}; font-size:13px'>\u25cc</span>"
+        self.map_legend.setText(
+            f"{dot(MAP_FIELD)} your research field &nbsp; {dot(MAP_LEARNED)} what you're into lately "
+            f"(bigger = stronger) &nbsp; {ring} new territory today. Hover a point for more."
+            + ("" if brain["learned"] else "<br><i>Nothing learned yet: click people, repos and news, "
+                                           "or follow, star and fork on GitHub, and your map grows.</i>"))
+        for key, tile in self.teach_tiles.items():
+            tile.set_value(brain["taught"][key])
+        self.teach_hint.setText(
+            (f"Each action fades to half after {brain['half_life']:g} days, so your map follows where your "
+             "work is going. Forks count most, then follows and stars, then clicks.")
+            if brain["learning"] else "Learning is off (mygeeky config set interest_learning true).")
+        self.explore_donut.set_share(brain["explore_share"])
+        share = round(brain["explore_share"] * 100)
+        self.explore_label.setText(
+            (f"{share}% of every list (People, Repos, News, Research) is kept for things outside your usual "
+             "interests, marked 🔭." + (f" Today: {', '.join(brain['explore'])}." if brain["explore"] else ""))
+            if share else "Exploration is off (mygeeky config set explore_share 0.2 turns it on).")
+        self.brain_title.setStyleSheet(f"color:{theme['text']}; font-size:15px; font-weight:700; background:transparent;")
+        for lbl in (self.brain_intro, self.map_legend, self.teach_hint, self.explore_label):
+            lbl.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        for lbl in (self.map_header, self.teach_header, self.explore_header, self.followback_header):
+            lbl.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
+                              "margin-top:8px; background:transparent;")
+        self.interest_map.set_theme_colors(theme["text"])
+        self.explore_donut.set_theme_colors(theme["text"])
+        for tile in self.teach_tiles.values():
+            tile.apply_theme(theme)
+
     def _style_model_grade(self) -> None:
         color = _auc_color(getattr(self, "_model_auc", None)).name()
         self.model_grade_label.setStyleSheet(
             f"color:{color}; font-size:20px; font-weight:700; background:transparent;")
 
     def _play_model_animations(self) -> None:
-        for widget in (self.auc_gauge, self.weight_bars, self.chart, *self.model_tiles.values()):
+        for widget in (self.auc_gauge, self.weight_bars, self.chart, *self.model_tiles.values(),
+                       self.interest_map, self.explore_donut, *self.teach_tiles.values()):
             widget.play()
 
     # ------------------------------------------------------------------ tabs
