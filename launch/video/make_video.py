@@ -282,8 +282,7 @@ BEACON = Terminal([
     (7.0, "ask", "Paste the token (input hidden): |********"),
     (8.2, "out", "  ✓ The token works. It's stored in your OS keyring."),
     (9.0, "out", "Step 3 of 3: checking that others can see you\n  ✓ beacon.json is published"),
-    (10.4, "out", "Your beacon is live. Signals are private: only the person you
-"
+    (10.4, "out", "Your beacon is live. Signals are private: only the person you\n"
                   "  send one to can read it, and no reply is ever expected."),
 ], title="mygeeky beacon init: join Signals (optional)")
 
