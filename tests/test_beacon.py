@@ -209,7 +209,7 @@ def test_public_beacon_reveals_nothing_about_who_was_signalled():
     assert set(pub) == {"mygeeky_beacon", "keys", "status", "quiet", "interests", "sealed"}
     text = json.dumps(pub)
     assert "alice" not in text and "thanks" not in text                     # who and what stay sealed
-    assert pub["keys"] == [my_pub] and pub["interests"] == ["gwas", "fine mapping"]
+    assert pub["keys"] == [my_pub] and set(pub["interests"]) == {"gwas", "fine mapping"}
     assert len(pub["sealed"]) == 1 and len(pub["sealed"][0]["at"]) == 10   # only the day
     assert bc.public_beacon(b, _cfg(topics=["gwas"], beacon_share_interests=False), my_pub)["interests"] == []
 

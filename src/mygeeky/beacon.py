@@ -378,9 +378,20 @@ def public_beacon(beacon: dict[str, Any], cfg: MyGeekyConfig, my_public_key: str
         "keys": keys[:MAX_KEYS],
         "status": cfg.beacon_status if cfg.beacon_status in STATUSES else "",
         "quiet": bool(cfg.beacon_quiet),
-        "interests": clean_interests(cfg.topics + cfg.keywords + cfg.languages) if cfg.beacon_share_interests else [],
+        "interests": _interests(cfg) if cfg.beacon_share_interests else [],
         "sealed": sorted(sealed.values(), key=lambda s: s["at"]),
     }
+
+
+def _interests(cfg: MyGeekyConfig) -> list[str]:
+    """Your interest tags, keywords the dictionary doesn't know yet first: that's
+    how they reach the maker, who teaches them to the next dictionary."""
+    try:
+        from . import keywords
+        red = keywords.split_known(cfg.keywords)[1]
+    except Exception:
+        red = []
+    return clean_interests(red + cfg.topics + cfg.keywords + cfg.languages)
 
 
 BEACON_README = """\

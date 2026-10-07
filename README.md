@@ -171,6 +171,21 @@ myGeeKy reminds you a week before either one expires, and `mygeeky auth status` 
   <sub><b>Folded</b>, it's just a small icon on your screen edge that now and then lets out a few floating hearts (turn them off in ⚙).</sub>
 </p>
 
+## 🔤 Keywords that mean something
+
+Add **AI** and myGeeKy also looks for LLMs, deep learning and AI agents; add **GWAS** and it brings in
+genomics and statistical genetics. A small model reads which GitHub topics go together across the most-starred
+repos, and builds a **keyword dictionary** that every myGeeKy uses.
+
+- 🟢 **Green** keywords are in the dictionary: they bring their whole meaning to People, Repos, Research and News.
+- 🔴 **Red** ones aren't yet: they still work as plain words, and they're **passed on** (through your
+  Signals beacon, or with one click as a suggestion) so the next dictionary learns them.
+
+```bash
+mygeeky keywords add AI "single cell"   # or in the panel: Model → 🔤 Your keywords
+mygeeky keywords explain gwas           # what it brings in, and how strongly
+```
+
 ## 🧠 It learns, and keeps room to explore
 
 <table>

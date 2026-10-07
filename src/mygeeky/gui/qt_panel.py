@@ -5,6 +5,7 @@ requiring PySide6 to be importable."""
 from __future__ import annotations
 
 import hashlib
+import html
 import math
 import re
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from typing import Any, Callable
 
 from PySide6.QtCore import (
     QRect,
+    QStringListModel,
     QUrl,
     QEasingCurve,
     QEvent,
@@ -44,6 +46,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QCompleter,
     QDialog,
     QLineEdit,
     QPlainTextEdit,
@@ -3097,6 +3100,12 @@ class MyGeekyPanel(QWidget):
         self.admin_prospects.setContentsMargins(0, 0, 0, 0)
         self.admin_prospects.setSpacing(6)
         layout.addWidget(prospect_box)
+        self.admin_kw_header = QLabel("\U0001f524 KEYWORDS TO TEACH")
+        layout.addWidget(self.admin_kw_header)
+        self.admin_kw = QLabel("")
+        self.admin_kw.setWordWrap(True)
+        self.admin_kw.setTextFormat(Qt.RichText)
+        layout.addWidget(self.admin_kw)
         layout.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -3141,7 +3150,21 @@ class MyGeekyPanel(QWidget):
         updated = data.get("fetched_at")
         if not getattr(self, "_admin_running", False):
             self.admin_updated.setText("updated " + _time_ago(updated) if updated else "")
-        for lbl in self.admin_headers:
+        rows = data.get("keyword_requests") or []
+        if rows:
+            listed = " · ".join(
+                f"<b>{html.escape(r['word'])}</b> <span style='color:{theme['muted']}'>"
+                + (f"{r['people']} on Signals" if r["people"] else "")
+                + (", " if r["people"] and r["suggested"] else "")
+                + (f"{r['suggested']} suggested" if r["suggested"] else "") + "</span>"
+                for r in rows[:30])
+            self.admin_kw.setText(f"{listed}<br><span style='color:{theme['muted']}'>Teach them: run "
+                                  "<code>mygeeky admin keywords build</code>, then publish a release.</span>")
+        else:
+            self.admin_kw.setText(f"<span style='color:{theme['muted']}'>No unknown keywords yet. They come "
+                                  "from beacons and from the suggest button.</span>")
+        self.admin_kw.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; background:transparent;")
+        for lbl in self.admin_headers + [self.admin_kw_header]:
             lbl.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
                               "margin-top:6px; background:transparent;")
         for lbl in (self.admin_funnel, self.admin_hint, self.admin_updated):
@@ -3292,6 +3315,35 @@ class MyGeekyPanel(QWidget):
         self.map_legend.setWordWrap(True)
         self.map_legend.setTextFormat(Qt.RichText)
         layout.addWidget(self.map_legend)
+
+        # your keywords: green ones mean something to the model, red ones are plain words for now
+        self.kw_header = QLabel("\U0001f524 YOUR KEYWORDS")
+        layout.addWidget(self.kw_header)
+        self.kw_chips = QLabel("")
+        self.kw_chips.setWordWrap(True)
+        self.kw_chips.setTextFormat(Qt.RichText)
+        self.kw_chips.setTextInteractionFlags(Qt.LinksAccessibleByMouse)
+        self.kw_chips.linkActivated.connect(self._on_keyword_link)
+        self.kw_chips.linkHovered.connect(self._on_keyword_hover)
+        layout.addWidget(self.kw_chips)
+        kw_row = QHBoxLayout()
+        kw_row.setSpacing(6)
+        self.kw_input = QLineEdit()
+        self.kw_input.setPlaceholderText("Add a keyword: AI, single cell, GWAS…")
+        self.kw_input.returnPressed.connect(self._on_add_keyword)
+        self.kw_completer = QCompleter([])
+        self.kw_completer.setCaseSensitivity(Qt.CaseInsensitive)
+        self.kw_completer.setFilterMode(Qt.MatchContains)
+        self.kw_input.setCompleter(self.kw_completer)
+        self.kw_add = QPushButton("Add")
+        self.kw_add.setCursor(Qt.PointingHandCursor)
+        self.kw_add.clicked.connect(self._on_add_keyword)
+        kw_row.addWidget(self.kw_input, 1)
+        kw_row.addWidget(self.kw_add)
+        layout.addLayout(kw_row)
+        self.kw_detail = QLabel("")
+        self.kw_detail.setWordWrap(True)
+        layout.addWidget(self.kw_detail)
 
         self.teach_header = QLabel("\U0001f9e0 WHAT TEACHES IT (LAST 30 DAYS)")
         layout.addWidget(self.teach_header)
@@ -4116,6 +4168,92 @@ class MyGeekyPanel(QWidget):
         self.explore_donut.set_theme_colors(theme["text"])
         for tile in self.teach_tiles.values():
             tile.apply_theme(theme)
+        self._render_keywords()
+
+    # ------------------------------------------------------------------ your keywords
+    KW_HINT = ("<span style='color:#34d399'>● green</span>: myGeeKy knows what it means and also looks "
+               "for what goes with it. <span style='color:#f87171'>● red</span>: used as a plain word "
+               "for now, and passed on so the next dictionary learns it. Click a keyword to see more.")
+
+    def _render_keywords(self) -> None:
+        theme = THEMES[self._theme_name()]
+        data = logic.get_keywords(self.cfg)
+        self._kw_rows = data["rows"]
+        self.kw_completer.setModel(QStringListModel(data["vocabulary"], self.kw_completer))
+        if not self._kw_rows:
+            chips = f"<span style='color:{theme['muted']}'>No keywords yet. Add a few: they shape every list.</span>"
+        else:
+            parts = []
+            for i, row in enumerate(self._kw_rows):
+                color = "#34d399" if row["known"] else "#f87171"
+                parts.append(f"<a href='kw:{i}' style='color:{color}; text-decoration:none'>● "
+                             f"{html.escape(row['word']).replace(' ', '&nbsp;')}</a>&nbsp;<a href='rm:{i}' style='color:{theme['muted']}; "
+                             f"text-decoration:none'>✕</a>")
+            chips = " &nbsp;&nbsp; ".join(parts)
+        self.kw_chips.setText(f"<span style='font-size:12px'>{chips}</span>")
+        self.kw_detail.setText(self.KW_HINT)
+        self.kw_detail.setTextFormat(Qt.RichText)
+        self.kw_header.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:700; "
+                                     "letter-spacing:0.5px; margin-top:8px; background:transparent;")
+        self.kw_detail.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        self.kw_input.setStyleSheet(f"QLineEdit {{ background:{theme['card_bg']}; color:{theme['text']}; "
+                                    f"border:1px solid {theme['btn_bg']}; border-radius:7px; padding:4px 6px; }}")
+        self.kw_add.setStyleSheet(f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; "
+                                  "border:none; border-radius:7px; padding:5px 10px; }")
+
+    def _keyword_at(self, link: str) -> tuple[str, dict[str, Any]] | None:
+        try:
+            action, idx = link.split(":", 1)
+            return action, self._kw_rows[int(idx)]
+        except (ValueError, IndexError, AttributeError):
+            return None
+
+    def _on_keyword_hover(self, link: str) -> None:
+        hit = self._keyword_at(link) if link else None
+        if hit is None or hit[0] != "kw":
+            self.kw_detail.setText(self.KW_HINT)
+            return
+        self.kw_detail.setText(self._keyword_explained(hit[1]))
+
+    def _keyword_explained(self, row: dict[str, Any]) -> str:
+        word = html.escape(row["word"])
+        if row["known"]:
+            related = ", ".join(html.escape(r) for r in row["related"]) or "its own topic"
+            return f"<b>{word}</b> also brings in: {related}."
+        return (f"<b>{word}</b> isn't in the dictionary yet, so it's matched as a plain word. "
+                "Click it to suggest it to myGeeKy's maker (a GitHub issue you submit).")
+
+    def _on_keyword_link(self, link: str) -> None:
+        hit = self._keyword_at(link)
+        if hit is None:
+            return
+        action, row = hit
+        if action == "rm":
+            words = [r["word"] for r in self._kw_rows if r is not row]
+            self._save_keywords(words)
+        elif row["known"]:
+            self.kw_detail.setText(self._keyword_explained(row))
+        else:
+            logic.suggest_keyword(row["word"])
+            self.kw_detail.setText(f"Your browser opened a suggestion for <b>{html.escape(row['word'])}</b>: "
+                                   "click <b>Submit new issue</b> there to send it. Thank you!")
+
+    def _on_add_keyword(self) -> None:
+        word = " ".join(self.kw_input.text().split())
+        if not word:
+            return
+        self.kw_input.clear()
+        self._save_keywords([r["word"] for r in getattr(self, "_kw_rows", [])] + [word])
+
+    def _save_keywords(self, words: list[str]) -> None:
+        self.kw_add.setEnabled(False)
+
+        def done(result: Any) -> None:
+            self.kw_add.setEnabled(True)
+            self._render_keywords()
+            if isinstance(result, dict) and result.get("note"):
+                self.kw_detail.setText(html.escape(result["note"]))
+        self._run_async(lambda: logic.set_keywords(self.cfg, words), done)
 
     def _style_model_grade(self) -> None:
         color = _auc_color(getattr(self, "_model_auc", None)).name()

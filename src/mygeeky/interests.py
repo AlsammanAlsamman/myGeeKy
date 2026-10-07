@@ -147,6 +147,13 @@ def profile_terms(cfg: MyGeekyConfig) -> dict[str, float]:
     weights: dict[str, float] = {}
     for t in cfg.topics + cfg.keywords:
         weights[t.lower().replace("-", " ")] = 1.0
+    try:   # what your keywords mean, from the keyword dictionary
+        from . import keywords
+        for phrase, w in keywords.expand(cfg.topics + cfg.keywords).items():
+            if len(phrase) >= 3:
+                weights.setdefault(phrase, w)
+    except Exception:
+        pass
     for t in cfg.languages:
         weights[t.lower()] = 0.4
     corpus = ""

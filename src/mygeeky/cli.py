@@ -14,11 +14,13 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import click
 
 from . import __version__
 from . import auth
+from . import keywords
 from .config import (
     CV_TEXT_FILE,
     MyGeekyConfig,
@@ -654,7 +656,7 @@ def _run_suggestions(cfg: MyGeekyConfig) -> dict[str, list[dict]]:
     client = _client_for(cfg)
 
     self_profile = _self_profile(client, cfg)
-    vocabulary = build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size)
+    vocabulary = keywords.enrich_vocabulary(build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size), cfg)
 
     following = set(client.list_following(cfg.github_username))
     save_following_snapshot(following)  # baseline for the next `learn` run, if none exists yet
@@ -982,7 +984,7 @@ def _run_contribute(cfg: MyGeekyConfig) -> list[dict]:
         raise click.ClickException("Run `mygeeky init` first.")
     client = _client_for(cfg)
     self_profile = _self_profile(client, cfg)
-    vocabulary = build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size)
+    vocabulary = keywords.enrich_vocabulary(build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size), cfg)
     results = suggest_repositories(client, cfg, self_profile, vocabulary,
                                    keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()),
                                    log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
@@ -1043,7 +1045,7 @@ def contribute(as_json: bool, last: bool) -> None:
 def _market_terms(client: GitHubClient, cfg: MyGeekyConfig) -> list[str]:
     from .contribute import search_terms
     self_profile = _self_profile(client, cfg)
-    vocabulary = build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size)
+    vocabulary = keywords.enrich_vocabulary(build_domain_vocabulary(self_profile.corpus, cfg.domain_vocab_size), cfg)
     return search_terms(cfg, self_profile, vocabulary,
                         keyword_counts=scholar.scholar_keyword_counts(scholar.load_scholar_profile()))
 
@@ -1270,6 +1272,47 @@ def admin_mark(login: str, status: str) -> None:
     click.echo(f"{login}: {status}" if result["ok"] else result["message"])
 
 
+@admin_cmd.group("keywords")
+def admin_keywords() -> None:
+    """The keyword dictionary: what people asked for, and rebuilding it."""
+
+
+@admin_keywords.command("requests")
+def admin_keywords_requests() -> None:
+    """Keywords the dictionary doesn't know yet (from beacons and suggestions)."""
+    cfg = load_config()
+    _require_admin(cfg)
+    rows = keywords.keyword_requests(_client_for(cfg), cfg)
+    if not rows:
+        click.echo("No unknown keywords yet.")
+    for r in rows:
+        click.echo(f"  {r['word']:<30} on Signals: {r['people']:<3} suggested: {r['suggested']}")
+
+
+@admin_keywords.command("build")
+@click.option("--max-terms", default=300, show_default=True, help="Keywords to learn (one search call each).")
+@click.option("--no-requests", is_flag=True, help="Don't add the requested keywords to the seeds.")
+@click.option("--out", type=click.Path(dir_okay=False, path_type=Path), default=None,
+              help="Where to write it (default: the package's data/keywords.json).")
+def admin_keywords_build(max_terms: int, no_requests: bool, out: Path | None) -> None:
+    """Rerun the model on GitHub's open data and write a new dictionary."""
+    cfg = load_config()
+    _require_admin(cfg)
+    client = _client_for(cfg)
+    extra = [] if no_requests else [r["word"] for r in keywords.keyword_requests(client, cfg)]
+    if extra:
+        click.echo(f"Including {len(extra)} requested keyword(s): {', '.join(extra[:12])}")
+    click.echo(f"Learning up to {max_terms} keywords (about {max_terms * 5.5 / 60:.0f} minutes)...")
+    d = keywords.build(client, extra=extra, max_terms=max_terms, log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    path = keywords.save(d, out or keywords.BUNDLED)
+    taught = [w for w in extra if keywords.known(w)]
+    click.echo(f"Wrote {path}: {len(d['terms'])} keywords, version {d['version']}.")
+    if extra:
+        click.echo(f"Learned {len(taught)} of the {len(extra)} requested: {', '.join(taught) or '-'} "
+                   "(the others have too few repos on GitHub to learn from yet).")
+    click.echo("Publish it: commit data/keywords.json and push (everyone picks it up within a week).")
+
+
 @admin_cmd.command("stats")
 def admin_stats() -> None:
     """Adoption: PyPI downloads, installer downloads, stars, forks, Signals users."""
@@ -1278,6 +1321,99 @@ def admin_stats() -> None:
     _require_admin(cfg)
     for k, v in admin.adoption(_client_for(cfg)).items():
         click.echo(f"  {k:<22} {'-' if v is None else v}")
+
+
+# --------------------------------------------------------------------------- keywords
+@main.group("keywords", invoke_without_command=True)
+@click.pass_context
+def keywords_cmd(ctx: click.Context) -> None:
+    """Your keywords. Green ones mean something (the dictionary knows what goes
+    with them); red ones are plain words for now."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(keywords_list)
+
+
+@keywords_cmd.command("list")
+def keywords_list() -> None:
+    """Your keywords, green (known) or red (plain words for now)."""
+    cfg = load_config()
+    if not cfg.keywords:
+        click.echo("No keywords yet: `mygeeky keywords add \"single cell\" AI`.")
+    for word in cfg.keywords:
+        entry = keywords.lookup(word)
+        if entry:
+            rel = ", ".join(keywords.label_of(r) for r, _ in entry["related"][:6])
+            click.secho(f"  ● {word}", fg="green", nl=False)
+            click.echo(f"   also: {rel}")
+        else:
+            click.secho(f"  ● {word}", fg="red", nl=False)
+            click.echo("   plain word for now (`mygeeky keywords suggest` sends it to the maker)")
+    click.echo(f"\nDictionary version {keywords.load().get('version') or '-'}, "
+               f"{len(keywords.load()['terms'])} keywords.")
+
+
+def _set_keywords(words: list[str]) -> None:
+    from .gui.app import set_keywords
+    result = set_keywords(load_config(), words)
+    if result.get("note"):
+        click.echo(result["note"])
+
+
+@keywords_cmd.command("add")
+@click.argument("words", nargs=-1, required=True)
+def keywords_add(words: tuple[str, ...]) -> None:
+    """Add keywords (quote ones with spaces)."""
+    cfg = load_config()
+    _set_keywords(list(cfg.keywords) + list(words))
+    for w in words:
+        if keywords.known(w):
+            click.secho(f"  ● {w}: known", fg="green")
+        else:
+            click.secho(f"  ● {w}: not in the dictionary yet, used as a plain word", fg="red")
+    keywords_list.callback()
+
+
+@keywords_cmd.command("remove")
+@click.argument("words", nargs=-1, required=True)
+def keywords_remove(words: tuple[str, ...]) -> None:
+    """Remove keywords."""
+    drop = {w.lower() for w in words}
+    _set_keywords([w for w in load_config().keywords if w.lower() not in drop])
+    keywords_list.callback()
+
+
+@keywords_cmd.command("explain")
+@click.argument("word")
+def keywords_explain(word: str) -> None:
+    """What WORD means to myGeeKy."""
+    entry = keywords.lookup(word)
+    if not entry:
+        click.echo(f"'{word}' isn't in the dictionary yet: it's matched as a plain word.")
+        return
+    click.echo(f"{word} -> {entry['label']} ({entry.get('repos', '?')} repos read). Goes with:")
+    for rel, w in entry["related"]:
+        click.echo(f"  {w:5.2f}  {keywords.label_of(rel)}")
+
+
+@keywords_cmd.command("suggest")
+@click.argument("word")
+def keywords_suggest(word: str) -> None:
+    """Ask for WORD to join the dictionary (opens a prefilled GitHub issue you submit)."""
+    from . import ideas
+    url = ideas.keyword_url(word)
+    click.echo("Opening it on GitHub: click 'Submit new issue' there to send it.")
+    click.launch(url)
+
+
+@keywords_cmd.command("update")
+def keywords_update() -> None:
+    """Fetch the newest keyword dictionary now."""
+    from .config import DATA_DIR  # noqa: F401
+    cached = keywords.CACHE_FILE
+    if cached.exists():
+        cached.unlink()
+    changed = keywords.refresh_if_due()
+    click.echo(f"Dictionary version {keywords.load().get('version')}" + (" (updated)" if changed else " (up to date)"))
 
 
 # --------------------------------------------------------------------------- sync

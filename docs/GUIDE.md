@@ -12,6 +12,7 @@ New here? Start with the <a href="https://github.com/AlsammanAlsamman/myGeeKy#re
 [Sync](#use-it-from-any-computer-mygeeky-sync) ·
 [Research trends](#research-trends-and-the-papers-behind-repos-mygeeky-trends) ·
 [News](#news-for-your-field-mygeeky-news) ·
+[Keywords](#keywords-that-mean-something-mygeeky-keywords) ·
 [Learning & exploring](#it-learns-what-youre-into-and-keeps-room-to-explore) ·
 [Signals](#signal-other-mygeeky-users-without-words-mygeeky-beacon) ·
 [Install](#install) · [Updating](#updating) · [Token expiry](#token-expiry) ·
@@ -280,6 +281,38 @@ mygeeky news --refresh    # fetch now
 ```
 
 <br clear="right">
+
+## Keywords that mean something (`mygeeky keywords`)
+
+A keyword in myGeeKy is a **concept, not just a word**. Add "AI" and myGeeKy
+also looks for LLMs, deep learning, AI agents and so on, each weighted by how
+closely it goes with "AI". Add "GWAS" and it brings in genomics, genetics and
+statistical genetics.
+
+```bash
+mygeeky keywords                  # yours: ● green = known, ● red = a plain word for now
+mygeeky keywords add AI "single cell"
+mygeeky keywords explain gwas     # what it brings in, and how strongly
+mygeeky keywords suggest "my niche term"   # ask for a red one to be learned
+```
+
+In the panel: **Model → 🔤 Your keywords**. Type to get suggestions from the
+dictionary, hover a keyword to see what it brings in, ✕ to remove it.
+
+**Where the meaning comes from.** A small, explainable model reads GitHub's
+open data: for each keyword (a GitHub topic) it looks at the 100 most-starred
+repos carrying it and counts which other topics they carry. Topics that go with
+everything ("python", "hacktoberfest") are discounted, so they can't relate to
+everything. The result is a dictionary of a few hundred keywords that ships with
+myGeeKy; a newer one is picked up by itself, at most once a week
+(`mygeeky keywords update` checks now).
+
+**Red keywords aren't lost.** They still work, matched as plain words, and they
+reach myGeeKy's maker so the next dictionary can learn them:
+- automatically, if you're on Signals: your beacon's public interest tags already
+  carry your keywords (red ones first);
+- or when you click a red keyword (or run `mygeeky keywords suggest`): a
+  prefilled GitHub issue that you submit yourself.
 
 ## It learns what you're into, and keeps room to explore
 

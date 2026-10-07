@@ -426,12 +426,56 @@ def news_refresh_due(cfg: MyGeekyConfig) -> bool:
 
 
 def refresh_news(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
-    from .. import news
+    from .. import keywords, news
+    try:
+        keywords.refresh_if_due()   # a newer keyword dictionary, at most once a week
+    except Exception:
+        pass
     try:
         return news.refresh(cfg, force=force)
     except Exception as exc:   # surfaced in the tab, not a crash
         from ..errors import describe
         return {**news.load_state(), "error": f"Couldn't update the news: {describe(exc)}"}
+
+
+def get_keywords(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Your keywords, each green (the dictionary knows what it means) or red
+    (used as a plain word until the dictionary learns it)."""
+    from .. import keywords
+    rows = []
+    for word in cfg.keywords:
+        entry = keywords.lookup(word)
+        rows.append({"word": word, "known": entry is not None,
+                     "related": [keywords.label_of(r) for r, _ in (entry or {}).get("related", [])
+                                 if len(r) >= 3][:6]})
+    terms = keywords.load()["terms"]
+    return {"rows": rows, "version": keywords.load().get("version", ""),
+            "vocabulary": sorted({keywords.label_of(t) for t in terms})}
+
+
+def set_keywords(cfg: MyGeekyConfig, words: list[str]) -> dict[str, Any]:
+    """Save your keywords; on Signals, republish your beacon so red ones reach the maker."""
+    seen, clean = set(), []
+    for w in words:
+        w = " ".join(str(w).split())[:40]
+        if w and w.lower() not in seen:
+            seen.add(w.lower())
+            clean.append(w)
+    cfg.keywords = clean
+    save_config(cfg)
+    note = ""
+    if cfg.beacon_enabled and auth.get_beacon_token(cfg.github_username):
+        try:
+            from .. import beacon as bc
+            bc.publish(cfg, bc.load_my_beacon())
+        except Exception as exc:
+            note = f"Saved. (Couldn't update your beacon: {exc})"
+    return {"ok": True, "note": note}
+
+
+def suggest_keyword(word: str) -> bool:
+    from .. import ideas
+    return open_link(ideas.keyword_url(word))
 
 
 def is_admin(cfg: MyGeekyConfig) -> bool:
@@ -445,7 +489,8 @@ def admin_data(cfg: MyGeekyConfig) -> dict[str, Any]:
     state = admin.load()
     return {"prospects": admin.prospects(state), "funnel": admin.funnel(state),
             "invited_today": admin.invited_today(state), "inbox": state.get("inbox") or [],
-            "adoption": state.get("adoption") or {}, "fetched_at": state.get("updated_at")}
+            "adoption": state.get("adoption") or {}, "fetched_at": state.get("updated_at"),
+            "keyword_requests": state.get("keyword_requests") or []}
 
 
 def admin_refresh(cfg: MyGeekyConfig) -> dict[str, Any]:
@@ -458,6 +503,8 @@ def admin_refresh(cfg: MyGeekyConfig) -> dict[str, Any]:
         state = admin.load()
         state["inbox"] = ideas.inbox(client)
         state["adoption"] = admin.adoption(client)
+        from .. import keywords
+        state["keyword_requests"] = keywords.keyword_requests(client, cfg)
         admin.save(state)
     except Exception as exc:
         from ..errors import describe

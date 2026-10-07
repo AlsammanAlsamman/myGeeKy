@@ -103,6 +103,14 @@ def save_profile(req: dict[str, Any]) -> dict[str, Any]:
         if key in req:
             setattr(cfg, key, _split(req[key]))
     save_config(cfg)
+    try:
+        from . import keywords
+        red = keywords.split_known(cfg.keywords)[1]
+        if red:
+            notes.append("Not in the keyword dictionary yet, so used as plain words for now: "
+                         f"{', '.join(red)}. They're passed on so the next dictionary learns them.")
+    except Exception:
+        pass
     if cfg.orcid_id or cfg.scholar_id:
         try:
             scholar.refresh_scholar_profile(cfg.orcid_id, cfg.scholar_id)

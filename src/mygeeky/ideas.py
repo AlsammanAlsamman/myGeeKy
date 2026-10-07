@@ -24,7 +24,15 @@ KINDS = {
     "idea": ("💡", "Idea", "idea"),
     "problem": ("🐞", "Problem", "problem"),
     "question": ("❓", "Question", "question"),
+    "keyword": ("🔤", "Keyword", "keyword"),
 }
+
+
+def keyword_url(word: str) -> str:
+    """A prefilled issue asking for `word` to join the keyword dictionary."""
+    return issue_url("keyword", f"Keyword: {word}",
+                     f"Please teach myGeeKy's keyword dictionary the word **{word}**.\n\n"
+                     "What it means to me (optional):", include_version=True)
 MAX_URL = 7000          # browsers and GitHub cope with ~8k; stay well under
 
 
