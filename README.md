@@ -1110,3 +1110,11 @@ fit. Both lists go through the same activity-QC and bot/dormant filters.
 ## License
 
 MIT — see [LICENSE](https://github.com/AlsammanAlsamman/myGeeKy/blob/main/LICENSE).
+
+
+## 💡 Ideas, problems and questions
+
+Click **💡** at the top of the panel (or run `mygeeky idea "your idea"`). Pick *Idea*, *Problem* or *Question*,
+write a line or two, and press **Open on GitHub**: your browser opens a ready-to-send issue in
+[myGeeKy-ideas](https://github.com/AlsammanAlsamman/myGeeKy-ideas), and you click **Submit**. Nothing is sent
+until you do, and no token passes through myGeeKy. Issues there are public, so leave out tokens and private data.

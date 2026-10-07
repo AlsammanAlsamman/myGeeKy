@@ -434,6 +434,47 @@ def refresh_news(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
         return {**news.load_state(), "error": f"Couldn't update the news: {describe(exc)}"}
 
 
+def is_admin(cfg: MyGeekyConfig) -> bool:
+    from .. import admin
+    return admin.is_admin(cfg)
+
+
+def admin_data(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """The admin tab from local state (no network)."""
+    from .. import admin
+    state = admin.load()
+    return {"prospects": admin.prospects(state), "funnel": admin.funnel(state),
+            "invited_today": admin.invited_today(state), "inbox": state.get("inbox") or [],
+            "adoption": state.get("adoption") or {}, "fetched_at": state.get("updated_at")}
+
+
+def admin_refresh(cfg: MyGeekyConfig) -> dict[str, Any]:
+    from .. import admin, ideas
+    if not admin.is_admin(cfg):
+        return {"error": "Admin only."}
+    try:
+        client = _build_client(cfg)
+        admin.refresh_prospects(client, cfg)
+        state = admin.load()
+        state["inbox"] = ideas.inbox(client)
+        state["adoption"] = admin.adoption(client)
+        admin.save(state)
+    except Exception as exc:
+        from ..errors import describe
+        return {"error": f"Couldn't refresh: {describe(exc)}"}
+    return {"ok": True}
+
+
+def admin_mark(login: str, status: str) -> dict[str, Any]:
+    from .. import admin
+    return admin.mark(login, status)
+
+
+def admin_invite(cfg: MyGeekyConfig, person: dict[str, Any]) -> dict[str, str]:
+    from .. import admin
+    return admin.invite(person, cfg)
+
+
 def get_brain(cfg: MyGeekyConfig) -> dict[str, Any]:
     """Everything myGeeKy has learned about you, for the Model tab -- local only."""
     from datetime import timedelta

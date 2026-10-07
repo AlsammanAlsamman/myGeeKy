@@ -1194,6 +1194,80 @@ def interests_cmd(reset: bool) -> None:
         click.echo(f"\nNew territory today ({share}% of every list): {', '.join(interests.explore_terms(cfg, 3))}")
 
 
+# --------------------------------------------------------------------------- 💡 ideas
+@main.command()
+@click.argument("title")
+@click.option("--kind", type=click.Choice(["idea", "problem", "question"]), default="idea", show_default=True)
+@click.option("--details", default="", help="More about it.")
+@click.option("--no-version", is_flag=True, help="Don't include the myGeeKy/Python/OS versions.")
+def idea(title: str, kind: str, details: str, no_version: bool) -> None:
+    """Send an idea, a problem or a question to myGeeKy's maker (opens a prefilled GitHub issue)."""
+    from . import ideas
+    url = ideas.issue_url(kind, title, details, include_version=not no_version)
+    click.echo("Opening it on GitHub: click 'Submit new issue' there to send it (it's public).")
+    click.echo(url)
+    click.launch(url)
+
+
+# --------------------------------------------------------------------------- 🛡 admin (the maker only)
+@main.group("admin")
+def admin_cmd() -> None:
+    """The maker's tools: ideas inbox, people to invite, adoption."""
+
+
+def _require_admin(cfg: MyGeekyConfig) -> None:
+    from . import admin
+    if not admin.is_admin(cfg):
+        raise click.ClickException("These commands are for myGeeKy's maker.")
+
+
+@admin_cmd.command("inbox")
+def admin_inbox() -> None:
+    """Newest ideas, problems and questions."""
+    from . import ideas
+    cfg = load_config()
+    _require_admin(cfg)
+    for i in ideas.inbox(_client_for(cfg)):
+        click.echo(f"  {ideas.KINDS[i['kind']][0]} #{i['number']:<4} {i['title'][:80]}  ({i['author']}, "
+                   f"{i['created_at'][:10]}, {i['comments']} comments)")
+
+
+@admin_cmd.command("prospects")
+@click.option("--refresh", is_flag=True, help="Look again (a minute or two).")
+def admin_prospects(refresh: bool) -> None:
+    """People most likely to want myGeeKy (you invite them yourself)."""
+    from . import admin
+    cfg = load_config()
+    _require_admin(cfg)
+    state = admin.refresh_prospects(_client_for(cfg), cfg) if refresh else admin.load()
+    for p in admin.prospects(state):
+        reach = p.get("email") or "(no public email)"
+        click.echo(f"  {p['score']:4.1f}  {p['login']:<22} {reach:<32} {'; '.join(p.get('why', [])[:2])[:60]}")
+    f = admin.funnel(state)
+    click.echo(f"\nInvited {f['invited']}, joined {f['joined']}, declined {f['declined']}. "
+               f"Mark with `mygeeky admin mark <login> invited|declined`.")
+
+
+@admin_cmd.command("mark")
+@click.argument("login")
+@click.argument("status", type=click.Choice(["invited", "declined", "new"]))
+def admin_mark(login: str, status: str) -> None:
+    from . import admin
+    _require_admin(load_config())
+    result = admin.mark(login, status)
+    click.echo(f"{login}: {status}" if result["ok"] else result["message"])
+
+
+@admin_cmd.command("stats")
+def admin_stats() -> None:
+    """Adoption: PyPI downloads, installer downloads, stars, forks, Signals users."""
+    from . import admin
+    cfg = load_config()
+    _require_admin(cfg)
+    for k, v in admin.adoption(_client_for(cfg)).items():
+        click.echo(f"  {k:<22} {'-' if v is None else v}")
+
+
 # --------------------------------------------------------------------------- sync
 @main.group()
 def sync() -> None:

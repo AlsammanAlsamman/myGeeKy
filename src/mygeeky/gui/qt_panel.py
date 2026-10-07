@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import (
+    QUrl,
     QEasingCurve,
     QEvent,
     QParallelAnimationGroup,
@@ -27,6 +28,7 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
+    QDesktopServices,
     QBrush,
     QColor,
     QGuiApplication,
@@ -41,6 +43,10 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDialog,
+    QLineEdit,
+    QPlainTextEdit,
+    QRadioButton,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -1196,6 +1202,169 @@ class ExploreDonut(QWidget):
         painter.end()
 
 
+class IdeaDialog(QDialog):
+    """The 💡: an idea, a problem or a question, sent as a prefilled GitHub issue
+    that the user submits themselves (nothing is sent from here)."""
+
+    def __init__(self, parent: QWidget, theme: dict[str, Any]) -> None:
+        super().__init__(parent)
+        from ..ideas import KINDS
+        self.setWindowTitle("Send an idea to myGeeKy")
+        self.setMinimumWidth(380)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(8)
+        intro = QLabel("Ideas, problems and questions go to myGeeKy's maker as a GitHub issue. Your browser opens "
+                       "it ready to send. Click <b>Submit</b> there, with your GitHub account. It's public, so "
+                       "don't include tokens or private data.")
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+        kinds = QHBoxLayout()
+        self.kind_buttons: dict[str, QRadioButton] = {}
+        for key, (emoji, label, _) in KINDS.items():
+            b = QRadioButton(f"{emoji} {label}")
+            self.kind_buttons[key] = b
+            kinds.addWidget(b)
+        self.kind_buttons["idea"].setChecked(True)
+        kinds.addStretch(1)
+        lay.addLayout(kinds)
+        self.title_edit = QLineEdit()
+        self.title_edit.setPlaceholderText("In a few words")
+        lay.addWidget(self.title_edit)
+        self.details = QPlainTextEdit()
+        self.details.setPlaceholderText("Details: what would help, or what happened and what you expected")
+        self.details.setFixedHeight(110)
+        lay.addWidget(self.details)
+        self.with_version = QCheckBox("Include version info (myGeeKy, Python, Windows version; helps with problems)")
+        self.with_version.setChecked(True)
+        lay.addWidget(self.with_version)
+        self.status = QLabel("")
+        self.status.setWordWrap(True)
+        lay.addWidget(self.status)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        cancel = QPushButton("Close")
+        cancel.clicked.connect(self.reject)
+        self.send = QPushButton("Open on GitHub ↗")
+        self.send.clicked.connect(self._send)
+        row.addWidget(cancel)
+        row.addWidget(self.send)
+        lay.addLayout(row)
+        self.setStyleSheet(f"QDialog {{ background:#17171f; }} QLabel, QRadioButton, QCheckBox {{ color:{theme['text']}; "
+                           f"font-size:11.5px; }} QLineEdit, QPlainTextEdit {{ background:#22222e; color:{theme['text']}; "
+                           f"border:1px solid #34344a; border-radius:7px; padding:5px; }}"
+                           f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                           f"border-radius:7px; padding:6px 12px; }} QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+                           "QRadioButton::indicator { width:12px; height:12px; border-radius:7px; "
+                           "border:2px solid #6b6b88; background:transparent; }"
+                           f"QRadioButton::indicator:checked {{ background:{theme['accent']}; border-color:{theme['accent']}; }}")
+
+    def kind(self) -> str:
+        return next(k for k, b in self.kind_buttons.items() if b.isChecked())
+
+    def _send(self) -> None:
+        from ..ideas import issue_url
+        if not self.title_edit.text().strip():
+            self.status.setText("Give it a short title first.")
+            return
+        url = issue_url(self.kind(), self.title_edit.text(), self.details.toPlainText(), self.with_version.isChecked())
+        QDesktopServices.openUrl(QUrl(url))
+        self.status.setText("✓ Your browser opened it on GitHub: click <b>Submit new issue</b> there to send it. "
+                            "Thank you!")
+
+
+class IdeaRow(QFrame):
+    """One idea/problem/question in the admin inbox; clicking opens it."""
+
+    def __init__(self, item: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+        super().__init__()
+        from ..ideas import KINDS
+        self.setObjectName("ideaRow")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(8)
+        emoji = QLabel(KINDS.get(item.get("kind", "idea"), KINDS["idea"])[0])
+        emoji.setStyleSheet("font-size:14px; background:transparent;")
+        lay.addWidget(emoji)
+        box = QVBoxLayout()
+        box.setSpacing(1)
+        title = QLabel(item.get("title", ""))
+        title.setTextFormat(Qt.PlainText)
+        title.setWordWrap(True)
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        title.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; font-weight:600; background:transparent;")
+        box.addWidget(title)
+        meta = QLabel(f"#{item.get('number')} · {item.get('author', '')} · {_time_ago(item.get('created_at', ''))}"
+                      f" · 💬 {item.get('comments', 0)} · 👍 {item.get('reactions', 0)}")
+        meta.setTextFormat(Qt.PlainText)
+        meta.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        box.addWidget(meta)
+        lay.addLayout(box, 1)
+        self.setStyleSheet(f"QFrame#ideaRow {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"QFrame#ideaRow:hover {{ background:{theme['btn_bg']}; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        url = item.get("url", "")
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
+class ProspectCard(QFrame):
+    """Someone who might want myGeeKy: why, and what you can do. Nothing is
+    ever sent from here: Email opens a draft in your mail app, Copy puts the
+    invite on your clipboard, and you mark them once you've reached out."""
+
+    def __init__(self, person: dict[str, Any], theme: dict[str, Any], on_action: Callable[[str, dict], None],
+                 loader: "AvatarLoader | None" = None) -> None:
+        super().__init__()
+        self.setObjectName("prospectCard")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 7, 8, 7)
+        outer.setSpacing(4)
+        top = QHBoxLayout()
+        top.setSpacing(8)
+        top.addWidget(_avatar_widget(person.get("login", "?"), person.get("avatar", ""), 30, loader))
+        box = QVBoxLayout()
+        box.setSpacing(1)
+        name = QLabel(person.get("name") or person.get("login", ""))
+        name.setTextFormat(Qt.PlainText)
+        name.setStyleSheet(f"color:{theme['text']}; font-size:12px; font-weight:600; background:transparent;")
+        box.addWidget(name)
+        why = QLabel(f"@{person.get('login', '')} · " + "; ".join(person.get("why", [])[:2]))
+        why.setTextFormat(Qt.PlainText)
+        why.setWordWrap(True)
+        why.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        why.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        box.addWidget(why)
+        if person.get("bio"):
+            bio = QLabel(person["bio"][:110])
+            bio.setTextFormat(Qt.PlainText)
+            bio.setWordWrap(True)
+            bio.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            bio.setStyleSheet(f"color:{theme['muted']}; font-size:10px; font-style:italic; background:transparent;")
+            box.addWidget(bio)
+        top.addLayout(box, 1)
+        sc = QLabel(f"{person.get('score', 0):.1f}")
+        sc.setToolTip("How likely they are to want myGeeKy (higher is better)")
+        sc.setStyleSheet(f"color:{theme['accent']}; font-size:12px; font-weight:700; background:transparent;")
+        top.addWidget(sc, 0, Qt.AlignTop)
+        outer.addLayout(top)
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        style = (f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                 f"border-radius:7px; padding:3px 8px; font-size:10.5px; }}"
+                 f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+        actions = [("Profile ↗", "profile"), ("✉ Email" if person.get("email") else "⧉ Copy invite",
+                                              "email" if person.get("email") else "copy"),
+                   ("Invited ✓", "invited"), ("Not now", "declined")]
+        for label, action in actions:
+            b = QPushButton(label)
+            b.setStyleSheet(style)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked=False, a=action: on_action(a, person))
+            row.addWidget(b)
+        row.addStretch(1)
+        outer.addLayout(row)
+        self.setStyleSheet(f"QFrame#prospectCard {{ background:{theme['card_bg']}; border-radius:10px; }}")
+
+
 class SuggestionCard(QFrame):
     """Clicking anywhere on the card opens the profile; the panel then drops
     the person from the suggestions (see MyGeekyPanel._on_suggestion_clicked)."""
@@ -2310,6 +2479,13 @@ class MyGeekyPanel(QWidget):
         header.addWidget(logo)
         header.addStretch(1)
 
+        self.idea_btn = QPushButton("\U0001f4a1")
+        self.idea_btn.setFixedSize(26, 26)
+        self.idea_btn.setCursor(Qt.PointingHandCursor)
+        self.idea_btn.setToolTip("Send an idea, a problem or a question to myGeeKy's maker")
+        self.idea_btn.clicked.connect(self._open_idea_dialog)
+        header.addWidget(self.idea_btn)
+
         self.settings_btn = QPushButton("⚙")
         self.settings_btn.setFixedSize(26, 26)
         self.settings_btn.setCursor(Qt.PointingHandCursor)
@@ -2342,9 +2518,12 @@ class MyGeekyPanel(QWidget):
 
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
-        for name, label in (("live", "Live"), ("suggestions", "People"), ("repos", "Repos"),
-                             ("market", "Market"), ("news", "News"), ("activity", "Activity"),
-                             ("signals", "Signals"), ("model", "Model")):
+        self._is_admin = logic.is_admin(self.cfg)
+        tabs = [("live", "Live"), ("suggestions", "People"), ("repos", "Repos"), ("market", "Market"),
+                ("news", "News"), ("activity", "Activity"), ("signals", "Signals"), ("model", "Model")]
+        if self._is_admin:
+            tabs.append(("admin", "\U0001f6e1"))
+        for name, label in tabs:
             btn = QPushButton(label)
             # Qt's Windows style gives every push button a ~75px minimum width;
             # five of those made the panel wider than gui_expanded_width.
@@ -2368,6 +2547,10 @@ class MyGeekyPanel(QWidget):
         self.content_stack.addWidget(self._build_activity_tab())
         self.content_stack.addWidget(self._build_signals_tab())
         self.content_stack.addWidget(self._build_model_tab())
+        if self._is_admin:
+            self._tab_order.append("admin")
+            self.content_stack.addWidget(self._build_admin_tab())
+            self.tab_buttons["admin"].setToolTip("Admin: ideas inbox, people to invite, adoption (only you see this)")
 
         outer.addWidget(self.panel_frame)
         self.folded_widget.hide()
@@ -2817,6 +3000,141 @@ class MyGeekyPanel(QWidget):
         if result.get("ok"):
             QTimer.singleShot(2500, self._check_tokens)   # another token still due? else the banner goes
 
+    # ------------------------------------------------------------------ 💡 ideas
+    def _open_idea_dialog(self) -> None:
+        IdeaDialog(self, THEMES[self._theme_name()]).exec()
+
+    # ------------------------------------------------------------------ 🛡 admin (the maker only)
+    def _build_admin_tab(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 4, 4)
+        layout.setSpacing(8)
+        actions = QHBoxLayout()
+        self.admin_updated = QLabel("")
+        self.admin_refresh_btn = QPushButton("Refresh")
+        self.admin_refresh_btn.setCursor(Qt.PointingHandCursor)
+        self.admin_refresh_btn.clicked.connect(self._refresh_admin)
+        actions.addWidget(self.admin_updated, 1)
+        actions.addWidget(self.admin_refresh_btn)
+        layout.addLayout(actions)
+        self.admin_headers = [QLabel("\U0001f4c8 ADOPTION"), QLabel("\U0001f4ec IDEAS INBOX"),
+                              QLabel("\U0001f3af PEOPLE TO INVITE")]
+        layout.addWidget(self.admin_headers[0])
+        tiles = QHBoxLayout()
+        tiles.setSpacing(6)
+        self.admin_tiles = {k: StatTile(c) for k, c in (("pypi_week", "PyPI / week"), ("installer_downloads", "installs (.exe)"),
+                                                        ("stars", "stars"), ("signals_users", "on Signals"))}
+        for t in self.admin_tiles.values():
+            tiles.addWidget(t, 1)
+        layout.addLayout(tiles)
+        self.admin_funnel = QLabel("")
+        self.admin_funnel.setWordWrap(True)
+        layout.addWidget(self.admin_funnel)
+        layout.addWidget(self.admin_headers[1])
+        inbox_box = QWidget()
+        self.admin_inbox = QVBoxLayout(inbox_box)
+        self.admin_inbox.setContentsMargins(0, 0, 0, 0)
+        self.admin_inbox.setSpacing(5)
+        layout.addWidget(inbox_box)
+        layout.addWidget(self.admin_headers[2])
+        self.admin_hint = QLabel("Ranked by how likely they are to want myGeeKy. Nothing is ever sent from here: "
+                                 "Email opens a draft in your mail app, Copy puts the invite on your clipboard. "
+                                 "Mark them once you've reached out (10 a day, at most).")
+        self.admin_hint.setWordWrap(True)
+        layout.addWidget(self.admin_hint)
+        prospect_box = QWidget()
+        self.admin_prospects = QVBoxLayout(prospect_box)
+        self.admin_prospects.setContentsMargins(0, 0, 0, 0)
+        self.admin_prospects.setSpacing(6)
+        layout.addWidget(prospect_box)
+        layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        QTimer.singleShot(0, self._render_admin)
+        return scroll
+
+    def _render_admin(self, data: dict[str, Any] | None = None) -> None:
+        theme = THEMES[self._theme_name()]
+        data = data or logic.admin_data(self.cfg)
+        adoption = data.get("adoption") or {}
+        for key, tile in self.admin_tiles.items():
+            v = adoption.get(key)
+            tile.set_value(v or 0, (lambda x: "\u2013") if v is None else None)
+            tile.apply_theme(theme)
+        f = data.get("funnel") or {}
+        self.admin_funnel.setText(f"Invites: {f.get('invited', 0)} sent · {f.get('joined', 0)} joined"
+                                  + (f" ({round(100 * f['joined'] / f['invited'])}%)" if f.get("invited") else "")
+                                  + f" · {f.get('new', 0)} to consider · {data.get('invited_today', 0)}/10 today")
+        _clear_layout(self.admin_inbox)
+        inbox = data.get("inbox") or []
+        if not inbox:
+            empty = QLabel("No ideas yet. They arrive from the \U0001f4a1 button in everyone's panel.")
+            empty.setWordWrap(True)
+            empty.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+            self.admin_inbox.addWidget(empty)
+        for item in inbox[:15]:
+            self.admin_inbox.addWidget(IdeaRow(item, theme, logic.open_link))
+        _clear_layout(self.admin_prospects)
+        people = data.get("prospects") or []
+        if not people:
+            empty = QLabel("No prospects yet: click Refresh.")
+            empty.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+            self.admin_prospects.addWidget(empty)
+        for person in people[:25]:
+            self.admin_prospects.addWidget(ProspectCard(person, theme, self._on_prospect_action, self.avatar_loader))
+        updated = data.get("fetched_at")
+        if not getattr(self, "_admin_running", False):
+            self.admin_updated.setText("updated " + _time_ago(updated) if updated else "")
+        for lbl in self.admin_headers:
+            lbl.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
+                              "margin-top:6px; background:transparent;")
+        for lbl in (self.admin_funnel, self.admin_hint, self.admin_updated):
+            lbl.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+        self.admin_refresh_btn.setStyleSheet(
+            f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
+            f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}")
+
+    def _refresh_admin(self) -> None:
+        if getattr(self, "_admin_running", False):
+            return
+        self._admin_running = True
+        self.admin_refresh_btn.setEnabled(False)
+        self.admin_updated.setText("updating\u2026 (a minute or two)")
+        self._run_async(lambda: logic.admin_refresh(self.cfg), self._on_admin_ready)
+
+    def _on_admin_ready(self, data: Any) -> None:
+        self._admin_running = False
+        self.admin_refresh_btn.setEnabled(True)
+        if isinstance(data, dict) and data.get("error"):
+            self.admin_updated.setText(data["error"])
+        self._render_admin()
+
+    def _on_prospect_action(self, action: str, person: dict[str, Any]) -> None:
+        login = person.get("login", "")
+        if action == "profile":
+            logic.open_link(f"https://github.com/{login}")
+            return
+        if action in ("email", "copy"):
+            invite = logic.admin_invite(self.cfg, person)
+            if action == "email" and invite.get("mailto"):
+                QDesktopServices.openUrl(QUrl(invite["mailto"]))
+            else:
+                QApplication.clipboard().setText(f"{invite['subject']}\n\n{invite['body']}")
+                logic.open_link(f"https://github.com/{login}")
+                self.admin_updated.setText(f"Invite for {login} copied: paste it wherever you reach them.")
+            return
+        result = logic.admin_mark(login, action)
+        if not result.get("ok"):
+            self.admin_updated.setText(result.get("message", ""))
+        self._render_admin()
+
     def _build_settings_panel(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("settings")
@@ -3050,11 +3368,12 @@ class MyGeekyPanel(QWidget):
             f"border-radius:8px; font-size:14px; }}"
             f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
         )
-        self.settings_btn.setStyleSheet(
-            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
-            f"border-radius:8px; font-size:13px; }}"
-            f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
-        )
+        for btn in (self.settings_btn, self.idea_btn):
+            btn.setStyleSheet(
+                f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                f"border-radius:8px; font-size:13px; }}"
+                f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
+            )
         self.settings_panel.setStyleSheet(f"#settings {{ background:{theme['card_bg']}; border-radius:12px; }}")
         self.opacity_value_label.setStyleSheet(f"font-size:10.5px; color:{theme['muted']}; background:transparent;")
         self.hearts_check.setStyleSheet(f"QCheckBox {{ font-size:11px; color:{theme['text']}; background:transparent; }}")

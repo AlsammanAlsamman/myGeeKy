@@ -40,6 +40,7 @@ INTEREST_SEEN_FILE = DATA_DIR / "interest_seen.json"        # your stars/forks a
 NEWS_FILE = DATA_DIR / "news.json"
 TRENDS_FILE = DATA_DIR / "trends.json"                 # research trends from OpenAlex
 PAPERS_CACHE_FILE = DATA_DIR / "papers_cache.json"     # repo -> its published paper (the [P] badge)
+ADMIN_FILE = DATA_DIR / "admin_prospects.json"         # the maker's admin tab: prospects and invites
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
 AVATAR_CACHE_DIR = DATA_DIR / "avatar_cache"
