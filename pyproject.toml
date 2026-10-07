@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mygeeky"
-version = "0.4.4"
+version = "0.4.5"
 description = "Your corner of GitHub: the people, projects and pulse of your field, from your CV, repos and papers. Suggests only; never follows anyone for you."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -52,7 +52,7 @@ gui = []
 dev = ["pytest>=7.4"]
 
 [project.scripts]
-mygeeky = "mygeeky.cli:main"
+mygeeky = "mygeeky.cli:entry"
 mygeeky-gui = "mygeeky.gui.app:main"
 mygeeky-setup = "mygeeky.gui.bootstrap:setup_main"
 

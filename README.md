@@ -585,6 +585,19 @@ It asks PyPI at most once a day, sending nothing about you. Turn it off with
 
 ### If something goes wrong on Windows
 
+Every error says what went wrong, naming the file or program involved, and
+the full details are saved for you to send:
+- **Installer:** `~/.mygeeky/setup.log`. The error message has an *Open the setup log* link.
+- **`mygeeky` command and panel:** the error says where it saved its report
+  (an `error-<date>.txt` in myGeeKy's `logs` folder).
+
+Please attach that file when you [open an issue](https://github.com/AlsammanAlsamman/myGeeKy/issues).
+
+If you don't have Python, or only have the Microsoft Store Python, the
+installer sets up a regular Python 3.12 just for you: with winget when your PC
+has it, otherwise straight from python.org. No admin rights needed.
+
+
 - **`'mygeeky' is not recognized`**: pip put the command in a folder that isn't
   on your PATH (common with the Microsoft Store Python). Use `python -m mygeeky`
   instead, e.g. `python -m mygeeky init`. It offers once to add that folder to

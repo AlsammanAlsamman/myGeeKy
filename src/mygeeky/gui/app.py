@@ -517,6 +517,31 @@ def _panel_geometry(cfg: MyGeekyConfig, folded: bool, screen_rect,
 
 
 def main() -> None:
+    """Start the panel. It usually runs without a console (pythonw), so a
+    failure must be shown in a message box -- otherwise it just never appears."""
+    import sys
+    from ..config import LOG_DIR
+    from ..errors import ISSUES_URL, describe, save_crash_report, show_message_box
+
+    def log_late_error(kind, exc, tb):   # errors after start-up: report, don't crash silently
+        if issubclass(kind, KeyboardInterrupt):
+            return sys.__excepthook__(kind, exc, tb)
+        save_crash_report(exc.with_traceback(tb), LOG_DIR, "panel")
+    sys.excepthook = log_late_error
+    try:
+        _main()
+    except SystemExit:
+        raise
+    except Exception as exc:
+        report = save_crash_report(exc, LOG_DIR, "panel start-up")
+        show_message_box("myGeeKy couldn't start",
+                         f"{describe(exc)}\n\n"
+                         + (f"Full details were saved to:\n{report}\n\n" if report else "")
+                         + f"If it keeps happening, please report it at {ISSUES_URL}")
+        raise SystemExit(1)
+
+
+def _main() -> None:
     from .bootstrap import ensure_qt
     ensure_qt()  # installs Qt on first use, wherever this Python can hold it
 

@@ -127,6 +127,25 @@ def update(only_check: bool) -> None:
                "(or click Update in the panel).")
 
 
+def entry() -> None:
+    """The `mygeeky` command: main(), but an unexpected failure gets a clear
+    sentence and a saved report instead of a raw traceback."""
+    try:
+        main(prog_name="mygeeky")
+    except KeyboardInterrupt:
+        raise SystemExit(130)
+    except Exception as exc:   # click already handled its own errors and SystemExit
+        from .config import LOG_DIR
+        from .errors import ISSUES_URL, describe, save_crash_report
+        report = save_crash_report(exc, LOG_DIR, "command line")
+        click.secho(f"myGeeKy hit a problem: {describe(exc)}", fg="red", err=True)
+        if report:
+            click.echo(f"Full details were saved to {report}", err=True)
+        click.echo(f"If it keeps happening, please open an issue at {ISSUES_URL} and attach that file.",
+                   err=True)
+        raise SystemExit(1)
+
+
 # --------------------------------------------------------------------------- init
 @main.command()
 def init() -> None:

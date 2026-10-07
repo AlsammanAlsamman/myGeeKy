@@ -84,10 +84,88 @@ QProgressBar::chunk { background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #f
 """
 
 
+# --------------------------------------------------------------------------- errors and the setup log
+SETUP_LOG = Path.home() / ".mygeeky" / "setup.log"
+PYTHON_ORG_INSTALLER = "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
+
+# What a missing program is, in words a user can act on
+PROGRAMS = {
+    "winget": "winget (Windows' app installer)",
+    "powershell": "PowerShell",
+    "schtasks": "Windows Task Scheduler (schtasks)",
+    "py": "the Python launcher (py)",
+    "where": "the Windows 'where' command",
+}
+
+
+class SetupError(RuntimeError):
+    """A failure with a message meant for the user (it names what went wrong)."""
+
+
+def log(message: str) -> None:
+    """Append to ~/.mygeeky/setup.log; logging must never break setup itself.
+    Tokens never reach this: they only travel on stdin, which isn't logged."""
+    try:
+        from datetime import datetime
+        SETUP_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with SETUP_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S}  {message}\n")
+    except OSError:
+        pass
+
+
+def _program_name(program: str) -> str:
+    stem = Path(program).stem.lower()
+    if stem.startswith("python"):
+        return f"Python ({program})"
+    return PROGRAMS.get(stem, Path(program).name)
+
+
+def _start_error(cmd: list[str], exc: BaseException) -> SetupError:
+    program = cmd[0]
+    if isinstance(exc, FileNotFoundError):
+        if Path(program).stem.lower().startswith("python"):
+            msg = (f"Python wasn't found at {program}. It may have been moved or uninstalled. "
+                   "Run this setup again and it will set Python up.")
+        else:
+            msg = f"Couldn't start {_program_name(program)}: it isn't installed on this PC (or isn't on PATH)."
+    elif isinstance(exc, subprocess.TimeoutExpired):
+        msg = f"{_program_name(program)} took too long and was stopped."
+    else:
+        msg = f"Couldn't start {_program_name(program)}: {getattr(exc, 'strerror', None) or exc}"
+    log(f"ERROR {msg} [{type(exc).__name__}: {exc}]")
+    return SetupError(msg)
+
+
+def describe(exc: BaseException) -> str:
+    """One readable sentence for any failure, naming the file or program."""
+    if isinstance(exc, SetupError):
+        return str(exc)
+    from ..errors import describe as describe_any
+    return describe_any(exc)
+
+
 # --------------------------------------------------------------------------- environment (no Qt)
 def _run(cmd: list[str], stdin: str | None = None, timeout: int = 600) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout,
-                          creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
+    """subprocess.run that never surfaces a bare 'WinError 2': a missing
+    program becomes a SetupError naming it. Output is logged; stdin is not."""
+    log("run: " + " ".join(cmd[:3]) + (" ..." if len(cmd) > 3 else ""))
+    try:
+        r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout,
+                           creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise _start_error(cmd, exc) from exc
+    if r.returncode != 0:
+        log(f"  exit {r.returncode}: {(r.stderr or r.stdout).strip()[-500:]}")
+    return r
+
+
+def _popen(cmd: list[str], **kwargs) -> subprocess.Popen:
+    log("start: " + " ".join(cmd[:3]) + (" ..." if len(cmd) > 3 else ""))
+    try:
+        return subprocess.Popen(cmd, **kwargs)
+    except OSError as exc:
+        raise _start_error(cmd, exc) from exc
 
 
 def python_version(exe: str) -> tuple[int, int] | None:
@@ -131,6 +209,35 @@ def find_python() -> str | None:
     return None
 
 
+def install_python(say: Callable[[str], Any]) -> str | None:
+    """Set up a per-user Python 3.12 (no admin): winget when this PC has it,
+    otherwise the official installer from python.org. Returns its path."""
+    say("No usable Python found, so setting up Python 3.12 just for you...")
+    try:
+        r = _run(["winget", "install", "-e", "--id", "Python.Python.3.12", "--scope", "user", "--silent",
+                  "--accept-package-agreements", "--accept-source-agreements"], timeout=1200)
+        if r.returncode == 0 and find_python():
+            return find_python()
+        say("winget couldn't install Python, so downloading it from python.org instead...")
+    except SetupError:
+        say("winget (Windows' app installer) isn't on this PC, so downloading Python from python.org instead...")
+    import tempfile
+    import urllib.request
+    target = Path(tempfile.gettempdir()) / Path(PYTHON_ORG_INSTALLER).name
+    try:
+        log(f"download {PYTHON_ORG_INSTALLER}")
+        urllib.request.urlretrieve(PYTHON_ORG_INSTALLER, target)
+    except OSError as exc:
+        raise SetupError(f"Couldn't download Python from python.org ({exc}). Check your internet "
+                         "connection and try again.") from exc
+    say("Installing Python 3.12 (about a minute)...")
+    r = _run([str(target), "/quiet", "InstallAllUsers=0", "PrependPath=1", "Include_test=0",
+              "Include_doc=0", "Include_launcher=0", "Shortcuts=0"], timeout=1200)
+    if r.returncode != 0:
+        raise SetupError(f"The Python installer stopped with code {r.returncode}. Details are in {SETUP_LOG}.")
+    return find_python()
+
+
 def pythonw_for(python: str) -> str:
     w = Path(python).with_name("pythonw.exe")
     return str(w) if w.exists() else python
@@ -159,14 +266,23 @@ def api(python: str, action: str, payload: dict[str, Any] | None = None, timeout
     """Run one setup_api step in the target Python."""
     try:
         r = _run([python, "-m", "mygeeky.setup_api", action], stdin=json.dumps(payload or {}), timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "That step took too long."}
+    except SetupError as exc:
+        return {"ok": False, "error": str(exc)}
     for line in reversed(r.stdout.strip().splitlines()):
         try:
-            return json.loads(line)
+            result = json.loads(line)
         except json.JSONDecodeError:
             continue
-    return {"ok": False, "error": (r.stderr or r.stdout).strip()[-400:] or "No answer from myGeeKy."}
+        if not result.get("ok"):
+            log(f"step '{action}' failed: {result.get('error')}")
+        return result
+    # no JSON answer: myGeeKy itself crashed; its last line usually says why
+    output = (r.stderr or r.stdout).strip()
+    log(f"step '{action}' crashed:\n{output[-3000:]}")
+    last = next((ln.strip() for ln in reversed(output.splitlines()) if ln.strip()), "")
+    if "No module named 'mygeeky'" in output or 'No module named "mygeeky"' in output:
+        return {"ok": False, "error": f"myGeeKy isn't installed in {python}. Go back and run the install step again."}
+    return {"ok": False, "error": f"The '{action}' step failed: {last or 'no answer from myGeeKy'}"}
 
 
 def stop_running_panels() -> int:
@@ -195,10 +311,14 @@ def make_shortcut(path: Path, target: str, args: str, icon: str | None) -> bool:
           "if ($env:ICON) { $s.IconLocation = $env:ICON }; $s.Save()")
     env = {**os.environ, "LNK": str(path), "TARGET": target, "ARGS": args, "ICON": icon or ""}
     try:
-        return subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, capture_output=True,
-                              creationflags=NO_WINDOW, timeout=60).returncode == 0
-    except Exception:
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, capture_output=True,
+                           text=True, creationflags=NO_WINDOW, timeout=60)
+    except Exception as exc:
+        log(f"ERROR couldn't create the shortcut {path}: {_start_error(['powershell'], exc)}")
         return False
+    if r.returncode != 0:
+        log(f"ERROR couldn't create the shortcut {path}: {r.stderr.strip()[-300:]}")
+    return r.returncode == 0
 
 
 def shortcut_paths() -> dict[str, Path]:
@@ -237,9 +357,16 @@ def uninstall(python: str) -> list[str]:
     for p in shortcut_paths().values():
         if p.exists():
             p.unlink()
-    _run(["schtasks", "/Delete", "/TN", "myGeeKyWeeklyRun", "/F"], timeout=60)
-    r = _run([python, "-m", "pip", "uninstall", "-y", "mygeeky"], timeout=300)
-    notes.append("Removed the myGeeKy package." if r.returncode == 0 else "pip couldn't remove the package.")
+    try:
+        _run(["schtasks", "/Delete", "/TN", "myGeeKyWeeklyRun", "/F"], timeout=60)
+    except SetupError:
+        pass  # no Task Scheduler, so there's no weekly task to remove either
+    try:
+        r = _run([python, "-m", "pip", "uninstall", "-y", "mygeeky"], timeout=300)
+        notes.append("Removed the myGeeKy package." if r.returncode == 0 else
+                     f"pip couldn't remove the package (details in {SETUP_LOG}).")
+    except SetupError as exc:
+        notes.append(str(exc))
     try:
         import winreg
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
@@ -262,7 +389,9 @@ class Worker(QThread):
         try:
             result = self._fn(self)
         except Exception as exc:
-            result = {"ok": False, "error": str(exc)}
+            import traceback
+            log("ERROR " + "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).rstrip())
+            result = {"ok": False, "error": describe(exc)}
         self.done.emit(result)
 
 
@@ -305,6 +434,14 @@ class Page(QWizardPage):
         self.status.setObjectName(kind)
         self.status.style().unpolish(self.status)  # re-apply the #ok/#err/#muted colour
         self.status.style().polish(self.status)
+        if kind == "err":
+            import html
+            log_url = QUrl.fromLocalFile(str(SETUP_LOG)).toString()
+            text = (f"{html.escape(text)}<br><a style='color:#7fd8ff' href='{log_url}'>Open the setup log</a> "
+                    f"<span style='color:#9a9ab0'>(full details, to send if you need help: {SETUP_LOG})</span>")
+            self.status.setTextFormat(Qt.RichText)
+        else:
+            self.status.setTextFormat(Qt.AutoText)
         self.status.setText(text)
 
     # subclasses: return None when there's nothing to do, else a background job
@@ -420,14 +557,11 @@ class InstallPage(Page):
     def _install(self, wk: Worker) -> dict[str, Any]:
         w = self.w
         if not w.python:
-            wk.line.emit("No Python 3.9+ found. Installing Python 3.12 for you (winget, just for you)…")
-            r = _run(["winget", "install", "-e", "--id", "Python.Python.3.12", "--scope", "user", "--silent",
-                      "--accept-package-agreements", "--accept-source-agreements"], timeout=1200)
-            wk.line.emit(r.stdout[-600:])
-            w.python = find_python()
+            w.python = install_python(wk.line.emit)
             if not w.python:
-                return {"ok": False, "error": "Couldn't install Python. Install it from python.org, then run "
-                                              "this setup again."}
+                return {"ok": False, "error": "Couldn't set up Python automatically. Install Python 3.12 from "
+                                              "https://www.python.org/downloads/ (tick 'Add python.exe to PATH'), "
+                                              "then run this setup again."}
         wk.line.emit(f"Using Python: {w.python}")
         if w.info.get("editable") and not self.update_editable.isChecked():
             wk.line.emit("Developer (editable) install found, so it was kept as is.")
@@ -439,7 +573,7 @@ class InstallPage(Page):
             wheel = bundled_wheel()
             target = str(wheel) if wheel else "mygeeky"
             wk.line.emit(f"Installing {wheel.name if wheel else 'mygeeky from PyPI'}…")
-            proc = subprocess.Popen([w.python, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check",
+            proc = _popen([w.python, "-m", "pip", "install", "--upgrade", "--disable-pip-version-check",
                                      target], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
                                     creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
             for line in proc.stdout:  # type: ignore[union-attr]
@@ -449,7 +583,7 @@ class InstallPage(Page):
             if proc.wait() != 0:
                 return {"ok": False, "error": "pip couldn't install myGeeKy. See the log above."}
         wk.line.emit("Setting up Qt for the panel…")
-        proc = subprocess.Popen([w.python, "-m", "mygeeky.gui.bootstrap"], stdout=subprocess.PIPE,
+        proc = _popen([w.python, "-m", "mygeeky.gui.bootstrap"], stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, creationflags=NO_WINDOW,
                                 encoding="utf-8", errors="replace")
         for line in proc.stdout:  # type: ignore[union-attr]
@@ -848,20 +982,28 @@ class SetupWizard(QWizard):
         pkg = package_dir(python)
         icon = str(Path(pkg) / "assets" / "icon.ico") if pkg and (Path(pkg) / "assets" / "icon.ico").exists() else None
         paths = shortcut_paths()
+        problems = []
+        names = {"start_menu": "Start menu", "desktop": "desktop", "startup": "sign-in"}
         for key in ("start_menu", "desktop", "startup"):
             if choices[key]:
-                make_shortcut(paths[key], pythonw, "-m mygeeky.gui.app", icon)
+                if not make_shortcut(paths[key], pythonw, "-m mygeeky.gui.app", icon):
+                    problems.append(f"Couldn't create the {names[key]} shortcut.")
             elif paths[key].exists() and key != "start_menu":
                 paths[key].unlink()
         if choices["weekly"]:
-            api(python, "schedule")
+            result = api(python, "schedule")
+            if not result.get("ok"):
+                problems.append(f"Couldn't set up the weekly run: {result.get('error') or result.get('message')}")
         try:
             register_uninstaller(python, self.state.get("version", ""), icon)
-        except OSError:
-            pass
+        except OSError as exc:
+            log(f"ERROR couldn't add myGeeKy to Installed apps: {exc}")
+        if problems:
+            return {"ok": False, "error": " ".join(problems) + " Untick it and click Finish again, or open "
+                                          "myGeeKy any time with `mygeeky gui`."}
         if choices["launch"] or self.restart_panel:
-            subprocess.Popen([pythonw, "-m", "mygeeky.gui.app"], creationflags=NO_WINDOW,
-                             close_fds=True, cwd=str(Path.home()))
+            _popen([pythonw, "-m", "mygeeky.gui.app"], creationflags=NO_WINDOW,
+                   close_fds=True, cwd=str(Path.home()))
         return {"ok": True}
 
 
@@ -871,7 +1013,9 @@ def main(argv: list[str] | None = None) -> int:
         wheel = bundled_wheel()
         Path(argv[argv.index("--selftest") + 1]).write_text(json.dumps({
             "frozen": FROZEN, "wheel": wheel.name if wheel else None,
-            "icon": (ASSETS / "icon_128.png").exists()}), encoding="utf-8")
+            "icon": (ASSETS / "icon_128.png").exists(),
+            "errors": describe(FileNotFoundError(2, "x", "probe.txt")),
+            "ssl": __import__("ssl").OPENSSL_VERSION}), encoding="utf-8")
         return 0
     app = QApplication.instance() or QApplication([])
     app.setFont(QFont("Segoe UI", 10))
@@ -884,6 +1028,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         QMessageBox.information(None, "myGeeKy", "\n".join(uninstall(python)))
         return 0
+    import platform
+    log(f"=== myGeeKy setup started (bundled wheel: {wheel_version(bundled_wheel()) or 'none'}, "
+        f"frozen: {FROZEN}, Windows {platform.version()})")
     wizard = SetupWizard()
     wizard.show()
     return app.exec()

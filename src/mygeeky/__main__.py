@@ -76,8 +76,8 @@ def offer_path_fix() -> None:
 
 def run() -> None:
     offer_path_fix()
-    from .cli import main
-    main(prog_name="mygeeky")
+    from .cli import entry
+    entry()
 
 
 if __name__ == "__main__":
