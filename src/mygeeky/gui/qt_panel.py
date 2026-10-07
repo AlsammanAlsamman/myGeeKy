@@ -3482,7 +3482,8 @@ class MyGeekyPanel(QWidget):
         self.setGeometry(self._docked_geometry(folded, screen))
         self.setWindowOpacity(self.cfg.gui_folded_opacity if folded else self.cfg.gui_opacity)
 
-    # The panel has no drag handle: it always belongs docked to its edge. But
+    # The panel has no drag handle: it always belongs docked to its edge (and on
+    # top: see topmost.py; the same check puts it back in front). But
     # Windows moves windows on its own -- when a monitor sleeps or is
     # unplugged, the PC locks or resumes, the resolution or scaling changes, a
     # remote-desktop session connects, or Explorer restarts -- and often parks
@@ -3512,6 +3513,10 @@ class MyGeekyPanel(QWidget):
     def _ensure_docked(self) -> None:
         if not self.isVisible() or self.isMinimized():
             return
+        # Windows also drops "always on top" now and then, leaving the icon behind other windows
+        from . import topmost
+        hearts = {int(self.hearts.winId())} if self.hearts.isVisible() else set()
+        topmost.keep_on_top(int(self.winId()), ignore=hearts)
         folded = self.folded_widget.isVisible()
         want = self._docked_geometry(folded, self._home_screen())
         have = self.geometry()
