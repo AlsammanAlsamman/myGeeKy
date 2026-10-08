@@ -1486,6 +1486,7 @@ class PairDialog(QDialog):
 
     def __init__(self, parent: "MyGeekyPanel", theme: dict[str, Any]) -> None:
         super().__init__(parent)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)   # in front of the always-on-top panel
         self.setWindowTitle("Connect your phone")
         self.setMinimumWidth(340)
         self._panel = parent
@@ -1545,6 +1546,7 @@ class IdeaDialog(QDialog):
 
     def __init__(self, parent: QWidget, theme: dict[str, Any]) -> None:
         super().__init__(parent)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)   # in front of the always-on-top panel
         from ..ideas import KINDS
         self.setWindowTitle("Send an idea to myGeeKy")
         self.setMinimumWidth(380)
@@ -4292,8 +4294,11 @@ class MyGeekyPanel(QWidget):
             return
         # Windows also drops "always on top" now and then, leaving the icon behind other windows
         from . import topmost
-        hearts = {int(self.hearts.winId())} if self.hearts.isVisible() else set()
-        topmost.keep_on_top(int(self.winId()), ignore=hearts)
+        # our own windows (the QR code, the idea box, a token prompt, the hearts) may
+        # sit over the panel: never lift the panel above them
+        own = {int(w.winId()) for w in QApplication.topLevelWidgets()
+               if w is not self and w.isVisible() and w.isWindow()}
+        topmost.keep_on_top(int(self.winId()), ignore=own)
         folded = self.folded_widget.isVisible()
         want = self._docked_geometry(folded, self._home_screen())
         have = self.geometry()

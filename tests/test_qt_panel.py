@@ -342,3 +342,31 @@ def test_hearts_rise_fade_and_hide(qapp):
             break
     assert not h.is_active() and not h.isVisible()
     h.close()
+
+
+def test_the_panel_never_lifts_itself_over_its_own_dialogs(monkeypatch):
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication, QDialog
+    QApplication.instance() or QApplication([])
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import topmost
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+    seen = {}
+    monkeypatch.setattr(topmost, "keep_on_top", lambda hwnd, ignore=None: seen.update(ignore=set(ignore or ())) or False)
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="me"))
+    try:
+        panel.show()
+        dialog = QDialog(panel)
+        dialog.show()
+        panel._ensure_docked()
+        assert int(dialog.winId()) in seen["ignore"]
+        dialog.close()
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard, panel._sync_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(2000)
+        panel.close()
+        panel.deleteLater()
