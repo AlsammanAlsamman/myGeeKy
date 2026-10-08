@@ -68,6 +68,7 @@ from .app import THEME_NAMES, THEMES
 from ..config import AVATAR_CACHE_DIR, MyGeekyConfig
 
 ASSETS_DIR = Path(__file__).parent / "assets"
+SYNC_EVERY_MS = 15 * 60 * 1000   # how often the panel syncs your data between computers
 DOCK_GUARD_MS = 3000   # how often the panel checks it is still docked where it belongs
 ICON_WINDOW = ASSETS_DIR / "icon_64.png"
 ICON_HEADER = ASSETS_DIR / "icon_32.png"
@@ -2431,6 +2432,13 @@ class MyGeekyPanel(QWidget):
         self._screen_name = ""          # the monitor the panel lives on, remembered across sleep/unplug
         self._dock(folded=False)
         self._watch_screens()
+        # the same you on every computer: sync with your private data repo now and then
+        self._syncing = False
+        self._sync_timer = QTimer(self)
+        self._sync_timer.timeout.connect(self._sync_now)
+        if logic.sync_enabled(self.cfg):
+            QTimer.singleShot(4000, self._sync_now)
+            self._sync_timer.start(SYNC_EVERY_MS)
 
         self._load_status()
         self._load_live_stats()
@@ -3259,7 +3267,57 @@ class MyGeekyPanel(QWidget):
         self.hearts_check.toggled.connect(self._on_hearts_toggled)
         layout.addWidget(self.hearts_check)
 
+        bottom = QHBoxLayout()
+        self.sync_label = QLabel("")
+        self.sync_label.setWordWrap(True)
+        bottom.addWidget(self.sync_label, 1)
+        self.quit_btn = QPushButton("Quit myGeeKy")
+        self.quit_btn.setCursor(Qt.PointingHandCursor)
+        self.quit_btn.setToolTip("Close the panel. Open it again from your apps menu or `mygeeky gui`.")
+        self.quit_btn.clicked.connect(self._quit)
+        bottom.addWidget(self.quit_btn)
+        layout.addLayout(bottom)
+
         return panel
+
+    def _quit(self) -> None:
+        if logic.sync_enabled(self.cfg) and not self._syncing:
+            logic.sync_now(self.cfg)            # take the latest from this computer along
+        QApplication.quit()
+
+    # ------------------------------------------------------------------ sync between your computers
+    def _sync_now(self) -> None:
+        if self._syncing:
+            return
+        self._syncing = True
+        self._run_async(lambda: logic.sync_now(self.cfg), self._on_synced)
+
+    def _on_synced(self, result: Any) -> None:
+        self._syncing = False
+        result = result if isinstance(result, dict) else {}
+        if result.get("skipped"):
+            return
+        if result.get("error"):
+            self.sync_label.setText(f"Sync: {result['error'][:120]}")
+            return
+        self.sync_label.setText("Synced with your other computers " + datetime.now().strftime("%H:%M"))
+        if result.get("changed"):
+            self._apply_synced_data()
+
+    def _apply_synced_data(self) -> None:
+        """Another computer's changes arrived: use its settings and data here too."""
+        from dataclasses import fields
+        from ..config import load_config
+        fresh = load_config()
+        for f in fields(fresh):
+            setattr(self.cfg, f.name, getattr(fresh, f.name))
+        self._apply_theme()
+        self._dock(self.folded_widget.isVisible())
+        self._load_suggestions()
+        if not self._contrib_running:
+            self._load_contributions()
+        self._render_brain()
+        self._refresh_signals(force=False)
 
     def _on_hearts_toggled(self, enabled: bool) -> None:
         logic.set_hearts(self.cfg, enabled)
@@ -3478,6 +3536,10 @@ class MyGeekyPanel(QWidget):
         self.settings_panel.setStyleSheet(f"#settings {{ background:{theme['card_bg']}; border-radius:12px; }}")
         self.opacity_value_label.setStyleSheet(f"font-size:10.5px; color:{theme['muted']}; background:transparent;")
         self.hearts_check.setStyleSheet(f"QCheckBox {{ font-size:11px; color:{theme['text']}; background:transparent; }}")
+        self.sync_label.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        self.quit_btn.setStyleSheet(f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                                    f"border-radius:7px; padding:4px 10px; font-size:11px; }}"
+                                    f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
         self.opacity_slider.setStyleSheet(
             f"QSlider::groove:horizontal {{ height:4px; background:{theme['border']}; border-radius:2px; }}"
             f"QSlider::sub-page:horizontal {{ background:{theme['accent']}; border-radius:2px; }}"

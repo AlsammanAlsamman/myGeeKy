@@ -438,6 +438,32 @@ def refresh_news(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
         return {**news.load_state(), "error": f"Couldn't update the news: {describe(exc)}"}
 
 
+def sync_enabled(cfg: MyGeekyConfig) -> bool:
+    if not cfg.sync_repo or not cfg.sync_auto:
+        return False
+    try:
+        from .. import sync
+        return sync.is_initialized() and sync.git_exe() is not None
+    except Exception:
+        return False
+
+
+def sync_now(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Two-way sync with your private data repo: this computer's changes go up,
+    the other computers' come down. Returns whether anything came down."""
+    from .. import sync
+    if not sync_enabled(cfg):
+        return {"ok": False, "skipped": True}
+    try:
+        before = sync._git("rev-parse", "HEAD", check=False).stdout.strip()
+        message = sync.push()
+        after = sync._git("rev-parse", "HEAD", check=False).stdout.strip()
+    except Exception as exc:
+        from ..errors import describe
+        return {"ok": False, "error": describe(exc)}
+    return {"ok": True, "changed": before != after, "message": message}
+
+
 def get_keywords(cfg: MyGeekyConfig) -> dict[str, Any]:
     """Your keywords, each green (the dictionary knows what it means) or red
     (used as a plain word until the dictionary learns it)."""
@@ -807,8 +833,16 @@ def main() -> None:
 
 
 def _main() -> None:
+    import os
+    import sys
     from .bootstrap import ensure_qt
     ensure_qt()  # installs Qt on first use, wherever this Python can hold it
+    # Linux desktops without the xdg-desktop-portal "Settings" interface make Qt's
+    # GNOME theme code log a harmless dbus error on every start; it only means Qt
+    # can't ask the desktop for its dark/light preference. Keep the terminal quiet.
+    rules = os.environ.get("QT_LOGGING_RULES", "")
+    if "qt.qpa.theme" not in rules:
+        os.environ["QT_LOGGING_RULES"] = ";".join(r for r in (rules, "qt.qpa.theme.gnome=false") if r)
 
     from PySide6.QtCore import QLockFile
     from PySide6.QtWidgets import QApplication
@@ -825,6 +859,9 @@ def _main() -> None:
         return
 
     app = QApplication.instance() or QApplication([])
+    app.setApplicationName("mygeeky")
+    if sys.platform.startswith("linux"):
+        app.setDesktopFileName("mygeeky")    # the dock/taskbar uses the menu entry's icon
     if ICON_WINDOW.exists():
         from PySide6.QtGui import QIcon
         app.setWindowIcon(QIcon(str(ICON_WINDOW)))

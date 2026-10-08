@@ -1806,10 +1806,67 @@ def setup() -> None:
 
 # --------------------------------------------------------------------------- gui
 @main.command()
-def gui() -> None:
-    """Launch the live glass panel (sets up Qt by itself the first time)."""
-    from .gui.app import main as gui_main
-    gui_main()
+@click.option("--foreground", is_flag=True, help="Run in this terminal (for troubleshooting).")
+def gui(foreground: bool) -> None:
+    """Open the panel. It runs in the background: you can close this terminal."""
+    import sys
+    from .config import LOG_DIR
+    from .gui import desktop
+    from .gui.bootstrap import ensure_qt
+    if foreground:
+        from .gui.app import main as gui_main
+        gui_main()
+        return
+    ensure_qt()                      # the first time, this installs Qt here, where you can see it
+    if _panel_running():
+        click.echo("myGeeKy is already running (look for its icon on the edge of your screen).")
+        return
+    if sys.platform.startswith("linux"):
+        for line in desktop.install_menu_entry():
+            click.echo(line)
+    desktop.launch_detached(LOG_DIR / "panel.log")
+    click.echo("myGeeKy is running in the background: look for its icon on the edge of your screen. "
+               "You can close this terminal. (Quit it from ⚙ in the panel.)")
+
+
+def _panel_running() -> bool:
+    """Is a panel already open? (It holds a lock while it runs.)"""
+    try:
+        from PySide6.QtCore import QLockFile
+        from .config import DATA_DIR, ensure_dirs
+        ensure_dirs()
+        lock = QLockFile(str(DATA_DIR / "panel.lock"))
+        if lock.tryLock(0):
+            lock.unlock()
+            return False
+        return True
+    except Exception:
+        return False
+
+
+@main.group("desktop")
+def desktop_cmd() -> None:
+    """Linux: myGeeKy in your applications menu, and (optionally) at sign-in."""
+
+
+@desktop_cmd.command("install")
+@click.option("--autostart/--no-autostart", default=None, help="Also open it when you sign in (or stop that).")
+def desktop_install(autostart: bool | None) -> None:
+    """Add myGeeKy (with its icon) to your applications menu."""
+    import sys
+    from .gui import desktop
+    if not sys.platform.startswith("linux"):
+        raise click.ClickException("This is for Linux. On Windows, the installer adds the Start-menu entry.")
+    changed = desktop.install_menu_entry(autostart=autostart)
+    click.echo("\n".join(changed) or "Already in your applications menu.")
+
+
+@desktop_cmd.command("remove")
+def desktop_remove() -> None:
+    """Take myGeeKy out of the applications menu and sign-in."""
+    from .gui import desktop
+    removed = desktop.remove_menu_entry()
+    click.echo(f"Removed {len(removed)} file(s)." if removed else "Nothing to remove.")
 
 
 if __name__ == "__main__":

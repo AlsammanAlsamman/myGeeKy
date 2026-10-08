@@ -198,6 +198,23 @@ mygeeky profile show        # what myGeeKy knows about you (no network)
   a normal run; if Google refuses it, the last fetched copy is kept and
   ORCID/OpenAlex still cover your publications.
 
+## Linux: the panel, the menu and the background
+
+`mygeeky gui` starts the panel **in the background** (you can close the terminal)
+and adds **myGeeKy to your applications menu**, with its icon. Quit it from ⚙ in
+the panel. `mygeeky gui --foreground` keeps it in the terminal, for troubleshooting.
+
+```bash
+mygeeky desktop install --autostart   # also open it when you sign in
+mygeeky desktop install --no-autostart
+mygeeky desktop remove                # out of the menu (and sign-in) again
+```
+
+If you ran an older version you may have seen
+`qt.qpa.theme.gnome: dbus reply error ... org.freedesktop.portal.Settings`.
+It was harmless (Qt asking the desktop for its dark/light preference, which some
+desktops don't offer) and is no longer printed.
+
 ## Use it from any computer (`mygeeky sync`)
 
 Your myGeeKy data can live in a **private** GitHub repo, so the model keeps
@@ -212,9 +229,14 @@ mygeeky sync pull | push | status
 ```
 
 On a new computer: `pip install mygeeky`, then `gh auth login` and
-`mygeeky sync init` again. It pulls your config, CV text, publications,
-history and training data. `mygeeky pipeline` (the weekly job) then does
-**pull → learn → run → contribute → push** automatically.
+`mygeeky sync init --repo <you>/mygeeky-data` (the **same** repo). It pulls your
+config, keywords, CV text, publications, history, sent signals and training data.
+
+After that it keeps itself in step: **the panel syncs every 15 minutes while it's
+open** (and once more when you quit it), so what you do on one computer shows up
+on the others. `mygeeky pipeline` (the weekly job) also does
+**pull → learn → run → contribute → push**. Your Signals token and key stay per
+computer: run `mygeeky beacon init` on each computer you want to send signals from.
 
 - It refuses to sync to a public repo.
 - Never synced: any token, caches, logs, and the pickled model. Loading a
