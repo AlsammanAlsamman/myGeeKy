@@ -25,7 +25,7 @@ export default function Scan() {
     }
     setMessage(`Connected as @${result.settings.username}…`);
     await save(result.settings, result.token ?? undefined);
-    router.replace('/headlines');
+    router.replace('/live');
   };
 
   if (!permission) return <View style={st.safe} />;

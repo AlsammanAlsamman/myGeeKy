@@ -1,6 +1,7 @@
 // Settings, the read token and your profile, shared by every screen; plus a
 // small hook that shows cached data at once and refreshes it when it's stale.
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { logOpenToday } from './badges';
 import { Profile } from './interests';
 import { buildProfile } from './profile';
 import { getToken, isStale, loadSettings, readCache, saveSettings, setToken, Settings, writeCache } from './storage';
@@ -28,6 +29,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSettings(s);
       setTok(t);
       setReady(true);
+      if (s) logOpenToday();
       if (s) setProfile(await buildProfile(s, t));
     })();
   }, []);

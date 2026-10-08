@@ -22,14 +22,16 @@ export default function TabLayout() {
         headerShown: false,
         tabBarActiveTintColor: C.pink,
         tabBarInactiveTintColor: C.muted,
-        tabBarStyle: { backgroundColor: '#17172a', borderTopColor: C.line },
+        tabBarStyle: { backgroundColor: '#17172a', borderTopColor: C.line, height: 64, paddingTop: 6 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         sceneStyle: { backgroundColor: C.bg },
       }}
     >
-      <Tabs.Screen name="headlines" options={{ title: 'Headlines', tabBarIcon: icon('newspaper-outline') }} />
-      <Tabs.Screen name="research" options={{ title: 'Research', tabBarIcon: icon('flask-outline') }} />
-      <Tabs.Screen name="models" options={{ title: 'Models', tabBarIcon: icon('sparkles-outline') }} />
-      <Tabs.Screen name="settings" options={{ title: 'You', tabBarIcon: icon('person-circle-outline') }} />
+      <Tabs.Screen name="live" options={{ title: 'Live', tabBarIcon: icon('flash-outline') }} />
+      <Tabs.Screen name="people" options={{ title: 'People', tabBarIcon: icon('people-outline') }} />
+      <Tabs.Screen name="news" options={{ title: 'News', tabBarIcon: icon('newspaper-outline') }} />
+      <Tabs.Screen name="market" options={{ title: 'Market', tabBarIcon: icon('trending-up-outline') }} />
+      <Tabs.Screen name="you" options={{ title: 'You', tabBarIcon: icon('person-circle-outline') }} />
     </Tabs>
   );
 }

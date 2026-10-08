@@ -3,7 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { useApp } from '../lib/app-state';
 import { C } from '../lib/theme';
 
-// First run goes to setup; after that, straight to the headlines.
+// First run goes to setup; after that, straight to Live.
 export default function Index() {
   const { ready, settings } = useApp();
   if (!ready) {
@@ -13,5 +13,5 @@ export default function Index() {
       </View>
     );
   }
-  return <Redirect href={settings?.username ? '/headlines' : '/setup'} />;
+  return <Redirect href={settings?.username ? '/live' : '/setup'} />;
 }

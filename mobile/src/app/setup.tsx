@@ -1,10 +1,9 @@
-import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
-import { useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useApp } from '../lib/app-state';
-import { startLogin, waitForLogin, whoAmI } from '../lib/github-login';
+import { SignInButton } from '../components/signin';
 import { DEFAULT_SETTINGS } from '../lib/storage';
 import { C } from '../lib/theme';
 
@@ -20,34 +19,7 @@ export default function Setup() {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState('');
-  const [signin, setSignin] = useState('');
   const [signedIn, setSignedIn] = useState('');
-  const cancelled = useRef(false);
-
-  // Sign in with GitHub: no token to make or paste. Read-only (no scopes).
-  const signIn = async () => {
-    cancelled.current = false;
-    setError('');
-    setSignin('Asking GitHub for a code…');
-    try {
-      const flow = await startLogin();
-      setCode(flow.userCode);
-      await Clipboard.setStringAsync(flow.userCode);
-      setSignin('The code is copied. Paste it on the GitHub page, tap Continue, then Authorize. Come back here after.');
-      await Linking.openURL(flow.uri);
-      const t = await waitForLogin(flow, () => cancelled.current);
-      const login = await whoAmI(t);
-      setToken(t);
-      setUsername(login);
-      setSignedIn(login);
-      setSignin('');
-    } catch (e) {
-      setSignin(e instanceof Error ? e.message : "The sign-in didn't finish. Try again.");
-    } finally {
-      setCode('');
-    }
-  };
 
   const submit = async () => {
     const u = username.trim().replace(/^@/, '');
@@ -58,7 +30,7 @@ export default function Setup() {
     setError('');
     await save({ ...(settings ?? DEFAULT_SETTINGS), username: u, orcid: o, keywords: split(keywords) }, token.trim() || undefined);
     setBusy(false);
-    router.replace('/headlines');
+    router.replace('/live');
   };
 
   return (
@@ -75,12 +47,11 @@ export default function Setup() {
               scan the code: everything is set up at once.</Text>
           </Pressable>
 
-          <Pressable style={({ pressed }) => [st.gh, pressed && { opacity: 0.85 }]} onPress={signIn}
-                     disabled={!!code || !!signedIn}>
-            <Text style={st.ghText}>{signedIn ? `✓ Signed in as ${signedIn}` : '🔑  Sign in with GitHub'}</Text>
-          </Pressable>
-          {code ? <Text selectable style={st.code}>{code}</Text> : null}
-          {signin ? <Text style={st.hint}>{signin}</Text> : null}
+          <SignInButton signedInAs={signedIn} onSignedIn={(login, t) => {
+            setToken(t);
+            setUsername(login);
+            setSignedIn(login);
+          }} />
           <Text style={st.or}>or fill it in</Text>
 
           <Text style={st.label}>GitHub username</Text>
@@ -129,9 +100,6 @@ const st = StyleSheet.create({
           borderRadius: 16, padding: 16 },
   scanTitle: { color: C.text, fontSize: 17, fontWeight: '800' },
   scanSub: { color: C.muted, fontSize: 13, marginTop: 6, lineHeight: 18 },
-  gh: { backgroundColor: '#24292f', borderRadius: 14, paddingVertical: 14, marginTop: 12, alignItems: 'center' },
-  ghText: { color: '#fff', fontSize: 16, fontWeight: '800' },
-  code: { color: C.pink, fontSize: 30, fontWeight: '900', letterSpacing: 4, textAlign: 'center', marginTop: 12 },
   or: { color: C.muted, textAlign: 'center', marginTop: 16, marginBottom: 2, fontSize: 13 },
   button: { backgroundColor: C.violet, borderRadius: 14, paddingVertical: 15, marginTop: 22, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
