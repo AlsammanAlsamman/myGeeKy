@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import (
+    QByteArray,
     QRect,
     QStringListModel,
     QUrl,
@@ -30,6 +31,7 @@ from PySide6.QtCore import (
     QVariantAnimation,
     Signal,
 )
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtGui import (
     QDesktopServices,
     QBrush,
@@ -1290,6 +1292,118 @@ class ExploreDonut(QWidget):
         font.setBold(True)
         painter.setFont(font)
         painter.drawText(rect, Qt.AlignCenter, f"{round(self._shown * 100)}%")
+        painter.end()
+
+
+# The dock's planets: each tab's colour and line icon (24x24 SVG path data).
+PLANETS = {
+    "live": ("#ff6fd8", "M13 2 3 14h9l-1 8 10-12h-9l1-8z"),
+    "suggestions": ("#7fd8ff", "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"),
+    "repos": ("#22c55e", "M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9"),
+    "market": ("#ffc457", "M22 7 13.5 15.5 8.5 10.5 2 17M16 7h6v6"),
+    "news": ("#eab308", "M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-4 0v-9h4M18 14h-8M15 18h-5M10 6h8v4h-8z"),
+    "activity": ("#34d399", "M22 12h-4l-3 9L9 3l-3 9H2"),
+    "signals": ("#a78bfa", "M4.9 19.1a10 10 0 0 1 0-14.2M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M19.1 4.9a10 10 0 0 1 0 14.2M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"),
+    "model": ("#ffd24a", "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"),
+    "badges": ("#f0a35e", "M12 15a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM8.2 13.9 7 23l5-3 5 3-1.2-9.1"),
+    "admin": ("#94a3b8", "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"),
+}
+
+
+class PlanetButton(QPushButton):
+    """One planet in the dock: a coloured ring with a line icon. The selected one
+    swells into a filled planet with a soft halo, with a little spring to it."""
+
+    def __init__(self, color: str, path: str) -> None:
+        super().__init__("")
+        self._color = QColor(color)
+        self._path = path
+        self._grow = 0.0
+        self._hover = False
+        self._dot = False
+        self._selected = False
+        self._bg = QColor("#1c1c2c")
+        self._icons: dict[str, QSvgRenderer] = {}
+        self._anim = QVariantAnimation(self)
+        self._anim.setDuration(360)
+        self._anim.setEasingCurve(QEasingCurve.OutBack)
+        self._anim.valueChanged.connect(self._on_grow)
+        self.setFixedHeight(48)
+        self.setMinimumWidth(1)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAttribute(Qt.WA_Hover, True)
+
+    def _on_grow(self, v) -> None:
+        self._grow = float(v)
+        self.update()
+
+    def set_selected(self, on: bool, animate: bool = True) -> None:
+        if on == self._selected and (self._grow in (0.0, 1.0) or self._anim.state() == QVariantAnimation.Running):
+            return
+        self._selected = on
+        target = 1.0 if on else 0.0
+        if animate and self.isVisible():
+            self._anim.stop()
+            self._anim.setEasingCurve(QEasingCurve.OutBack if on else QEasingCurve.OutCubic)
+            self._anim.setStartValue(self._grow)
+            self._anim.setEndValue(target)
+            self._anim.start()
+        else:
+            self._grow = target
+            self.update()
+
+    def set_dot(self, on: bool) -> None:
+        self._dot = on
+        self.update()
+
+    def set_planet_bg(self, color: QColor) -> None:
+        self._bg = color
+        self.update()
+
+    def _icon(self, color: QColor) -> QSvgRenderer:
+        key = color.name()
+        if key not in self._icons:
+            svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{key}" '
+                   f'stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="{self._path}"/></svg>')
+            self._icons[key] = QSvgRenderer(QByteArray(svg.encode()))
+        return self._icons[key]
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self._hover = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self._hover = False
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        g = self._grow
+        c = QPointF(self.width() / 2, self.height() / 2)
+        r = 12 + 6 * g + (1 if self._hover and g < 0.5 else 0)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        if g > 0.01:                                       # the halo of the selected planet
+            halo = QColor(self._color)
+            halo.setAlpha(int(70 * min(g, 1.0)))
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(halo)
+            painter.drawEllipse(c, r + 3 * g, r + 3 * g)
+        fill = QColor(
+            int(self._bg.red() + (self._color.red() - self._bg.red()) * min(max(g, 0), 1)),
+            int(self._bg.green() + (self._color.green() - self._bg.green()) * min(max(g, 0), 1)),
+            int(self._bg.blue() + (self._color.blue() - self._bg.blue()) * min(max(g, 0), 1)))
+        painter.setPen(QPen(self._color, 2))
+        painter.setBrush(fill)
+        painter.drawEllipse(c, r, r)
+        side = r * 1.05
+        icon_color = QColor("#0d0d16") if g > 0.5 else self._color
+        self._icon(icon_color).render(painter, QRectF(c.x() - side / 2, c.y() - side / 2, side, side))
+        if self._dot and g < 0.5:                         # something new here (e.g. a new badge)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor("#f0f0f5"))
+            painter.drawEllipse(QPointF(c.x() + r * 0.8, c.y() - r * 0.8), 3.5, 3.5)
         painter.end()
 
 
@@ -2598,50 +2712,6 @@ class RoundedButton(QPushButton):
         self._text_color = QColor("#ffffff")
         self._radius = 18.0
         self._icon: QPixmap | None = None
-        self._orbit: list[tuple[str, bool]] = []
-        self._orbit_angle = 0.0
-        self._orbit_timer = QTimer(self)
-        self._orbit_timer.setInterval(60)
-        self._orbit_timer.timeout.connect(self._orbit_tick)
-
-    def set_orbit(self, planets: list[tuple[str, bool]]) -> None:
-        """Small planets slowly circling the folded icon: (colour, has something new)."""
-        self._orbit = list(planets)
-        self._orbit_timer.start()
-        self.update()
-
-    def _orbit_tick(self) -> None:
-        if not self.isVisible():
-            return
-        self._orbit_angle = (self._orbit_angle + 0.004) % (2 * math.pi)
-        self.update()
-
-    def _paint_orbit(self, painter: QPainter, rect: QRectF, side: int) -> None:
-        c = rect.center()
-        radius = side / 2 - 6
-        ring = QColor(255, 255, 255, 60)
-        painter.setPen(QPen(ring, 1))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(c, radius, radius)
-        pulse = 0.5 + 0.5 * math.sin(self._orbit_angle * 60)
-        n = len(self._orbit)
-        for i, (color, new) in enumerate(self._orbit):
-            a = self._orbit_angle + i * 2 * math.pi / n - math.pi / 2
-            pt = QPointF(c.x() + radius * math.cos(a), c.y() + radius * math.sin(a))
-            col = QColor(color)
-            if new:
-                glow = QColor(col)
-                glow.setAlpha(int(50 + 90 * pulse))
-                painter.setPen(Qt.NoPen)
-                painter.setBrush(glow)
-                painter.drawEllipse(pt, 6 + 2 * pulse, 6 + 2 * pulse)
-                painter.setBrush(col)
-                painter.drawEllipse(pt, 4.0, 4.0)
-            else:
-                painter.setPen(QPen(col, 1.5))
-                painter.setBrush(QColor(20, 20, 31))
-                painter.drawEllipse(pt, 2.8, 2.8)
-
 
     def set_icon(self, pixmap: QPixmap) -> None:
         """Icon-only mode: just the icon, filling the button, no pill behind it."""
@@ -2665,9 +2735,6 @@ class RoundedButton(QPushButton):
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         if self._icon is not None and not self._icon.isNull():
             side = int(min(rect.width(), rect.height()))
-            if self._orbit:
-                self._paint_orbit(painter, rect, side)
-                side = int(side * 0.66)                   # the icon shrinks to make room for its planets
             icon = self._icon.scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             painter.drawPixmap(int(rect.center().x() - icon.width() / 2),
                                int(rect.center().y() - icon.height() / 2), icon)
@@ -2690,14 +2757,6 @@ class RoundedButton(QPushButton):
         painter.drawText(rect, Qt.AlignCenter, self.text())
         painter.end()
 
-
-# each tab's planet colour in the orbit
-PLANET_COLORS = {
-    "live": "#ff6fd8", "suggestions": "#7fd8ff", "activity": "#34d399", "signals": "#a78bfa",
-    "news": "#eab308", "repos": "#22c55e", "market": "#ffc457", "model": "#ffd24a",
-}
-ORBIT_INNER = ["live", "suggestions", "activity", "signals"]      # your circle
-ORBIT_OUTER = ["news", "repos", "market"]                         # the world
 
 # name -> (icon, name shown when open / on hover)
 TABS = {
@@ -2906,16 +2965,17 @@ class MyGeekyPanel(QWidget):
         tabs = [name for name in TABS if name != "admin" or self._is_admin]
         self._badges_new = False
         for name in tabs:
-            btn = QPushButton(TABS[name][0])
+            btn = PlanetButton(*PLANETS[name])
             btn.setToolTip(TABS[name][1])
+            btn.setAccessibleName(TABS[name][1])
             # Qt's Windows style gives every push button a ~75px minimum width;
             # five of those made the panel wider than gui_expanded_width.
             btn.setMinimumWidth(1)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
-        # One tidy bar: every tab is an icon, and the open one also shows its name
-        # (hover any icon for its name), like a phone's tab bar.
+        # The dock: every tab is a planet; the open one swells into the selected
+        # planet (hover any planet for its name).
         self.tab_bar = QFrame()
         self.tab_bar.setObjectName("tabBar")
         bar = QHBoxLayout(self.tab_bar)
@@ -2923,23 +2983,7 @@ class MyGeekyPanel(QWidget):
         bar.setSpacing(1)
         for name in tabs:
             bar.addWidget(self.tab_buttons[name], 1)
-        self.orbit_btn = QPushButton("\U0001fa90")
-        self.orbit_btn.setFixedWidth(28)
-        self.orbit_btn.setCursor(Qt.PointingHandCursor)
-        self.orbit_btn.setToolTip("Show the rings: everything around you at a glance")
-        self.orbit_btn.clicked.connect(self._toggle_orbit)
-        bar.addWidget(self.orbit_btn, 0)
         panel_layout.addWidget(self.tab_bar)
-
-        # the orbit: unfolded on demand, folded again as soon as you open something
-        from .orbit import OrbitWidget
-        planet = lambda n: (n, TABS[n][1], TABS[n][0], PLANET_COLORS[n])  # noqa: E731
-        self.orbit = OrbitWidget([planet(n) for n in ORBIT_INNER], [planet(n) for n in ORBIT_OUTER],
-                                 ("model", "You", TABS["model"][0], PLANET_COLORS["model"]))
-        self.orbit.set_letter(self.cfg.github_username)
-        self.orbit.selected.connect(self._switch_tab)
-        self.orbit.hide()
-        panel_layout.addWidget(self.orbit)
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
@@ -4087,83 +4131,18 @@ class MyGeekyPanel(QWidget):
 
     def _update_tab_styles(self) -> None:
         theme = THEMES[self._theme_name()]
-        if hasattr(self, "orbit_btn"):
-            on = hasattr(self, "orbit") and self.orbit.isVisible()
-            self.orbit_btn.setStyleSheet(
-                f"QPushButton {{ background:{theme['tab_active'] if on else 'transparent'}; color:{theme['text']}; "
-                f"border:none; border-radius:8px; padding:4px 0; font-size:13px; }}"
-                f"QPushButton:hover {{ background:{theme['tab_active'] if on else 'rgba(255,255,255,0.08)'}; }}")
         self.tab_bar.setStyleSheet(f"QFrame#tabBar {{ background:{theme['card_bg']}; border-radius:10px; }}")
+        dark = _parse_color(theme["text"], force_alpha=255).lightness() > 128
         for name, btn in self.tab_buttons.items():
             active = name == self.active_tab
             icon, label = TABS[name]
-            dot = "\u2022" if name == "badges" and self._badges_new else ""
-            btn.setText(f"{icon}  {label}" if active else icon + dot)
-            bg = theme["tab_active"] if active else "transparent"
-            btn.setStyleSheet(
-                f"QPushButton {{ background:{bg}; color:{theme['text']}; border:none; border-radius:8px; "
-                f"padding:4px 0; font-size:{11 if active else 13}px; font-weight:{700 if active else 400}; }}"
-                f"QPushButton:hover {{ background:{theme['tab_active'] if active else 'rgba(255,255,255,0.08)'}; }}"
-            )
-            if active:                                  # the open tab takes the spare room, for its name
-                btn.setMinimumWidth(0)
-                btn.setMaximumWidth(16777215)
-                btn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)   # never widens the panel
-            else:
-                btn.setFixedWidth(26)
-
-    # ------------------------------------------------------------------ the orbit
-    def _orbit_counts(self) -> dict[str, int]:
-        """How much each planet holds -- local files only, never the network."""
-        def safe(fn) -> int:
-            try:
-                return int(fn())
-            except Exception:
-                return 0
-        events = (logic.load_activity_cache() or {}).get("events") or []
-        recent = 0
-        now = datetime.now(timezone.utc)
-        for e in events:
-            try:
-                if (now - datetime.fromisoformat(e.get("created_at", "").replace("Z", "+00:00"))).total_seconds() < 86400:
-                    recent += 1
-            except ValueError:
-                pass
-        sugg = safe(lambda: sum(len(v) for v in logic.get_suggestions(self.cfg).values()))
-        return {
-            "live": recent, "activity": len(events), "suggestions": sugg,
-            "signals": getattr(self, "_signals_count", 0),
-            "news": safe(lambda: len(logic.get_headlines(self.cfg).get("items") or [])),
-            "repos": safe(lambda: len(logic.get_contributions(self.cfg))),
-            "market": safe(lambda: len(logic.get_market(self.cfg).get("rows") or [])),
-        }
-
-    def _toggle_orbit(self) -> None:
-        if self.orbit.isVisible():
-            self._fold_orbit()
-            return
-        theme = THEMES[self._theme_name()]
-        text = _parse_color(theme["text"], force_alpha=255)
-        self.orbit.set_theme(text, _parse_color(theme["muted"]), dark=text.lightness() > 128)
-        self.orbit.set_counts(self._orbit_counts())
-        self.orbit.set_selected(self.active_tab, animate=False)
-        self.orbit.show()
-        self._update_tab_styles()
-
-    def _fold_orbit(self) -> None:
-        if hasattr(self, "orbit") and self.orbit.isVisible():
-            self.orbit.hide()
-            self._update_tab_styles()
-
-    def _refresh_folded_orbit(self) -> None:
-        """The folded icon's mini orbit: planets that hold something new since you
-        last opened the panel glow and pulse."""
-        counts = self._orbit_counts()
-        seen = getattr(self, "_orbit_seen", None)
-        if seen is None:
-            seen = self._orbit_seen = counts
-        self.folded_widget.set_orbit([(PLANET_COLORS[n], counts.get(n, 0) > seen.get(n, 0))
-                                      for n in ORBIT_INNER + ORBIT_OUTER])
+            new_badge = name == "badges" and self._badges_new
+            # the text isn't drawn (the planet is): it's for screen readers and the tests
+            btn.setText(f"{icon}  {label}" if active else icon + ("\u2022" if new_badge else ""))
+            btn.setStyleSheet("QPushButton { background: transparent; border: none; }")
+            btn.set_planet_bg(QColor("#1c1c2c") if dark else QColor("#ffffff"))
+            btn.set_dot(new_badge)
+            btn.set_selected(active)
 
     def _on_theme_clicked(self, name: str) -> None:
         if logic.set_theme(self.cfg, name):
@@ -4259,14 +4238,10 @@ class MyGeekyPanel(QWidget):
 
     def fold(self) -> None:
         self._dock(folded=True)
-        self._fold_orbit()
-        self._refresh_folded_orbit()
 
     def unfold(self) -> None:
         self._dock(folded=False)
         self.hearts.hide()
-        self._orbit_seen = self._orbit_counts()          # you've looked: nothing is "new" any more
-        self.folded_widget.set_orbit([(PLANET_COLORS[n], False) for n in ORBIT_INNER + ORBIT_OUTER])
 
     def closeEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
         self.hearts.close()  # a separate top-level window; it would outlive the panel
@@ -4364,7 +4339,6 @@ class MyGeekyPanel(QWidget):
             layout.addWidget(SuggestionCard(item, score_key, theme, self._on_suggestion_clicked, self.avatar_loader))
 
     def _on_suggestion_clicked(self, item: dict[str, Any]) -> None:
-        self._fold_orbit()
         logic.record_click(self.cfg, "person", item)
         logic.open_profile(item.get("profile_url", ""))
         logic.mark_suggestion_seen(item.get("username", ""))
@@ -4375,7 +4349,6 @@ class MyGeekyPanel(QWidget):
     def _opener(self, kind: str, item: dict[str, Any]) -> Callable[[str], bool]:
         """open_profile, plus: this click is an interest signal (and counts toward badges)."""
         def open_and_learn(url: str) -> bool:
-            self._fold_orbit()
             logic.record_click(self.cfg, kind, item)
             QTimer.singleShot(0, self._refresh_badges)
             return logic.open_link(url)
@@ -4679,7 +4652,6 @@ class MyGeekyPanel(QWidget):
             self.signals_area.addWidget(lbl)
 
         incoming = data.get("incoming") or []
-        self._signals_count = len(incoming)
         header("FOR YOU")
         if data.get("quiet"):
             held = data.get("held") or 0
@@ -5133,8 +5105,6 @@ class MyGeekyPanel(QWidget):
     # ------------------------------------------------------------------ tabs
     def _switch_tab(self, name: str) -> None:
         self.active_tab = name
-        if hasattr(self, "orbit") and (self.orbit.ring_of(name) or name == "model"):
-            self.orbit.set_selected(name)
         self.content_stack.setCurrentIndex(self._tab_order.index(name))
         self._update_tab_styles()
         if name == "badges":
