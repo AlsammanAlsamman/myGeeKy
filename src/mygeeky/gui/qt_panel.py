@@ -2598,6 +2598,50 @@ class RoundedButton(QPushButton):
         self._text_color = QColor("#ffffff")
         self._radius = 18.0
         self._icon: QPixmap | None = None
+        self._orbit: list[tuple[str, bool]] = []
+        self._orbit_angle = 0.0
+        self._orbit_timer = QTimer(self)
+        self._orbit_timer.setInterval(60)
+        self._orbit_timer.timeout.connect(self._orbit_tick)
+
+    def set_orbit(self, planets: list[tuple[str, bool]]) -> None:
+        """Small planets slowly circling the folded icon: (colour, has something new)."""
+        self._orbit = list(planets)
+        self._orbit_timer.start()
+        self.update()
+
+    def _orbit_tick(self) -> None:
+        if not self.isVisible():
+            return
+        self._orbit_angle = (self._orbit_angle + 0.004) % (2 * math.pi)
+        self.update()
+
+    def _paint_orbit(self, painter: QPainter, rect: QRectF, side: int) -> None:
+        c = rect.center()
+        radius = side / 2 - 6
+        ring = QColor(255, 255, 255, 60)
+        painter.setPen(QPen(ring, 1))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(c, radius, radius)
+        pulse = 0.5 + 0.5 * math.sin(self._orbit_angle * 60)
+        n = len(self._orbit)
+        for i, (color, new) in enumerate(self._orbit):
+            a = self._orbit_angle + i * 2 * math.pi / n - math.pi / 2
+            pt = QPointF(c.x() + radius * math.cos(a), c.y() + radius * math.sin(a))
+            col = QColor(color)
+            if new:
+                glow = QColor(col)
+                glow.setAlpha(int(50 + 90 * pulse))
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(glow)
+                painter.drawEllipse(pt, 6 + 2 * pulse, 6 + 2 * pulse)
+                painter.setBrush(col)
+                painter.drawEllipse(pt, 4.0, 4.0)
+            else:
+                painter.setPen(QPen(col, 1.5))
+                painter.setBrush(QColor(20, 20, 31))
+                painter.drawEllipse(pt, 2.8, 2.8)
+
 
     def set_icon(self, pixmap: QPixmap) -> None:
         """Icon-only mode: just the icon, filling the button, no pill behind it."""
@@ -2621,6 +2665,9 @@ class RoundedButton(QPushButton):
         rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         if self._icon is not None and not self._icon.isNull():
             side = int(min(rect.width(), rect.height()))
+            if self._orbit:
+                self._paint_orbit(painter, rect, side)
+                side = int(side * 0.66)                   # the icon shrinks to make room for its planets
             icon = self._icon.scaled(side, side, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             painter.drawPixmap(int(rect.center().x() - icon.width() / 2),
                                int(rect.center().y() - icon.height() / 2), icon)
@@ -2643,6 +2690,14 @@ class RoundedButton(QPushButton):
         painter.drawText(rect, Qt.AlignCenter, self.text())
         painter.end()
 
+
+# each tab's planet colour in the orbit
+PLANET_COLORS = {
+    "live": "#ff6fd8", "suggestions": "#7fd8ff", "activity": "#34d399", "signals": "#a78bfa",
+    "news": "#eab308", "repos": "#22c55e", "market": "#ffc457", "model": "#ffd24a",
+}
+ORBIT_INNER = ["live", "suggestions", "activity", "signals"]      # your circle
+ORBIT_OUTER = ["news", "repos", "market"]                         # the world
 
 # name -> (icon, name shown when open / on hover)
 TABS = {
@@ -2868,7 +2923,23 @@ class MyGeekyPanel(QWidget):
         bar.setSpacing(1)
         for name in tabs:
             bar.addWidget(self.tab_buttons[name], 1)
+        self.orbit_btn = QPushButton("\U0001fa90")
+        self.orbit_btn.setFixedWidth(28)
+        self.orbit_btn.setCursor(Qt.PointingHandCursor)
+        self.orbit_btn.setToolTip("Show the rings: everything around you at a glance")
+        self.orbit_btn.clicked.connect(self._toggle_orbit)
+        bar.addWidget(self.orbit_btn, 0)
         panel_layout.addWidget(self.tab_bar)
+
+        # the orbit: unfolded on demand, folded again as soon as you open something
+        from .orbit import OrbitWidget
+        planet = lambda n: (n, TABS[n][1], TABS[n][0], PLANET_COLORS[n])  # noqa: E731
+        self.orbit = OrbitWidget([planet(n) for n in ORBIT_INNER], [planet(n) for n in ORBIT_OUTER],
+                                 ("model", "You", TABS["model"][0], PLANET_COLORS["model"]))
+        self.orbit.set_letter(self.cfg.github_username)
+        self.orbit.selected.connect(self._switch_tab)
+        self.orbit.hide()
+        panel_layout.addWidget(self.orbit)
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
@@ -4016,6 +4087,12 @@ class MyGeekyPanel(QWidget):
 
     def _update_tab_styles(self) -> None:
         theme = THEMES[self._theme_name()]
+        if hasattr(self, "orbit_btn"):
+            on = hasattr(self, "orbit") and self.orbit.isVisible()
+            self.orbit_btn.setStyleSheet(
+                f"QPushButton {{ background:{theme['tab_active'] if on else 'transparent'}; color:{theme['text']}; "
+                f"border:none; border-radius:8px; padding:4px 0; font-size:13px; }}"
+                f"QPushButton:hover {{ background:{theme['tab_active'] if on else 'rgba(255,255,255,0.08)'}; }}")
         self.tab_bar.setStyleSheet(f"QFrame#tabBar {{ background:{theme['card_bg']}; border-radius:10px; }}")
         for name, btn in self.tab_buttons.items():
             active = name == self.active_tab
@@ -4034,6 +4111,59 @@ class MyGeekyPanel(QWidget):
                 btn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)   # never widens the panel
             else:
                 btn.setFixedWidth(26)
+
+    # ------------------------------------------------------------------ the orbit
+    def _orbit_counts(self) -> dict[str, int]:
+        """How much each planet holds -- local files only, never the network."""
+        def safe(fn) -> int:
+            try:
+                return int(fn())
+            except Exception:
+                return 0
+        events = (logic.load_activity_cache() or {}).get("events") or []
+        recent = 0
+        now = datetime.now(timezone.utc)
+        for e in events:
+            try:
+                if (now - datetime.fromisoformat(e.get("created_at", "").replace("Z", "+00:00"))).total_seconds() < 86400:
+                    recent += 1
+            except ValueError:
+                pass
+        sugg = safe(lambda: sum(len(v) for v in logic.get_suggestions(self.cfg).values()))
+        return {
+            "live": recent, "activity": len(events), "suggestions": sugg,
+            "signals": getattr(self, "_signals_count", 0),
+            "news": safe(lambda: len(logic.get_headlines(self.cfg).get("items") or [])),
+            "repos": safe(lambda: len(logic.get_contributions(self.cfg))),
+            "market": safe(lambda: len(logic.get_market(self.cfg).get("rows") or [])),
+        }
+
+    def _toggle_orbit(self) -> None:
+        if self.orbit.isVisible():
+            self._fold_orbit()
+            return
+        theme = THEMES[self._theme_name()]
+        text = _parse_color(theme["text"], force_alpha=255)
+        self.orbit.set_theme(text, _parse_color(theme["muted"]), dark=text.lightness() > 128)
+        self.orbit.set_counts(self._orbit_counts())
+        self.orbit.set_selected(self.active_tab, animate=False)
+        self.orbit.show()
+        self._update_tab_styles()
+
+    def _fold_orbit(self) -> None:
+        if hasattr(self, "orbit") and self.orbit.isVisible():
+            self.orbit.hide()
+            self._update_tab_styles()
+
+    def _refresh_folded_orbit(self) -> None:
+        """The folded icon's mini orbit: planets that hold something new since you
+        last opened the panel glow and pulse."""
+        counts = self._orbit_counts()
+        seen = getattr(self, "_orbit_seen", None)
+        if seen is None:
+            seen = self._orbit_seen = counts
+        self.folded_widget.set_orbit([(PLANET_COLORS[n], counts.get(n, 0) > seen.get(n, 0))
+                                      for n in ORBIT_INNER + ORBIT_OUTER])
 
     def _on_theme_clicked(self, name: str) -> None:
         if logic.set_theme(self.cfg, name):
@@ -4129,10 +4259,14 @@ class MyGeekyPanel(QWidget):
 
     def fold(self) -> None:
         self._dock(folded=True)
+        self._fold_orbit()
+        self._refresh_folded_orbit()
 
     def unfold(self) -> None:
         self._dock(folded=False)
         self.hearts.hide()
+        self._orbit_seen = self._orbit_counts()          # you've looked: nothing is "new" any more
+        self.folded_widget.set_orbit([(PLANET_COLORS[n], False) for n in ORBIT_INNER + ORBIT_OUTER])
 
     def closeEvent(self, event) -> None:  # noqa: N802 -- Qt's own naming convention
         self.hearts.close()  # a separate top-level window; it would outlive the panel
@@ -4230,6 +4364,7 @@ class MyGeekyPanel(QWidget):
             layout.addWidget(SuggestionCard(item, score_key, theme, self._on_suggestion_clicked, self.avatar_loader))
 
     def _on_suggestion_clicked(self, item: dict[str, Any]) -> None:
+        self._fold_orbit()
         logic.record_click(self.cfg, "person", item)
         logic.open_profile(item.get("profile_url", ""))
         logic.mark_suggestion_seen(item.get("username", ""))
@@ -4240,6 +4375,7 @@ class MyGeekyPanel(QWidget):
     def _opener(self, kind: str, item: dict[str, Any]) -> Callable[[str], bool]:
         """open_profile, plus: this click is an interest signal (and counts toward badges)."""
         def open_and_learn(url: str) -> bool:
+            self._fold_orbit()
             logic.record_click(self.cfg, kind, item)
             QTimer.singleShot(0, self._refresh_badges)
             return logic.open_link(url)
@@ -4543,6 +4679,7 @@ class MyGeekyPanel(QWidget):
             self.signals_area.addWidget(lbl)
 
         incoming = data.get("incoming") or []
+        self._signals_count = len(incoming)
         header("FOR YOU")
         if data.get("quiet"):
             held = data.get("held") or 0
@@ -4996,6 +5133,8 @@ class MyGeekyPanel(QWidget):
     # ------------------------------------------------------------------ tabs
     def _switch_tab(self, name: str) -> None:
         self.active_tab = name
+        if hasattr(self, "orbit") and (self.orbit.ring_of(name) or name == "model"):
+            self.orbit.set_selected(name)
         self.content_stack.setCurrentIndex(self._tab_order.index(name))
         self._update_tab_styles()
         if name == "badges":
