@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -1290,6 +1291,93 @@ class ExploreDonut(QWidget):
         painter.setFont(font)
         painter.drawText(rect, Qt.AlignCenter, f"{round(self._shown * 100)}%")
         painter.end()
+
+
+class QrWidget(QWidget):
+    """Paints a QR code (a matrix of dark modules) crisply at any size."""
+
+    def __init__(self, matrix: list[list[bool]], size: int = 260) -> None:
+        super().__init__()
+        self._m = matrix
+        self.setFixedSize(size, size)
+
+    def set_matrix(self, matrix: list[list[bool]]) -> None:
+        self._m = matrix
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        if not self._m:
+            return                                     # nothing yet: leave the space empty
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("white"))
+        n = len(self._m) or 1
+        cell = self.width() / n
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor("#12121c"))
+        for y, row in enumerate(self._m):
+            for x, dark in enumerate(row):
+                if dark:
+                    painter.drawRect(QRectF(x * cell, y * cell, cell + 0.5, cell + 0.5))
+        painter.end()
+
+
+class PairDialog(QDialog):
+    """⚙ → Connect your phone: a QR code the myGeeKy phone app scans to set
+    itself up. It closes by itself after a couple of minutes."""
+
+    def __init__(self, parent: "MyGeekyPanel", theme: dict[str, Any]) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Connect your phone")
+        self.setMinimumWidth(340)
+        self._panel = parent
+        lay = QVBoxLayout(self)
+        lay.setSpacing(8)
+        lay.setSizeConstraint(QLayout.SetFixedSize)   # the window always fits its contents, as they change
+        self.intro = QLabel("In the myGeeKy phone app, tap <b>Scan from your computer</b> and point it at this code.")
+        self.intro.setWordWrap(True)
+        self.intro.setFixedWidth(320)
+        lay.addWidget(self.intro)
+        self.wait = QLabel("Checking your GitHub token\u2026")
+        lay.addWidget(self.wait, 0, Qt.AlignCenter)
+        self.qr = QrWidget([])                         # its space is reserved now; the code is drawn when ready
+        lay.addWidget(self.qr, 0, Qt.AlignCenter)
+        self.why = QLabel("")
+        self.why.setWordWrap(True)
+        self.why.setFixedWidth(320)
+        lay.addWidget(self.why)
+        self.countdown = QLabel("")
+        lay.addWidget(self.countdown)
+        close = QPushButton("Close")
+        close.clicked.connect(self.accept)
+        lay.addWidget(close, 0, Qt.AlignRight)
+        self.setStyleSheet(f"QDialog {{ background:#17171f; }} QLabel {{ color:{theme['text']}; font-size:11.5px; }}"
+                           f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                           f"border-radius:7px; padding:6px 14px; }}")
+        self._left = 0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._tick)
+        parent._run_async(lambda: logic.phone_pairing(parent.cfg), self._ready)
+
+    def _ready(self, result: Any) -> None:
+        result = result if isinstance(result, dict) else {}
+        self.wait.setVisible(False)
+        if not result.get("ok"):
+            self.why.setText(result.get("error", "Couldn't make the code."))
+            return
+        self.qr.set_matrix(result["matrix"])
+        self.why.setText(("\U0001f512 " if result["with_token"] else "") + result["why"]
+                         + " Your Signals token never leaves this computer.")
+        self._left = result["seconds"]
+        self._tick()
+        self._timer.start(1000)
+
+    def _tick(self) -> None:
+        if self._left <= 0:
+            self._timer.stop()
+            self.accept()                       # gone: nobody can photograph it later
+            return
+        self.countdown.setText(f"This code disappears in {self._left}s.")
+        self._left -= 1
 
 
 class IdeaDialog(QDialog):
@@ -3506,6 +3594,12 @@ class MyGeekyPanel(QWidget):
         self.hearts_check.toggled.connect(self._on_hearts_toggled)
         layout.addWidget(self.hearts_check)
 
+        self.pair_btn = QPushButton("\U0001f4f1 Connect your phone")
+        self.pair_btn.setCursor(Qt.PointingHandCursor)
+        self.pair_btn.setToolTip("Show a QR code that sets up the myGeeKy phone app in one scan")
+        self.pair_btn.clicked.connect(lambda: PairDialog(self, THEMES[self._theme_name()]).exec())
+        layout.addWidget(self.pair_btn)
+
         bottom = QHBoxLayout()
         self.sync_label = QLabel("")
         self.sync_label.setWordWrap(True)
@@ -3776,6 +3870,9 @@ class MyGeekyPanel(QWidget):
         self.opacity_value_label.setStyleSheet(f"font-size:10.5px; color:{theme['muted']}; background:transparent;")
         self.hearts_check.setStyleSheet(f"QCheckBox {{ font-size:11px; color:{theme['text']}; background:transparent; }}")
         self.sync_label.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        self.pair_btn.setStyleSheet(f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; "
+                                    f"border:none; border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
+                                    f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
         self.quit_btn.setStyleSheet(f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
                                     f"border-radius:7px; padding:4px 10px; font-size:11px; }}"
                                     f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")

@@ -39,6 +39,13 @@ export default function Setup() {
           <Text style={st.brand}>myGeeKy</Text>
           <Text style={st.lead}>{"What's new in your field: research, AI news and models, picked for your own work."}</Text>
 
+          <Pressable style={({ pressed }) => [st.scan, pressed && { opacity: 0.85 }]} onPress={() => router.push('/scan')}>
+            <Text style={st.scanTitle}>📷  Scan from your computer</Text>
+            <Text style={st.scanSub}>Already use myGeeKy on your computer? Open ⚙ → Connect your phone there, and
+              scan the code: everything is set up at once.</Text>
+          </Pressable>
+          <Text style={st.or}>or fill it in</Text>
+
           <Text style={st.label}>GitHub username</Text>
           <TextInput style={st.input} value={username} onChangeText={setUsername} autoCapitalize="none"
                      autoCorrect={false} placeholder="e.g. octocat" placeholderTextColor={C.muted} />
@@ -79,6 +86,11 @@ const st = StyleSheet.create({
            paddingHorizontal: 14, paddingVertical: 12, fontSize: 16 },
   hint: { color: C.muted, fontSize: 12, marginTop: 8, lineHeight: 17 },
   error: { color: C.red, fontSize: 14, marginTop: 14 },
+  scan: { backgroundColor: 'rgba(255,111,216,0.12)', borderColor: 'rgba(255,111,216,0.45)', borderWidth: 1,
+          borderRadius: 16, padding: 16 },
+  scanTitle: { color: C.text, fontSize: 17, fontWeight: '800' },
+  scanSub: { color: C.muted, fontSize: 13, marginTop: 6, lineHeight: 18 },
+  or: { color: C.muted, textAlign: 'center', marginTop: 16, marginBottom: 2, fontSize: 13 },
   button: { backgroundColor: C.violet, borderRadius: 14, paddingVertical: 15, marginTop: 22, alignItems: 'center' },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '800' },
 });

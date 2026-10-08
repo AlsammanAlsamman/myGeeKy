@@ -28,7 +28,15 @@
       "expo-router",
       "expo-status-bar",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "myGeeKy uses the camera only to scan the QR code from myGeeKy on your computer.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "scheme": "mygeeky",
     "backgroundColor": "#12121c",

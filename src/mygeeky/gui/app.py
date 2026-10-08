@@ -272,6 +272,18 @@ def _log_click_for_badges(kind: str, item: dict[str, Any]) -> None:
     achievements.log("click", kind, str(item.get("category", "")), bool(item.get("explore")))
 
 
+def phone_pairing(cfg: MyGeekyConfig, include_token: bool = True) -> dict[str, Any]:
+    """The "Connect your phone" QR code: your profile, plus your token only if
+    it's strictly read-only. Checks the token with GitHub (a few seconds)."""
+    from .. import pairing
+    if not cfg.github_username:
+        return {"ok": False, "error": "Set up myGeeKy here first (your GitHub username)."}
+    token, why = pairing.shareable_token(cfg) if include_token else (None, "Without your token.")
+    text = pairing.payload(cfg, token)
+    return {"ok": True, "text": text, "matrix": pairing.matrix(text), "with_token": bool(token), "why": why,
+            "seconds": pairing.SHOW_SECONDS}
+
+
 def get_badges(cfg: MyGeekyConfig) -> dict[str, Any]:
     """Your badges (local files only) and your cached GitHub achievements."""
     from .. import achievements
