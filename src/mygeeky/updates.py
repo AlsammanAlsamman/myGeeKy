@@ -19,6 +19,7 @@ from typing import Any
 
 import requests
 
+from . import winproc
 from . import __version__
 from .config import UPDATE_CHECK_FILE, ensure_dirs
 
@@ -99,7 +100,7 @@ def run_upgrade() -> tuple[bool, str]:
                        "myGeeKy folder instead.")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     try:
-        r = subprocess.run(upgrade_command(), capture_output=True, text=True, timeout=900,
+        r = winproc.run(upgrade_command(), capture_output=True, text=True, timeout=900,
                            creationflags=flags, encoding="utf-8", errors="replace")
     except (OSError, subprocess.SubprocessError) as exc:
         return False, f"Couldn't run pip: {exc}"
@@ -113,7 +114,7 @@ def run_upgrade() -> tuple[bool, str]:
 def installed_version() -> str | None:
     """The version pip has on disk now (this process still runs the old one)."""
     try:
-        r = subprocess.run([sys.executable, "-c", "import mygeeky; print(mygeeky.__version__)"],
+        r = winproc.run([sys.executable, "-c", "import mygeeky; print(mygeeky.__version__)"],
                            capture_output=True, text=True, timeout=60,
                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return r.stdout.strip() or None

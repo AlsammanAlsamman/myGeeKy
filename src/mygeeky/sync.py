@@ -25,6 +25,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import winproc
 from .config import CONFIG_FILE, DATA_DIR, MODEL_FILE, SYNCED_CONFIG_FILE, ensure_dirs
 
 GITIGNORE = """\
@@ -104,7 +105,7 @@ def _git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.
         cmd += ["-c", "credential.https://github.com.helper=", "-c",
                 "credential.https://github.com.helper=!gh auth git-credential"]
     cmd += list(args)
-    result = subprocess.run(cmd, cwd=str(cwd or DATA_DIR), capture_output=True, text=True)
+    result = winproc.run(cmd, cwd=str(cwd or DATA_DIR), capture_output=True, text=True)
     if check and result.returncode != 0:
         raise SyncError(f"`git {' '.join(args)}` failed:\n{result.stderr.strip() or result.stdout.strip()}")
     return result
@@ -121,14 +122,14 @@ def remote_url(repo: str) -> str:
 def _repo_exists(repo: str) -> bool:
     if not _has_gh():
         return _git("ls-remote", remote_url(repo), check=False).returncode == 0
-    return subprocess.run(["gh", "repo", "view", repo, "--json", "visibility"],
+    return winproc.run(["gh", "repo", "view", repo, "--json", "visibility"],
                           capture_output=True, text=True).returncode == 0
 
 
 def _repo_is_private(repo: str) -> bool | None:
     if not _has_gh():
         return None
-    r = subprocess.run(["gh", "repo", "view", repo, "--json", "visibility", "-q", ".visibility"],
+    r = winproc.run(["gh", "repo", "view", repo, "--json", "visibility", "-q", ".visibility"],
                        capture_output=True, text=True)
     if r.returncode != 0:
         return None
@@ -142,7 +143,7 @@ def _create_private_repo(repo: str) -> None:
             f"The private repo {repo} doesn't exist yet. Create it at "
             f"https://github.com/new?name={name}&visibility=private (keep it Private and empty), then try again."
         )
-    r = subprocess.run(["gh", "repo", "create", repo, "--private",
+    r = winproc.run(["gh", "repo", "create", repo, "--private",
                         "--description", "Private myGeeKy data (synced by mygeeky)"],
                        capture_output=True, text=True)
     if r.returncode != 0:

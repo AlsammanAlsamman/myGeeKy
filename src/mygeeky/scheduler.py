@@ -12,6 +12,9 @@ from __future__ import annotations
 import platform
 import subprocess
 import sys
+from pathlib import Path
+
+from . import winproc
 
 TASK_NAME = "myGeeKyWeeklyRun"
 
@@ -20,12 +23,29 @@ def _python_and_module() -> tuple[str, str]:
     return sys.executable, "mygeeky.cli"
 
 
+def windowless_python() -> str:
+    """pythonw.exe next to this Python: the same Python, without a console window."""
+    exe = Path(sys.executable)
+    w = exe.with_name("pythonw.exe")
+    return str(w if exe.name.lower() == "python.exe" and w.exists() else exe)
+
+
 def windows_command() -> str:
-    python, _ = _python_and_module()
     return (
         f'schtasks /Create /SC WEEKLY /D MON /ST 09:00 /TN "{TASK_NAME}" '
-        f'/TR "\\"{python}\\" -m mygeeky pipeline" /F'
+        f'/TR "\\"{windowless_python()}\\" -m mygeeky pipeline" /F'
     )
+
+
+def make_windowless() -> bool:
+    """Tasks made before 0.15.2 ran python.exe, which opens a console window every
+    Monday; switch an existing one to pythonw (same schedule). True if changed."""
+    if platform.system() != "Windows":
+        return False
+    q = winproc.run(f'schtasks /Query /TN "{TASK_NAME}" /V /FO LIST', shell=True, capture_output=True, text=True)
+    if q.returncode != 0 or "pythonw.exe" in q.stdout.lower() or "python.exe" not in q.stdout.lower():
+        return False
+    return winproc.run(windows_command(), shell=True, capture_output=True, text=True).returncode == 0
 
 
 def cron_line() -> str:
@@ -57,7 +77,7 @@ def install(confirmed: bool) -> str:
     system = platform.system()
     if system == "Windows":
         cmd = windows_command()
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        result = winproc.run(cmd, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             return f"Failed to create scheduled task:\n{result.stderr or result.stdout}"
         return f"Scheduled task '{TASK_NAME}' created. It will run `mygeeky pipeline` every Monday at 09:00."
@@ -77,7 +97,7 @@ def install(confirmed: bool) -> str:
 def remove() -> str:
     system = platform.system()
     if system == "Windows":
-        result = subprocess.run(f'schtasks /Delete /TN "{TASK_NAME}" /F', shell=True, capture_output=True, text=True)
+        result = winproc.run(f'schtasks /Delete /TN "{TASK_NAME}" /F', shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             return f"Could not remove scheduled task (maybe it wasn't installed):\n{result.stderr or result.stdout}"
         return f"Scheduled task '{TASK_NAME}' removed."

@@ -740,8 +740,8 @@ def set_muted(cfg: MyGeekyConfig, login: str, mute: bool = True) -> None:
 
 # --------------------------------------------------------------------------- one-time setup (CLI `beacon init` and the installer)
 def _gh(*args: str):
-    import subprocess
-    return subprocess.run(["gh", *args], capture_output=True, text=True)
+    from . import winproc
+    return winproc.run(["gh", *args], capture_output=True, text=True)
 
 
 def ensure_repo(cfg: MyGeekyConfig, client: GitHubClient, create: bool) -> list[str]:

@@ -49,6 +49,8 @@ from PySide6.QtWidgets import (
 
 APP = "myGeeKy"
 MIN_PY = (3, 9)
+from .. import winproc  # noqa: E402
+
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 FROZEN = getattr(sys, "frozen", False)
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
@@ -156,7 +158,7 @@ def _run(cmd: list[str], stdin: str | None = None, timeout: int = 600) -> subpro
     program becomes a SetupError naming it. Output is logged; stdin is not."""
     log("run: " + " ".join(cmd[:3]) + (" ..." if len(cmd) > 3 else ""))
     try:
-        r = subprocess.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout,
+        r = winproc.run(cmd, input=stdin, capture_output=True, text=True, timeout=timeout,
                            creationflags=NO_WINDOW, encoding="utf-8", errors="replace")
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise _start_error(cmd, exc) from exc
@@ -168,7 +170,7 @@ def _run(cmd: list[str], stdin: str | None = None, timeout: int = 600) -> subpro
 def _popen(cmd: list[str], **kwargs) -> subprocess.Popen:
     log("start: " + " ".join(cmd[:3]) + (" ..." if len(cmd) > 3 else ""))
     try:
-        return subprocess.Popen(cmd, **kwargs)
+        return winproc.popen(cmd, **kwargs)
     except OSError as exc:
         raise _start_error(cmd, exc) from exc
 
@@ -374,7 +376,7 @@ def make_shortcut(path: Path, target: str, args: str, icon: str | None) -> bool:
           "if ($env:ICON) { $s.IconLocation = $env:ICON }; $s.Save()")
     env = {**os.environ, "LNK": str(path), "TARGET": target, "ARGS": args, "ICON": icon or ""}
     try:
-        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], env=env, capture_output=True,
+        r = winproc.run(["powershell", "-NoProfile", "-Command", ps], env=env, capture_output=True,
                            text=True, creationflags=NO_WINDOW, timeout=60)
     except Exception as exc:
         log(f"ERROR couldn't create the shortcut {path}: {_start_error(['powershell'], exc)}")

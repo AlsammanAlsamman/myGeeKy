@@ -74,7 +74,23 @@ def offer_path_fix() -> None:
         pass
 
 
+def _quiet_stdio() -> None:
+    """Started without a console (pythonw: the weekly task), print() has nowhere
+    to go, so the output goes to logs/weekly.log instead."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    try:
+        from .config import LOG_DIR
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        log = open(LOG_DIR / "weekly.log", "a", encoding="utf-8", buffering=1)
+    except OSError:
+        log = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = sys.stdout or log
+    sys.stderr = sys.stderr or log
+
+
 def run() -> None:
+    _quiet_stdio()
     offer_path_fix()
     from .cli import entry
     entry()

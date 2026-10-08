@@ -35,6 +35,7 @@ Design goals, in priority order:
 
 from __future__ import annotations
 
+from . import winproc
 import getpass
 import os
 import shutil
@@ -59,7 +60,7 @@ def _gh_cli_token() -> str | None:
     if not shutil.which("gh"):
         return None
     try:
-        r = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
+        r = winproc.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return None
     token = r.stdout.strip()

@@ -974,6 +974,12 @@ def _main() -> None:
     lock = QLockFile(str(DATA_DIR / "panel.lock"))
     if not lock.tryLock(200):
         return
+    try:                                   # an older weekly task opened a console every Monday
+        import threading
+        from .. import scheduler
+        threading.Thread(target=scheduler.make_windowless, daemon=True).start()
+    except Exception:
+        pass
 
     app = QApplication.instance() or QApplication([])
     app.setApplicationName("mygeeky")

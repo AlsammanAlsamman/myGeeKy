@@ -86,8 +86,11 @@ def install_qt(log=print) -> bool:
         cmd += ["--target", str(target), "--upgrade"]
         log(f"This Python's package folder is too deep for Qt, so it goes into {target} instead.")
     log("Installing Qt for the myGeeKy panel (about 80 MB, one time only)...")
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.stdout is None else 0
-    ok = subprocess.run(cmd, creationflags=flags).returncode == 0
+    if sys.stdout is None:                      # no console of our own: don't flash one for pip
+        from .. import winproc
+        ok = winproc.run(cmd).returncode == 0
+    else:                                       # in a terminal: let pip show its progress there
+        ok = subprocess.run(cmd).returncode == 0
     if ok:
         # make a fresh install importable in this same process
         import importlib
