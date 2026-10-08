@@ -768,6 +768,9 @@ class HeadlineRow(QFrame):
         tag.setToolTip("\U0001f30d the big picture: outside your usual interests" if item.get("explore")
                        else "for you: " + ", ".join(item.get("match") or []))
         lay.addWidget(tag, 0, Qt.AlignTop)
+        from ..badges import BADGES, item_kind
+        kind = item_kind(item)
+        lay.addWidget(letter_badge(kind, f"{BADGES[kind][0].capitalize()}"), 0, Qt.AlignTop)
         title = QLabel(item.get("title", ""))
         title.setTextFormat(Qt.PlainText)
         title.setWordWrap(True)
@@ -803,6 +806,9 @@ class NewsCard(QFrame):
                             f"font-size:9.5px; font-weight:700;")
         badge.setFixedHeight(15)
         top.addWidget(badge)
+        from ..badges import BADGES, item_kind
+        kind = item_kind(item)
+        top.addWidget(letter_badge(kind, BADGES[kind][0].capitalize()))
         if item.get("explore"):
             top.addWidget(_explore_chip(theme))
         top.addStretch(1)
@@ -835,22 +841,44 @@ class NewsCard(QFrame):
 PUBLISHED_GREEN = "#22c55e"
 
 
+def letter_badge(letter: str, tooltip: str, url: str = "",
+                 on_open: Callable[[str], bool] | None = None) -> QPushButton:
+    """P (paper, green) · N (news, yellow) · D (discussion, blue) · A (announcement,
+    violet): one small square, one meaning, everywhere. Clickable when it has a link."""
+    from ..badges import BADGES
+    color = BADGES[letter][1]
+    badge = QPushButton(letter)
+    badge.setFixedSize(18, 18)
+    badge.setToolTip(tooltip)
+    text = "#1a1a1a" if letter == "N" else "white"          # dark on yellow reads better
+    badge.setStyleSheet(f"QPushButton {{ background:{color}; color:{text}; border:none; border-radius:4px; "
+                        f"font-size:10px; font-weight:800; padding:0; }}")
+    if url and on_open is not None:
+        badge.setCursor(Qt.PointingHandCursor)
+        badge.clicked.connect(lambda: on_open(url))
+    return badge
+
+
 def published_badge(paper: dict[str, Any], on_open: Callable[[str], bool]) -> QPushButton:
     """The green [P]: this repo has a published paper. Click to open it."""
-    badge = QPushButton("P")
-    badge.setFixedSize(18, 18)
-    badge.setCursor(Qt.PointingHandCursor)
     cited = paper.get("cited")
     title = paper.get("title") or paper.get("doi") or "a paper"
     year = (paper.get("date") or "")[:4]
-    badge.setToolTip(f"Published: {title}" + (f" ({year})" if year else "")
-                     + (f" · cited {cited} times" if cited else "") + "\nClick to open the paper.")
-    badge.setStyleSheet(f"QPushButton {{ background:{PUBLISHED_GREEN}; color:white; border:none; border-radius:4px; "
-                        f"font-size:10px; font-weight:800; padding:0; }}"
-                        f"QPushButton:hover {{ background:#16a34a; }}")
-    url = paper.get("url", "")
-    badge.clicked.connect(lambda: on_open(url))
-    return badge
+    return letter_badge("P", f"Published: {title}" + (f" ({year})" if year else "")
+                        + (f" · cited {cited} times" if cited else "") + "\nClick to open the paper.",
+                        paper.get("url", ""), on_open)
+
+
+def news_badge(story: dict[str, Any], on_open: Callable[[str], bool]) -> QPushButton:
+    """The yellow [N] (in the news) or blue [D] (discussed on Hacker News) on a repo."""
+    what = "In the news" if story["kind"] == "N" else "Discussed on Hacker News"
+    return letter_badge(story["kind"], f"{what} this week: {story.get('title', '')}\nClick to read it.",
+                        story.get("url", ""), on_open)
+
+
+BADGE_LEGEND = ("<span style='color:#22c55e'>■</span> P paper &nbsp; <span style='color:#eab308'>■</span> N news "
+                "&nbsp; <span style='color:#38bdf8'>■</span> D discussion &nbsp; "
+                "<span style='color:#a78bfa'>■</span> A announcement")
 
 
 class ResearchCard(QFrame):
@@ -1819,6 +1847,8 @@ class MarketRow(QFrame):
         title_line.addWidget(title, 1)
         if row.get("paper"):
             title_line.addWidget(published_badge(row["paper"], on_open))
+        if row.get("news"):
+            title_line.addWidget(news_badge(row["news"], on_open))
         body.addLayout(title_line)
 
         bits = [f"★ {_fmt_count(row.get('stars'))}"]
@@ -1952,6 +1982,8 @@ class RepoCard(QFrame):
         title_row.addWidget(name_label, 1)
         if item.get("paper"):
             title_row.addWidget(published_badge(item["paper"], on_open))
+        if item.get("news"):
+            title_row.addWidget(news_badge(item["news"], on_open))
         if item.get("explore"):
             title_row.addWidget(_explore_chip(theme))
         title_row.addWidget(score_label)
@@ -2884,6 +2916,7 @@ class MyGeekyPanel(QWidget):
         layout.addLayout(mode_row)
         self.news_hint = QLabel("")
         self.news_hint.setWordWrap(True)
+        self.news_hint.setTextFormat(Qt.RichText)
         layout.addWidget(self.news_hint)
         headlines_box = QWidget()
         self.headlines_area = QVBoxLayout(headlines_box)
@@ -3892,7 +3925,9 @@ class MyGeekyPanel(QWidget):
             empty.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
             self.repos_area.addWidget(empty)
             return
+        mentions = logic.news_mentions([i.get("full_name", "") for i in items])
         for item in items:
+            item = {**item, "news": mentions.get(item.get("full_name", ""))}
             self.repos_area.addWidget(RepoCard(item, theme, self._opener("repo", item), self.avatar_loader))
 
     # ------------------------------------------------------------------ activity
@@ -4040,9 +4075,9 @@ class MyGeekyPanel(QWidget):
     # ------------------------------------------------------------------ market
     NEWS_HINTS = {
         "headlines": "What's happening across your work, as titles: AI labs, journals and the tech press, ranked by "
-                     "your interests. \U0001f30d = the big picture, outside your usual interests.",
+                     "your interests. \U0001f30d = the big picture.<br>" + BADGE_LEGEND,
         "papers": "New papers and discussions about your interests, from arXiv, bioRxiv and Hacker News. "
-                  "\U0001f52d = outside your usual interests, on purpose.",
+                  "\U0001f52d = outside your usual interests, on purpose.<br>" + BADGE_LEGEND,
     }
 
     def _set_news_mode(self, mode: str) -> None:
@@ -4216,7 +4251,9 @@ class MyGeekyPanel(QWidget):
             msg.setWordWrap(True)
             msg.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
             self.market_area.addWidget(msg)
+        mentions = logic.news_mentions([r.get("repo", "") for r in rows])
         for row in rows:
+            row = {**row, "news": mentions.get(row.get("repo", ""))}
             self.market_area.addWidget(MarketRow(row, theme, self._opener("repo", row), self.avatar_loader))
         self._render_producthunt(data, theme)
         collecting = rows and all(r.get("stars_week") is None for r in rows)

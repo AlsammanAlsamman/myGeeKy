@@ -109,7 +109,8 @@ def _hn_items(hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
         out.append({"source": "hackernews", "id": f"hn:{oid}", "title": _clip(h.get("title"), 220),
                     "summary": f"{int(h.get('points') or 0)} points · {int(h.get('num_comments') or 0)} comments",
                     "published": _when(str(h.get("created_at") or "")),
-                    "url": f"https://news.ycombinator.com/item?id={oid}"})
+                    "url": f"https://news.ycombinator.com/item?id={oid}",
+                    "story_url": _clip(h.get("url"), 300) if str(h.get("url") or "").startswith("https://") else ""})
     return out
 
 

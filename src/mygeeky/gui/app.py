@@ -439,6 +439,16 @@ def refresh_news_and_headlines(cfg: MyGeekyConfig, force: bool = False) -> dict[
     return {"news": refresh_news(cfg, force=force), "headlines": refresh_headlines(cfg, force=force)}
 
 
+def news_mentions(repos: list[str]) -> dict[str, dict[str, Any]]:
+    """{owner/name: the story} for repos in this week's news or discussions (local files only)."""
+    from .. import badges, headlines, news
+    try:
+        items = (news.load_state().get("items") or []) + (headlines.load_state().get("items") or [])
+        return badges.in_the_news(repos, items)
+    except Exception:
+        return {}
+
+
 def news_refresh_due(cfg: MyGeekyConfig) -> bool:
     from .. import news
     from .. import headlines

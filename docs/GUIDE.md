@@ -300,6 +300,18 @@ CV and papers, and what you've clicked lately.
 - Only feeds are downloaded; nothing about you is sent. Titles are plain text,
   and a link only opens if it points at that feed's own site.
 
+**One letter, one meaning, everywhere:**
+
+| | On a news item | On a repo (Repos, Market) |
+|---|---|---|
+| 🟩 **P** | it's a paper (research article, preprint) | it has a published paper |
+| 🟨 **N** | a news story | it's **in the news this week** (a story links to it or names it) |
+| 🟦 **D** | a Hacker News discussion | it's being discussed on Hacker News |
+| 🟪 **A** | an announcement from an AI lab or company blog | |
+
+Click a repo's **N** or **D** to read the story. A repo's name only counts from a
+title when it's distinctive (not "tools" or a field like "genomics").
+
 **Papers & discussions** (the other view):
 
 <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/news.png" width="280" align="right" alt="News tab">

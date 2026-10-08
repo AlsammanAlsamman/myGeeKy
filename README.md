@@ -64,7 +64,7 @@
 
 📈 **Feels the pulse.** Your field's repos as a daily stock race: stars, commits, PyPI downloads, who moved up.
 
-🔬 **Reads the literature.** Papers gaining citations fastest, new tools with their code, and the people behind them. A green **P** marks repos with a published paper.
+🔬 **Reads the literature.** Papers gaining citations fastest, new tools with their code, and the people behind them. One letter, one meaning: 🟩 **P** a paper, 🟨 **N** in the news, 🟦 **D** discussed on Hacker News, 🟪 **A** an announcement.
 
 🗞️ **Brings the news.** Headlines from AI labs, journals and the tech press, ranked for *your* work, plus new arXiv, bioRxiv and Hacker News items about your topics.
 
