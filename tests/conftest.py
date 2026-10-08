@@ -27,6 +27,7 @@ import mygeeky.papers  # noqa: F401
 import mygeeky.admin  # noqa: F401
 import mygeeky.keywords  # noqa: F401
 import mygeeky.headlines  # noqa: F401
+import mygeeky.achievements  # noqa: F401
 import mygeeky.hfmodels  # noqa: F401
 import mygeeky.producthunt  # noqa: F401
 import mygeeky.config as config_module
@@ -58,3 +59,13 @@ def _isolate_real_data(tmp_path, monkeypatch):
                 if hit:
                     root, rel = hit
                     monkeypatch.setattr(module, attr, fake_roots[root] / rel)
+
+
+@pytest.fixture(autouse=True)
+def _no_github_achievements_fetch(monkeypatch):
+    """Panels read your GitHub achievements in the background: never over the network in tests."""
+    import mygeeky.achievements as ach
+
+    def offline(*a, **kw):
+        raise ach.requests.ConnectionError("tests are offline")
+    monkeypatch.setattr(ach.requests, "get", offline)

@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QCompleter,
+    QProgressBar,
     QDialog,
     QLineEdit,
     QPlainTextEdit,
@@ -1357,6 +1358,8 @@ class IdeaDialog(QDialog):
             return
         url = issue_url(self.kind(), self.title_edit.text(), self.details.toPlainText(), self.with_version.isChecked())
         QDesktopServices.openUrl(QUrl(url))
+        from ..achievements import log
+        log("idea")
         self.status.setText("✓ Your browser opened it on GitHub: click <b>Submit new issue</b> there to send it. "
                             "Thank you!")
 
@@ -2553,6 +2556,11 @@ class MyGeekyPanel(QWidget):
             self._sync_timer.start(SYNC_EVERY_MS)
 
         self._load_status()
+        from ..achievements import log_open_today
+        log_open_today()                      # a day of use, for the Regular badge
+        self._badges: dict[str, Any] = {}
+        self._refresh_badges()
+        self._load_github_achievements()
         self._load_live_stats()
         self._load_suggestions()
         self._load_contributions()
@@ -2681,12 +2689,21 @@ class MyGeekyPanel(QWidget):
         self.status_label = QLabel("Loading…")
         self.status_label.setWordWrap(True)
         panel_layout.addWidget(self.status_label)
+        self.badge_strip = QFrame()
+        self.badge_strip.setCursor(Qt.PointingHandCursor)
+        self.badge_strip.setToolTip("Your badges: click to see them all")
+        self.badge_strip_layout = QHBoxLayout(self.badge_strip)
+        self.badge_strip_layout.setContentsMargins(0, 0, 0, 0)
+        self.badge_strip_layout.setSpacing(4)
+        self.badge_strip.mousePressEvent = lambda ev: self._switch_tab("badges")  # noqa: ARG005
+        panel_layout.addWidget(self.badge_strip)
 
         tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
         self._is_admin = logic.is_admin(self.cfg)
         tabs = [("live", "Live"), ("suggestions", "People"), ("repos", "Repos"), ("market", "Market"),
                 ("news", "News"), ("activity", "Activity"), ("signals", "Signals"), ("model", "Model")]
+        tabs.append(("badges", "\U0001f3c5"))
         if self._is_admin:
             tabs.append(("admin", "\U0001f6e1"))
         for name, label in tabs:
@@ -2697,8 +2714,12 @@ class MyGeekyPanel(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
-            # width follows the label, so six tabs still fit the narrow panel
-            tabs_row.addWidget(btn, len(label) + 3)
+            if len(label) <= 2:                 # icon-only tabs (🏅, 🛡): just wide enough for the icon
+                btn.setFixedWidth(30)
+                tabs_row.addWidget(btn, 0)
+            else:                               # width follows the label, so all the tabs fit the narrow panel
+                tabs_row.addWidget(btn, len(label) + 3)
+        tabs_row.setSpacing(4)
         panel_layout.addLayout(tabs_row)
 
         self.content_stack = QStackedWidget()
@@ -2713,6 +2734,9 @@ class MyGeekyPanel(QWidget):
         self.content_stack.addWidget(self._build_activity_tab())
         self.content_stack.addWidget(self._build_signals_tab())
         self.content_stack.addWidget(self._build_model_tab())
+        self._tab_order.append("badges")
+        self.content_stack.addWidget(self._build_badges_tab())
+        self.tab_buttons["badges"].setToolTip("Your badges")
         if self._is_admin:
             self._tab_order.append("admin")
             self.content_stack.addWidget(self._build_admin_tab())
@@ -4000,11 +4024,176 @@ class MyGeekyPanel(QWidget):
         QTimer.singleShot(0, self._load_suggestions)
 
     def _opener(self, kind: str, item: dict[str, Any]) -> Callable[[str], bool]:
-        """open_profile, plus: this click is an interest signal."""
+        """open_profile, plus: this click is an interest signal (and counts toward badges)."""
         def open_and_learn(url: str) -> bool:
             logic.record_click(self.cfg, kind, item)
+            QTimer.singleShot(0, self._refresh_badges)
             return logic.open_link(url)
         return open_and_learn
+
+    # ------------------------------------------------------------------ badges
+    STRIP_MAX = 7
+
+    def _refresh_badges(self) -> None:
+        self._badges = logic.get_badges(self.cfg)
+        self._render_badge_strip()
+        self._update_badge_tab_label()
+        if self.active_tab == "badges":
+            self._render_badges()
+
+    def _load_github_achievements(self) -> None:
+        self._run_async(lambda: logic.refresh_github_achievements(self.cfg), lambda r: self._refresh_badges())
+
+    def _badge_icon(self, b: dict[str, Any], size: int = 22, locked: bool = False) -> QLabel:
+        from ..achievements import TIER_COLORS
+        icon = QLabel(b["emoji"])
+        icon.setFixedSize(size, size)
+        icon.setAlignment(Qt.AlignCenter)
+        ring = "#55556a" if locked else TIER_COLORS.get(b["tier"], "#55556a")
+        icon.setStyleSheet(f"background:{'rgba(255,255,255,0.04)' if locked else 'rgba(255,255,255,0.10)'}; "
+                           f"border:2px solid {ring}; border-radius:{size // 2}px; font-size:{int(size * 0.5)}px;")
+        return icon
+
+    def _github_icon(self, a: dict[str, str], size: int = 22) -> QLabel:
+        icon = QLabel()
+        icon.setFixedSize(size, size)
+        icon.setToolTip(f"GitHub achievement: {a.get('name', '')}")
+        icon.setStyleSheet("background:transparent;")
+        self.avatar_loader.request(a.get("image", ""), size, icon.setPixmap)
+        return icon
+
+    def _render_badge_strip(self) -> None:
+        _clear_layout(self.badge_strip_layout)
+        data = getattr(self, "_badges", {})
+        mine, github = data.get("earned", []), data.get("github", [])
+        shown = 0
+        for b in mine:
+            if shown >= self.STRIP_MAX:
+                break
+            icon = self._badge_icon(b)
+            icon.setToolTip(f"{b['tier'].capitalize()} {b['name']}: {b['count']} {b['what']}")
+            self.badge_strip_layout.addWidget(icon)
+            shown += 1
+        for a in github:
+            if shown >= self.STRIP_MAX:
+                break
+            self.badge_strip_layout.addWidget(self._github_icon(a))
+            shown += 1
+        extra = len(mine) + len(github) - shown
+        if extra > 0:
+            more = QLabel(f"+{extra}")
+            more.setStyleSheet(f"color:{THEMES[self._theme_name()]['muted']}; font-size:10.5px; "
+                               "font-weight:700; background:transparent;")
+            self.badge_strip_layout.addWidget(more)
+        self.badge_strip_layout.addStretch(1)
+        self.badge_strip.setVisible(bool(mine or github))
+
+    def _update_badge_tab_label(self) -> None:
+        seen = set(self.cfg.badges_seen)
+        new = [b for b in getattr(self, "_badges", {}).get("earned", []) if f"{b['id']}:{b['tier']}" not in seen]
+        btn = self.tab_buttons.get("badges")
+        if btn is not None:
+            btn.setText("\U0001f3c5\u2022" if new else "\U0001f3c5")
+            btn.setToolTip(f"New badge: {new[0]['emoji']} {new[0]['name']}!" if new else "Your badges")
+
+    def _build_badges_tab(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 4, 4, 4)
+        layout.setSpacing(8)
+        self.badges_title = QLabel("Your badges")
+        layout.addWidget(self.badges_title)
+        self.badges_intro = QLabel("Earned by using myGeeKy: opening things, following people, coming back. "
+                                   "Bronze, then silver, then gold.")
+        self.badges_intro.setWordWrap(True)
+        layout.addWidget(self.badges_intro)
+        box = QWidget()
+        self.badges_area = QVBoxLayout(box)
+        self.badges_area.setContentsMargins(0, 0, 0, 0)
+        self.badges_area.setSpacing(6)
+        layout.addWidget(box)
+        layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        return scroll
+
+    def _render_badges(self) -> None:
+        from ..achievements import TIER_COLORS
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.badges_area)
+        data = getattr(self, "_badges", None) or logic.get_badges(self.cfg)
+        self.badges_title.setStyleSheet(f"color:{theme['text']}; font-size:15px; font-weight:700; background:transparent;")
+        self.badges_intro.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
+
+        def header(text: str) -> None:
+            lbl = QLabel(text)
+            lbl.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
+                              "margin-top:6px; background:transparent;")
+            self.badges_area.addWidget(lbl)
+
+        if data.get("github"):
+            header("ON GITHUB")
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            for a in data["github"]:
+                cell = QVBoxLayout()
+                cell.setSpacing(2)
+                cell.addWidget(self._github_icon(a, 44), 0, Qt.AlignHCenter)
+                name = QLabel(a.get("name", ""))
+                name.setTextFormat(Qt.PlainText)
+                name.setStyleSheet(f"color:{theme['muted']}; font-size:9.5px; background:transparent;")
+                cell.addWidget(name, 0, Qt.AlignHCenter)
+                row.addLayout(cell)
+            row.addStretch(1)
+            self.badges_area.addLayout(row)
+
+        header("ON MYGEEKY")
+        for b in sorted(data.get("all", []), key=lambda b: (-b["level"], b["name"])):
+            locked = not b["tier"]
+            card = QFrame()
+            card.setObjectName("badgeCard")
+            lay = QHBoxLayout(card)
+            lay.setContentsMargins(8, 6, 8, 6)
+            lay.setSpacing(10)
+            lay.addWidget(self._badge_icon(b, 36, locked=locked))
+            body = QVBoxLayout()
+            body.setSpacing(1)
+            tier = "" if locked else f"  <span style='color:{TIER_COLORS[b['tier']]}'>{b['tier']}</span>"
+            name = QLabel(f"<b>{html.escape(b['name'])}</b>{tier}")
+            name.setTextFormat(Qt.RichText)
+            name.setStyleSheet(f"color:{theme['text'] if not locked else theme['muted']}; font-size:12px; "
+                               "background:transparent;")
+            body.addWidget(name)
+            if b["single"]:
+                status = "earned" if not locked else f"not yet: {b['what']}"
+            elif b["next"] is None:
+                status = f"{b['count']} {b['what']}: the top level!"
+            else:
+                status = f"{b['count']} of {b['next']} {b['what']}"
+            sub = QLabel(status)
+            sub.setTextFormat(Qt.PlainText)
+            sub.setWordWrap(True)
+            sub.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+            sub.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+            body.addWidget(sub)
+            if not b["single"] and b["next"] is not None:
+                bar = QProgressBar()
+                bar.setRange(0, b["next"])
+                bar.setValue(min(b["count"], b["next"]))
+                bar.setTextVisible(False)
+                bar.setFixedHeight(4)
+                bar.setStyleSheet(f"QProgressBar {{ background:rgba(255,255,255,0.08); border:none; border-radius:2px; }}"
+                                  f"QProgressBar::chunk {{ background:{theme['accent']}; border-radius:2px; }}")
+                body.addWidget(bar)
+            lay.addLayout(body, 1)
+            card.setStyleSheet(f"QFrame#badgeCard {{ background:{theme['card_bg']}; border-radius:10px; }}")
+            self.badges_area.addWidget(card)
 
     def _on_ticker_clicked(self, url: str) -> bool:
         opened = logic.open_profile(url)
@@ -4594,6 +4783,10 @@ class MyGeekyPanel(QWidget):
         self.active_tab = name
         self.content_stack.setCurrentIndex(self._tab_order.index(name))
         self._update_tab_styles()
+        if name == "badges":
+            self._render_badges()
+            logic.mark_badges_seen(self.cfg, [f"{b['id']}:{b['tier']}" for b in self._badges.get("earned", [])])
+            self._update_badge_tab_label()
         if name == "model":  # re-read (it's a local file) and replay the entrance
             self._load_model_history()
             self._play_model_animations()

@@ -72,6 +72,8 @@
 "I used your tool"), sealed so **only the recipient can read them**. No reply is ever expected, and 🤝
 "let's collaborate" only shows up if you *both* choose it.
 
+🏅 **Rewards you for using it.** Badges under your name (Regular, Clicker, AI Fan, Analyst, Model Hunter, Networker…, in bronze, silver and gold), next to your GitHub achievements.
+
 🧠 **Learns what you're into.** Every click, follow, star and fork tunes it, and 🔭 20% of every list stays open for new territory.
 
 </td>

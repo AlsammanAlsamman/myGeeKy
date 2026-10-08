@@ -41,6 +41,7 @@ token_check.json
 news.json
 headlines.json
 hf_models.json
+github_achievements.json
 keywords.json
 trends.json
 papers_cache.json

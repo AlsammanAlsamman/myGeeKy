@@ -239,7 +239,9 @@ def suggestions_auto_refresh_due(cfg: MyGeekyConfig, now: datetime | None = None
 
 def record_click(cfg: MyGeekyConfig, kind: str, item: dict[str, Any]) -> None:
     """A click on a person, repo, Market row or news item is an interest
-    signal (terms only; see interests.py). Never raises."""
+    signal (terms only; see interests.py), and counts toward your badges
+    (the kind of thing only). Never raises."""
+    _log_click_for_badges(kind, item)
     try:
         from .. import interests
         if kind == "person":
@@ -258,6 +260,39 @@ def record_click(cfg: MyGeekyConfig, kind: str, item: dict[str, Any]) -> None:
                              source=item.get("id", ""), cfg=cfg)
     except Exception:
         pass
+
+
+def _log_click_for_badges(kind: str, item: dict[str, Any]) -> None:
+    from .. import achievements, badges
+    if kind == "news":
+        source = item.get("source", "")
+        kind = "paper" if source in ("arxiv", "biorxiv") or "velocity" in item or "cited" in item else "news"
+    elif kind == "headline" and badges.item_kind(item) == "P":
+        kind = "paper"
+    achievements.log("click", kind, str(item.get("category", "")), bool(item.get("explore")))
+
+
+def get_badges(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Your badges (local files only) and your cached GitHub achievements."""
+    from .. import achievements
+    try:
+        cache = __import__("json").loads(__import__("pathlib").Path(achievements.GH_ACHIEVEMENTS_FILE)
+                                         .read_text(encoding="utf-8"))
+        github = cache.get("items", []) if cache.get("user") == cfg.github_username else []
+    except (OSError, ValueError):
+        github = []
+    every = achievements.earned(cfg)
+    return {"all": every, "earned": [b for b in achievements.earned_only(cfg)], "github": github}
+
+
+def refresh_github_achievements(cfg: MyGeekyConfig) -> list[dict[str, str]]:
+    from .. import achievements
+    return achievements.github_achievements(cfg.github_username) if cfg.github_username else []
+
+
+def mark_badges_seen(cfg: MyGeekyConfig, keys: list[str]) -> None:
+    cfg.badges_seen = sorted(set(cfg.badges_seen) | set(keys))
+    save_config(cfg)
 
 
 def mark_suggestion_seen(username: str) -> None:

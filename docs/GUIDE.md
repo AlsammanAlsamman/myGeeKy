@@ -387,6 +387,36 @@ reach myGeeKy's maker so the next dictionary can learn them:
 - or when you click a red keyword (or run `mygeeky keywords suggest`): a
   prefilled GitHub issue that you submit yourself.
 
+## 🏅 Badges
+
+Under your name in the panel: the badges you've earned, and your GitHub
+achievements (Pull Shark, Quickdraw…). Click them, or the 🏅 tab, to see them all,
+with how far you are from the next level. A dot on 🏅 means a new one.
+
+| | Badge | Earned by | Bronze · Silver · Gold |
+|---|---|---|---|
+| 🔥 | Regular | days you open myGeeKy | 3 · 14 · 60 |
+| 🖱️ | Clicker | things you open from it | 10 · 50 · 200 |
+| 📰 | News Reader | headlines and news | 10 · 50 · 200 |
+| 📊 | Analyst | papers | 5 · 25 · 100 |
+| 🤖 | AI Fan | AI headlines and models | 5 · 25 · 100 |
+| 🤗 | Model Hunter | Hugging Face models | 3 · 15 · 50 |
+| 🔭 | Explorer | things outside your usual interests | 3 · 15 · 50 |
+| 🤝 | Networker | people you follow | 1 · 10 · 30 |
+| ⭐ | Stargazer | repos you star | 1 · 10 · 50 |
+| 🛠️ | Builder | repos you fork to contribute | 1 · 5 · 20 |
+| 🙏 | Grateful | signals you send | 1 · 5 · 20 |
+| 🔤 | Wordsmith | keywords you set | 3 · 8 · 15 |
+| 💡 | Idea Giver | ideas and problems you send | 1 · 3 · 10 |
+| ☁️ | Everywhere | sync set up | earned once |
+| 🌱 | Early Adopter | joined before 2027 | earned once |
+
+Badges come from your own files only. myGeeKy keeps a small usage log
+(`usage.jsonl`) with the **kind** of thing you opened (a headline, a model, a
+paper) and its area, never titles or links; it syncs with the rest of your data.
+GitHub achievements have no API, so they're read from your public profile at most
+once a week; if GitHub changes that page, they just don't show.
+
 ## It learns what you're into, and keeps room to explore
 
 Everything you do teaches myGeeKy a little about your interests:

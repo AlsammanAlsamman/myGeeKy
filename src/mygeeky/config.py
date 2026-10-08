@@ -40,6 +40,8 @@ INTEREST_SEEN_FILE = DATA_DIR / "interest_seen.json"        # your stars/forks a
 NEWS_FILE = DATA_DIR / "news.json"
 TRENDS_FILE = DATA_DIR / "trends.json"                 # research trends from OpenAlex
 PAPERS_CACHE_FILE = DATA_DIR / "papers_cache.json"     # repo -> its published paper (the [P] badge)
+USAGE_FILE = DATA_DIR / "usage.jsonl"                 # what kinds of things you open (badges); synced
+GH_ACHIEVEMENTS_FILE = DATA_DIR / "github_achievements.json"   # your GitHub achievements, cached
 HF_MODELS_FILE = DATA_DIR / "hf_models.json"         # Hugging Face models trending in your field
 HEADLINES_FILE = DATA_DIR / "headlines.json"          # AI, science and tech headlines, ranked for you
 ADMIN_FILE = DATA_DIR / "admin_prospects.json"         # the maker's admin tab: prospects and invites
@@ -167,6 +169,7 @@ class MyGeekyConfig:
     beacon_daily_limit: int = 10            # signals you can send per day
     beacon_repeat_days: int = 30            # the same signal to the same person at most once in this many days
     beacon_weekly_new_people: int = 5       # people you can start signalling per week
+    badges_seen: list[str] = field(default_factory=list)   # "id:tier" you've already been shown
     beacon_quiet: bool = False              # "not taking signals right now": others can't send to you
     beacon_muted: list[str] = field(default_factory=list)  # hide their signals (they're not told)
     beacon_gesture_ttl_days: int = 90       # signals expire (yours are pruned, others' ignored) after this
