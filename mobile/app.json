@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "myGeeKy",
+    "slug": "mygeeky",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.mygeeky.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#12121c",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "org.mygeeky.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "scheme": "mygeeky",
+    "backgroundColor": "#12121c",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
