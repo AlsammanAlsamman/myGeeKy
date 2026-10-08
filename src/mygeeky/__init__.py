@@ -4,4 +4,4 @@ myGeeKy never follows anyone automatically. It only ever suggests; you
 decide who to follow, by hand, on github.com.
 """
 
-__version__ = "0.16.3"
+__version__ = "0.16.4"

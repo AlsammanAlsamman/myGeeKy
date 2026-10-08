@@ -1,4 +1,5 @@
 // You, in the centre of the orbit: your model (keywords), your badges, and the rest.
+import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -119,8 +120,26 @@ export function MorePart() {
       { text: 'Cancel', style: 'cancel' }, { text: 'Start over', style: 'destructive', onPress: go },
     ]);
   };
+  const rows: [string, string, boolean][] = [
+    ['GitHub', settings.username, true],
+    ['Signed in', token ? 'yes: Live and People refresh freely' : 'no (sign in below)', !!token],
+    ['ORCID', settings.orcid || 'not set', !!settings.orcid],
+    ['Keywords', settings.keywords.length ? settings.keywords.join(', ') : 'none yet (add them in Your model)', settings.keywords.length > 0],
+    ['Signals', 'on the desktop panel for now', false],
+    ['App version', Constants.expoConfig?.version ?? '', true],
+  ];
   return (
     <>
+      <Section>⚙️ YOUR SETUP</Section>
+      <Card>
+        {rows.map(([k, v, on]) => (
+          <View key={k} style={st.setupRow}>
+            <Text style={st.setupKey}>{k}</Text>
+            <Text style={[st.setupVal, !on && { color: C.muted }]}>{v}</Text>
+          </View>
+        ))}
+      </Card>
+
       <Section>🔑 GITHUB</Section>
       <Card>
         <Text style={st.body}>{token ? 'Signed in: Live and People refresh freely. Read-only: myGeeKy can never follow, star or post.'
@@ -170,5 +189,8 @@ const st = StyleSheet.create({
   addText: { color: '#fff', fontWeight: '800' },
   body: { color: C.text, fontSize: 14, lineHeight: 20 },
   link: { color: C.cyan, fontSize: 14, marginTop: 8 },
+  setupRow: { flexDirection: 'row', paddingVertical: 4, gap: 10 },
+  setupKey: { color: C.muted, fontSize: 13, width: 92 },
+  setupVal: { color: C.text, fontSize: 13, flex: 1 },
   medal: { width: 42, height: 42, borderRadius: 21, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
 });

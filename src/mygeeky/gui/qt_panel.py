@@ -3789,6 +3789,17 @@ class MyGeekyPanel(QWidget):
         self.hearts_check.toggled.connect(self._on_hearts_toggled)
         layout.addWidget(self.hearts_check)
 
+        # Your setup: what decides how myGeeKy works for you, at a glance
+        self.setup_label = QLabel("")
+        self.setup_label.setTextFormat(Qt.RichText)
+        self.setup_label.setWordWrap(True)
+        layout.addWidget(self.setup_label)
+        self.signals_btn = QPushButton("")
+        self.signals_btn.setCursor(Qt.PointingHandCursor)
+        self.signals_btn.clicked.connect(self._on_signals_switch)
+        self.signals_btn.hide()
+        layout.addWidget(self.signals_btn)
+
         self.pair_btn = QPushButton("\U0001f4f1 Connect your phone")
         self.pair_btn.setCursor(Qt.PointingHandCursor)
         self.pair_btn.setToolTip("Show a QR code that sets up the myGeeKy phone app in one scan")
@@ -3863,6 +3874,67 @@ class MyGeekyPanel(QWidget):
 
     def _toggle_settings(self) -> None:
         self.settings_panel.setVisible(not self.settings_panel.isVisible())
+        if self.settings_panel.isVisible():
+            self._load_setup()
+
+    # ------------------------------------------------------------------ your setup (in ⚙)
+    def _load_setup(self) -> None:
+        if not getattr(self, "_setup", None):
+            self.setup_label.setText("Checking your setup\u2026")
+        self._run_async(lambda: logic.setup_overview(self.cfg), self._render_setup)
+
+    def _render_setup(self, info: dict[str, Any]) -> None:
+        import html as h
+        self._setup = info
+        theme = THEMES[self._theme_name()]
+        ok, off = "#34d399", theme["muted"]
+
+        def row(name: str, value: str, color: str | None = None) -> str:
+            return (f"<tr><td style='color:{theme['muted']}; padding:1px 10px 1px 0'>{name}</td>"
+                    f"<td style='color:{color or theme['text']}'>{value}</td></tr>")
+        rows = [row("GitHub", h.escape(info.get("user") or "not set"))]
+        for t in info.get("tokens", []):
+            label = "Token 1 (read)" if t["name"] == "read" else "Token 2 (Signals)" if t["name"] == "beacon" else t["name"]
+            msg = t["message"].split(") ", 1)[-1] if ") " in t["message"] else t["message"]
+            bad = t["state"] in ("expired", "invalid", "soon")
+            rows.append(row(label, h.escape(msg or "stored"), "#f87171" if bad else None))
+        if info.get("signals"):
+            rows.append(row("Signals", "\u2713 on: you send and receive", ok))
+        else:
+            rows.append(row("Signals", "off" + ("" if info.get("beacon_token") else " (needs token 2)"), off))
+        rows.append(row("Sync", f"\u2713 on: {h.escape(info['sync'])}" if info.get("sync") else "off: this computer only",
+                        ok if info.get("sync") else off))
+        rows.append(row("ORCID", h.escape(info.get("orcid") or "not set"), None if info.get("orcid") else off))
+        rows.append(row("Scholar", h.escape(info.get("scholar") or "not set"), None if info.get("scholar") else off))
+        rows.append(row("CV", h.escape(info.get("cv") or "not set"), None if info.get("cv") else off))
+        kws = info.get("keywords") or []
+        rows.append(row("Keywords", h.escape(", ".join(kws[:6]) + ("\u2026" if len(kws) > 6 else "")) if kws
+                        else "none yet (add them in the Model tab)", None if kws else off))
+        rows.append(row("Version", h.escape(info.get("version", ""))))
+        self.setup_label.setText(
+            f"<div style='font-size:11px; font-weight:600; color:{theme['text']}; margin-bottom:4px'>Your setup</div>"
+            f"<table style='font-size:10.5px'>{''.join(rows)}</table>")
+        self.setup_label.setStyleSheet("background:transparent;")
+        can = info.get("signals") or info.get("beacon_token")
+        self.signals_btn.setVisible(bool(can))
+        self.signals_btn.setEnabled(True)
+        self.signals_btn.setText("Turn Signals off" if info.get("signals") else "Turn Signals on")
+        self.signals_btn.setStyleSheet(
+            f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; border-radius:7px; "
+            f"padding:4px 10px; font-size:11px; }} QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+
+    def _on_signals_switch(self) -> None:
+        on = not self.cfg.beacon_enabled
+        self.signals_btn.setEnabled(False)
+        self.signals_btn.setText("Turning Signals on\u2026" if on else "Turning Signals off\u2026")
+
+        def done(result: dict[str, Any]) -> None:
+            if not result.get("ok"):
+                self.setup_label.setText(self.setup_label.text() + f"<p style='color:#f87171; font-size:10.5px'>"
+                                         f"Couldn't turn Signals on: {result.get('error')}</p>")
+            self._refresh_signals(force=True)
+            self._load_setup()
+        self._run_async(lambda: logic.set_signals_enabled(self.cfg, on), done)
 
     @staticmethod
     def _slider_to_opacity(value: int) -> float:

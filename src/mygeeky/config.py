@@ -277,9 +277,22 @@ def _migrate(values: dict[str, Any], version: int) -> dict[str, Any]:
     return values
 
 
+# settings that are painful to lose: a save that drops any of them keeps a backup first
+_PRECIOUS = ("beacon_enabled", "sync_repo", "orcid_id", "scholar_id", "cv_path")
+
+
 def save_config(cfg: MyGeekyConfig) -> None:
     ensure_dirs()
-    CONFIG_FILE.write_text(json.dumps(cfg.to_dict(), indent=2), encoding="utf-8")
+    new = cfg.to_dict()
+    try:
+        old = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        if any(old.get(k) and not new.get(k) for k in _PRECIOUS):
+            from datetime import datetime
+            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            CONFIG_FILE.with_name(f"config.backup-{stamp}.json").write_text(json.dumps(old, indent=2), encoding="utf-8")
+    except (OSError, ValueError):
+        pass
+    CONFIG_FILE.write_text(json.dumps(new, indent=2), encoding="utf-8")
 
 
 def config_summary(cfg: MyGeekyConfig) -> str:

@@ -171,3 +171,38 @@ def test_dragging_the_grip_and_the_slider_change_the_height_within_limits(monkey
             w.wait(2000)
         panel.close()
         panel.deleteLater()
+
+
+def test_setup_overview_shows_what_matters(monkeypatch):
+    from mygeeky import tokens
+    from mygeeky.gui import app as logic
+    monkeypatch.setattr(tokens, "status", lambda cfg: [{"name": "read", "message": "Token 1 (read-only) expires soon.", "state": "ok"}])
+    monkeypatch.setattr(logic.auth, "get_beacon_token", lambda user: "tok")
+    cfg = MyGeekyConfig(github_username="me", beacon_enabled=True, sync_repo="me/mygeeky-data", orcid_id="0000-0002-1825-0097",
+                        cv_path=r"C:\cv\me.pdf", keywords=["gwas"])
+    info = logic.setup_overview(cfg)
+    assert info["signals"] and info["beacon_token"] and info["sync"] == "me/mygeeky-data"
+    assert info["cv"] == "me.pdf" and info["keywords"] == ["gwas"] and info["tokens"][0]["name"] == "read"
+
+
+def test_signals_can_be_turned_off_and_on(monkeypatch):
+    from mygeeky import beacon
+    from mygeeky.gui import app as logic
+    cfg = MyGeekyConfig(github_username="me", beacon_enabled=True)
+    assert logic.set_signals_enabled(cfg, False)["ok"] and not load_config().beacon_enabled
+    monkeypatch.setattr(beacon, "go_live", lambda c: setattr(c, "beacon_enabled", True))
+    assert logic.set_signals_enabled(cfg, True)["ok"] and cfg.beacon_enabled
+    monkeypatch.setattr(beacon, "go_live", lambda c: (_ for _ in ()).throw(RuntimeError("no token")))
+    r = logic.set_signals_enabled(MyGeekyConfig(github_username="me"), True)
+    assert not r["ok"] and "no token" in r["error"]
+
+
+def test_a_save_that_loses_important_settings_keeps_a_backup():
+    import mygeeky.config as config_module
+    full = dict(github_username="me", beacon_enabled=True, sync_repo="me/data", orcid_id="0000-0002-1825-0097")
+    save_config(MyGeekyConfig(**full))
+    save_config(MyGeekyConfig(**full, gui_opacity=0.5))                          # an everyday save: no backup
+    assert not list(config_module.CONFIG_FILE.parent.glob("config.backup-*.json"))
+    save_config(MyGeekyConfig(github_username="me"))                            # loses Signals and sync
+    backups = list(config_module.CONFIG_FILE.parent.glob("config.backup-*.json"))
+    assert len(backups) == 1 and '"sync_repo": "me/data"' in backups[0].read_text(encoding="utf-8")

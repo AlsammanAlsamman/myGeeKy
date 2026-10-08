@@ -40,6 +40,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from pathlib import Path
+
 from .. import auth
 from ..activity import get_matched_activity, get_recent_activity
 from ..cli import _run_contribute, _run_suggestions
@@ -152,6 +154,39 @@ def set_panel_height(cfg: MyGeekyConfig, fraction: float) -> float:
     cfg.gui_panel_height_fraction = clamp_panel_height(fraction)
     save_config(cfg)
     return cfg.gui_panel_height_fraction
+
+
+def setup_overview(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Everything that decides how myGeeKy works for you, for ⚙ (may check the
+    tokens' expiry with GitHub, at most once a day)."""
+    from .. import __version__, tokens
+    try:
+        toks = tokens.status(cfg)
+    except Exception:
+        toks = []
+    return {
+        "user": cfg.github_username, "version": __version__,
+        "tokens": [{"name": t.get("name", ""), "message": t.get("message", ""), "state": t.get("state", "")} for t in toks],
+        "signals": cfg.beacon_enabled,
+        "beacon_token": bool(cfg.github_username and auth.get_beacon_token(cfg.github_username)),
+        "sync": cfg.sync_repo, "orcid": cfg.orcid_id, "scholar": cfg.scholar_id,
+        "cv": Path(cfg.cv_path).name if cfg.cv_path else "", "keywords": list(cfg.keywords),
+    }
+
+
+def set_signals_enabled(cfg: MyGeekyConfig, on: bool) -> dict[str, Any]:
+    """Turn Signals on (publishes your beacon with your Signals token) or off
+    (your beacon repo stays as it is; you just stop sending and receiving)."""
+    from .. import beacon as bc
+    if on:
+        try:
+            bc.go_live(cfg)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True}
+    cfg.beacon_enabled = False
+    save_config(cfg)
+    return {"ok": True}
 
 
 def get_update_info(cfg: MyGeekyConfig) -> dict[str, Any]:
