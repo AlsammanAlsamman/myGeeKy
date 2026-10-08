@@ -2802,13 +2802,19 @@ class MyGeekyPanel(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
-            if len(label) <= 2:                 # icon-only tabs (🏅, 🛡): just wide enough for the icon
-                btn.setFixedWidth(30)
-                tabs_row.addWidget(btn, 0)
-            else:                               # width follows the label, so all the tabs fit the narrow panel
-                tabs_row.addWidget(btn, len(label) + 3)
-        tabs_row.setSpacing(4)
-        panel_layout.addLayout(tabs_row)
+        # Two rows, so every name has room in the narrow panel: the everyday tabs
+        # first, then the rest (and the icon-only ones, just wide enough for the icon).
+        second_row = QHBoxLayout()
+        for row, names in ((tabs_row, [n for n, _ in tabs[:5]]), (second_row, [n for n, _ in tabs[5:]])):
+            row.setSpacing(4)
+            for name in names:
+                btn = self.tab_buttons[name]
+                if len(btn.text()) <= 2:
+                    btn.setFixedWidth(34)
+                    row.addWidget(btn, 0)
+                else:
+                    row.addWidget(btn, 1)
+            panel_layout.addLayout(row)
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
