@@ -1293,63 +1293,6 @@ class ExploreDonut(QWidget):
         painter.end()
 
 
-class FlowLayout(QLayout):
-    """Lays widgets out left to right, wrapping onto a new line when the row is
-    full (Qt's classic flow layout)."""
-
-    def __init__(self, parent: QWidget | None = None, spacing: int = 4) -> None:
-        super().__init__(parent)
-        self._items: list = []
-        self._spacing = spacing
-        self.setContentsMargins(0, 0, 0, 0)
-
-    def addItem(self, item) -> None:  # noqa: N802
-        self._items.append(item)
-
-    def count(self) -> int:
-        return len(self._items)
-
-    def itemAt(self, i: int):  # noqa: N802
-        return self._items[i] if 0 <= i < len(self._items) else None
-
-    def takeAt(self, i: int):  # noqa: N802
-        return self._items.pop(i) if 0 <= i < len(self._items) else None
-
-    def expandingDirections(self):  # noqa: N802
-        return Qt.Orientations(0)
-
-    def hasHeightForWidth(self) -> bool:  # noqa: N802
-        return True
-
-    def heightForWidth(self, width: int) -> int:  # noqa: N802
-        return self._arrange(QRect(0, 0, width, 0), apply=False)
-
-    def setGeometry(self, rect) -> None:  # noqa: N802
-        super().setGeometry(rect)
-        self._arrange(rect, apply=True)
-
-    def sizeHint(self):  # noqa: N802
-        return self.minimumSize()
-
-    def minimumSize(self):  # noqa: N802
-        size = QSize(0, 0)
-        for item in self._items:
-            size = size.expandedTo(item.minimumSize())
-        return size
-
-    def _arrange(self, rect, apply: bool) -> int:
-        x, y, line = rect.x(), rect.y(), 0
-        for item in self._items:
-            w, h = item.sizeHint().width(), item.sizeHint().height()
-            if x + w > rect.right() + 1 and line > 0:
-                x, y, line = rect.x(), y + line + self._spacing, 0
-            if apply:
-                item.setGeometry(QRect(x, y, w, h))
-            x += w + self._spacing
-            line = max(line, h)
-        return y + line - rect.y()
-
-
 class HeightGrip(QWidget):
     """A small handle at the bottom of the panel: drag it to make the panel taller
     or shorter (within limits). Double-click goes back to the default height."""
@@ -2701,6 +2644,21 @@ class RoundedButton(QPushButton):
         painter.end()
 
 
+# name -> (icon, name shown when open / on hover)
+TABS = {
+    "live": ("\u26a1", "Live"),
+    "suggestions": ("\U0001f465", "People"),
+    "repos": ("\U0001f4e6", "Repos"),
+    "market": ("\U0001f4c8", "Market"),
+    "news": ("\U0001f4f0", "News"),
+    "activity": ("\U0001f552", "Activity"),
+    "signals": ("\U0001f4e1", "Signals"),
+    "model": ("\U0001f9e0", "Model"),
+    "badges": ("\U0001f3c5", "Badges"),
+    "admin": ("\U0001f6e1", "Admin"),
+}
+
+
 class MyGeekyPanel(QWidget):
     def __init__(self, cfg: MyGeekyConfig) -> None:
         super().__init__()
@@ -2888,32 +2846,29 @@ class MyGeekyPanel(QWidget):
         self.badge_strip.mousePressEvent = lambda ev: self._switch_tab("badges")  # noqa: ARG005
         panel_layout.addWidget(self.badge_strip)
 
-        tabs_row = QHBoxLayout()
         self.tab_buttons: dict[str, QPushButton] = {}
         self._is_admin = logic.is_admin(self.cfg)
-        tabs = [("live", "Live"), ("suggestions", "People"), ("repos", "Repos"), ("market", "Market"),
-                ("news", "News"), ("activity", "Activity"), ("signals", "Signals"), ("model", "Model")]
-        tabs.append(("badges", "\U0001f3c5"))
-        if self._is_admin:
-            tabs.append(("admin", "\U0001f6e1"))
-        for name, label in tabs:
-            btn = QPushButton(label)
+        tabs = [name for name in TABS if name != "admin" or self._is_admin]
+        self._badges_new = False
+        for name in tabs:
+            btn = QPushButton(TABS[name][0])
+            btn.setToolTip(TABS[name][1])
             # Qt's Windows style gives every push button a ~75px minimum width;
             # five of those made the panel wider than gui_expanded_width.
             btn.setMinimumWidth(1)
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
-        # Compact tabs, each just as wide as its name, flowing onto a second line
-        # only when the narrow panel's row is full.
-        tabs_box = QWidget()
-        flow = FlowLayout(tabs_box, spacing=3)
-        for name, _ in tabs:
-            btn = self.tab_buttons[name]
-            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-            flow.addWidget(btn)
-        panel_layout.addWidget(tabs_box)
-        del tabs_row
+        # One tidy bar: every tab is an icon, and the open one also shows its name
+        # (hover any icon for its name), like a phone's tab bar.
+        self.tab_bar = QFrame()
+        self.tab_bar.setObjectName("tabBar")
+        bar = QHBoxLayout(self.tab_bar)
+        bar.setContentsMargins(3, 3, 3, 3)
+        bar.setSpacing(1)
+        for name in tabs:
+            bar.addWidget(self.tab_buttons[name], 1)
+        panel_layout.addWidget(self.tab_bar)
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
@@ -2931,11 +2886,9 @@ class MyGeekyPanel(QWidget):
         self.content_stack.addWidget(self._build_model_tab())
         self._tab_order.append("badges")
         self.content_stack.addWidget(self._build_badges_tab())
-        self.tab_buttons["badges"].setToolTip("Your badges")
         if self._is_admin:
             self._tab_order.append("admin")
             self.content_stack.addWidget(self._build_admin_tab())
-            self.tab_buttons["admin"].setToolTip("Admin: ideas inbox, people to invite, adoption (only you see this)")
 
         outer.addWidget(self.panel_frame)
         self.folded_widget.hide()
@@ -4063,14 +4016,24 @@ class MyGeekyPanel(QWidget):
 
     def _update_tab_styles(self) -> None:
         theme = THEMES[self._theme_name()]
+        self.tab_bar.setStyleSheet(f"QFrame#tabBar {{ background:{theme['card_bg']}; border-radius:10px; }}")
         for name, btn in self.tab_buttons.items():
             active = name == self.active_tab
-            bg = theme["tab_active"] if active else theme["card_bg"]
+            icon, label = TABS[name]
+            dot = "\u2022" if name == "badges" and self._badges_new else ""
+            btn.setText(f"{icon}  {label}" if active else icon + dot)
+            bg = theme["tab_active"] if active else "transparent"
             btn.setStyleSheet(
-                f"QPushButton {{ background:{bg}; color:{theme['text']}; border:none; "
-                f"border-radius:7px; padding:3px 7px; font-size:11px; }}"
+                f"QPushButton {{ background:{bg}; color:{theme['text']}; border:none; border-radius:8px; "
+                f"padding:4px 0; font-size:{11 if active else 13}px; font-weight:{700 if active else 400}; }}"
+                f"QPushButton:hover {{ background:{theme['tab_active'] if active else 'rgba(255,255,255,0.08)'}; }}"
             )
-            btn.adjustSize()                            # hug the name (the padding just changed)
+            if active:                                  # the open tab takes the spare room, for its name
+                btn.setMinimumWidth(0)
+                btn.setMaximumWidth(16777215)
+                btn.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)   # never widens the panel
+            else:
+                btn.setFixedWidth(26)
 
     def _on_theme_clicked(self, name: str) -> None:
         if logic.set_theme(self.cfg, name):
@@ -4344,7 +4307,8 @@ class MyGeekyPanel(QWidget):
         new = [b for b in getattr(self, "_badges", {}).get("earned", []) if f"{b['id']}:{b['tier']}" not in seen]
         btn = self.tab_buttons.get("badges")
         if btn is not None:
-            btn.setText("\U0001f3c5\u2022" if new else "\U0001f3c5")
+            self._badges_new = bool(new)
+            self._update_tab_styles()
             btn.setToolTip(f"New badge: {new[0]['emoji']} {new[0]['name']}!" if new else "Your badges")
 
     def _build_badges_tab(self) -> QScrollArea:

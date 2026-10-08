@@ -105,7 +105,9 @@ def test_strip_under_your_name_and_badges_tab(monkeypatch):
         assert len(icons) >= 3 and not panel.badge_strip.isHidden()
         assert panel.tab_buttons["badges"].text().endswith("•")          # new badges to see
         panel._switch_tab("badges")
-        assert panel.tab_buttons["badges"].text() == "\U0001f3c5"            # seen now
+        assert panel.tab_buttons["badges"].text() == "\U0001f3c5  Badges"   # open, and seen now
+        panel._switch_tab("live")
+        assert panel.tab_buttons["badges"].text() == "\U0001f3c5"
         assert set(cfg.badges_seen) >= {"wordsmith:gold", "clicker:bronze"}
         names = " ".join(w.text() for w in panel.badges_area.parentWidget().findChildren(QLabel))
         assert "Wordsmith" in names and "Builder" in names                   # locked ones show how to earn them

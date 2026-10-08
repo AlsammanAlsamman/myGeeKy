@@ -201,7 +201,7 @@ def test_news_tab_renders_and_clicks_teach(monkeypatch):
         monkeypatch.setattr(logic, name, value)
     panel = MyGeekyPanel(_cfg())
     try:
-        assert panel.tab_buttons["news"].text() == "News" and panel.tab_buttons["suggestions"].text() == "People"
+        assert panel.tab_buttons["news"].toolTip() == "News" and panel.tab_buttons["suggestions"].toolTip() == "People"
         cards = panel.news_area.parentWidget().findChildren(NewsCard)
         assert len(cards) == 2
         cards[0].mousePressEvent(None)
