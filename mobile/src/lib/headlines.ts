@@ -1,6 +1,7 @@
 // Headlines: titles from AI labs, journals and the tech press, ranked by your
 // interests -- a port of the desktop's headlines.py. On the phone there's no
 // browser CORS, so the feeds are read directly.
+import { fetchT } from './net';
 import { XMLParser } from 'fast-xml-parser';
 import { match, mix, strongMatch, todaySeed, Weights } from './interests';
 
@@ -147,7 +148,7 @@ export async function fetchHeadlines(weights: Weights): Promise<{ items: Headlin
   const results = await Promise.all(
     FEEDS.map(async (f) => {
       try {
-        const r = await fetch(f.url, { headers: { 'User-Agent': 'mygeeky-mobile' } });
+        const r = await fetchT(f.url, { headers: { 'User-Agent': 'mygeeky-mobile' } });
         if (!r.ok) throw new Error(String(r.status));
         return parseFeed(await r.text(), f);
       } catch {

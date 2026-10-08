@@ -1,5 +1,6 @@
 // Hugging Face models trending in your field, and everywhere -- a port of the
 // desktop's hfmodels.py (public API, no key).
+import { fetchT } from './net';
 import { match, Weights } from './interests';
 
 export type Model = {
@@ -34,7 +35,7 @@ function clean(m: any): Model | null {
 
 async function get(params: Record<string, string>): Promise<Model[]> {
   const q = new URLSearchParams({ sort: 'trendingScore', limit: '40', ...params });
-  const r = await fetch(`https://huggingface.co/api/models?${q}`);
+  const r = await fetchT(`https://huggingface.co/api/models?${q}`);
   if (!r.ok) throw new Error(`Hugging Face ${r.status}`);
   const data = await r.json();
   return (Array.isArray(data) ? data : []).map(clean).filter(Boolean) as Model[];

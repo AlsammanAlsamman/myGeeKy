@@ -30,7 +30,7 @@ export default function Setup() {
     setError('');
     await save({ ...(settings ?? DEFAULT_SETTINGS), username: u, orcid: o, keywords: split(keywords) }, token.trim() || undefined);
     setBusy(false);
-    router.replace('/live');
+    router.replace('/home');
   };
 
   return (

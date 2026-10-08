@@ -1,5 +1,6 @@
 // Market: the popular, active repos of your field (a light port of the
 // desktop's market.py watchlist), and today's Product Hunt launches.
+import { fetchT } from './net';
 import { XMLParser } from 'fast-xml-parser';
 import { Repo, searchRepos } from './github';
 import { match, Weights } from './interests';
@@ -69,7 +70,7 @@ const FEED_LINK = /^https:\/\/www\.producthunt\.com\/products\/([a-z0-9][a-z0-9-
 
 /** Today's featured launches (Product Hunt's public feed, no token), yours first. */
 export async function fetchLaunches(weights: Weights, size = 20): Promise<Launch[]> {
-  const r = await fetch('https://www.producthunt.com/feed');
+  const r = await fetchT('https://www.producthunt.com/feed');
   if (!r.ok) throw new Error(`Product Hunt said ${r.status}.`);
   const entries = parser.parse(await r.text())?.feed?.entry ?? [];
   const out: Launch[] = [];

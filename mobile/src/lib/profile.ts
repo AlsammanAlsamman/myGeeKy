@@ -1,6 +1,7 @@
 // Your profile on the phone: your keywords and topics (with their meanings from
 // the keyword dictionary), your research topics from OpenAlex (via ORCID) and
 // the topics on your GitHub repos -- cached for a day.
+import { fetchT } from './net';
 import { Dict, expand, Profile, Weights } from './interests';
 import { isStale, readCache, Settings, writeCache } from './storage';
 
@@ -11,7 +12,7 @@ export async function loadDictionary(): Promise<Dict | null> {
   const cached = await readCache<Dict>('keywords');
   if (cached && !isStale(cached.at, 24 * 7)) return cached.data;
   try {
-    const r = await fetch(DICT_URL);
+    const r = await fetchT(DICT_URL);
     if (!r.ok) throw new Error(String(r.status));
     const d = (await r.json()) as Dict;
     await writeCache('keywords', d);
@@ -28,7 +29,7 @@ export async function profileFromSources(s: Settings, token: string | null, dict
   const topicIds: { id: string; name: string }[] = [];
   if (/^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/.test(s.orcid)) {          // your research topics, from OpenAlex
     try {
-      const r = await fetch(`https://api.openalex.org/authors/orcid:${s.orcid}?select=id,topics`);
+      const r = await fetchT(`https://api.openalex.org/authors/orcid:${s.orcid}?select=id,topics`);
       if (r.ok) {
         for (const t of ((await r.json()).topics ?? []).slice(0, 6)) {
           const id = String(t.id ?? '').split('/').pop() ?? '';
@@ -46,7 +47,7 @@ export async function profileFromSources(s: Settings, token: string | null, dict
   }
   if (s.username) {                                          // the topics on your own repos (2+ repos)
     try {
-      const r = await fetch(`https://api.github.com/users/${encodeURIComponent(s.username)}/repos?per_page=100&sort=pushed`, {
+      const r = await fetchT(`https://api.github.com/users/${encodeURIComponent(s.username)}/repos?per_page=100&sort=pushed`, {
         headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
       if (r.ok) {

@@ -17,6 +17,13 @@ type AppState = {
 
 const Ctx = createContext<AppState | null>(null);
 
+/** Your keywords and topics alone: no network, so nothing ever waits on it. */
+export function quickProfile(s: Settings): Profile {
+  const weights: Record<string, number> = {};
+  for (const t of [...s.keywords, ...s.topics]) weights[t.toLowerCase()] = 1;
+  return { weights, topicIds: [], field: [] };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -29,8 +36,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSettings(s);
       setTok(t);
       setReady(true);
-      if (s) logOpenToday();
-      if (s) setProfile(await buildProfile(s, t));
+      if (!s) return;
+      logOpenToday();
+      setProfile(quickProfile(s));             // lists start at once from your keywords...
+      try {
+        setProfile(await buildProfile(s, t));  // ...and sharpen when your full profile is ready
+      } catch {
+        /* offline: the quick profile stays */
+      }
     })();
   }, []);
 
@@ -41,14 +54,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTok(t);
     }
     setSettings(s);
-    setProfile(await buildProfile(s, t === undefined ? token : t, true));
+    setProfile(quickProfile(s));
+    try {
+      setProfile(await buildProfile(s, t === undefined ? token : t, true));
+    } catch {
+      /* keep the quick profile */
+    }
   }, [token]);
 
   const refreshProfile = useCallback(async () => {
     if (!settings) return null;
-    const p = await buildProfile(settings, token, true);
-    setProfile(p);
-    return p;
+    try {
+      const p = await buildProfile(settings, token, true);
+      setProfile(p);
+      return p;
+    } catch {
+      return null;
+    }
   }, [settings, token]);
 
   return <Ctx.Provider value={{ ready, settings, token, profile, save, refreshProfile }}>{children}</Ctx.Provider>;

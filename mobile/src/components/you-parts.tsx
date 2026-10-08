@@ -1,19 +1,18 @@
-import { router, useLocalSearchParams } from 'expo-router';
+// You, in the centre of the orbit: your model (keywords), your badges, and the rest.
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, Image, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { SignInButton } from '../../components/signin';
-import { Card, Empty, open, s, Screen, Section, Segments } from '../../components/ui';
-import { useApp } from '../../lib/app-state';
-import { Achievement, earned, Earned, githubAchievements, TIER_COLORS } from '../../lib/badges';
-import { Dict, lookup } from '../../lib/interests';
-import { loadDictionary } from '../../lib/profile';
-import { clearAll } from '../../lib/storage';
-import { C } from '../../lib/theme';
+import { SignInButton } from './signin';
+import { Card, Empty, open, s, Section } from './ui';
+import { useApp } from '../lib/app-state';
+import { Achievement, earned, Earned, githubAchievements, TIER_COLORS } from '../lib/badges';
+import { Dict, lookup } from '../lib/interests';
+import { loadDictionary } from '../lib/profile';
+import { clearAll } from '../lib/storage';
+import { C } from '../lib/theme';
 
-type Part = 'model' | 'badges' | 'more';
-const PARTS: [Part, string][] = [['model', 'Your model'], ['badges', 'Badges'], ['more', 'More']];
 
-function ModelPart() {
+export function ModelPart() {
   const { settings, profile, save } = useApp();
   const [word, setWord] = useState('');
   const [dict, setDict] = useState<Dict | null>(null);
@@ -68,7 +67,7 @@ function ModelPart() {
   );
 }
 
-function BadgesPart() {
+export function BadgesPart() {
   const { settings } = useApp();
   const [mine, setMine] = useState<Earned[]>([]);
   const [gh, setGh] = useState<Achievement[]>([]);
@@ -107,7 +106,7 @@ function BadgesPart() {
   );
 }
 
-function MorePart() {
+export function MorePart() {
   const { settings, token, save } = useApp();
   if (!settings) return null;
   const reset = async () => {
@@ -153,23 +152,6 @@ function MorePart() {
       </Pressable>
       <Pressable onPress={reset}><Text style={[st.link, { color: C.red, marginTop: 14 }]}>Start over</Text></Pressable>
     </>
-  );
-}
-
-export default function You() {
-  const { settings } = useApp();
-  const params = useLocalSearchParams<{ part?: Part }>();
-  const [part, setPart] = useState<Part>(params.part ?? 'model');
-  const [lastParam, setLastParam] = useState(params.part);
-  if (params.part !== lastParam) {          // opened from the badge strip or a tip
-    setLastParam(params.part);
-    if (params.part) setPart(params.part);
-  }
-  if (!settings) return null;
-  return (
-    <Screen title={`@${settings.username}`} top={<Segments value={part} options={PARTS} onChange={setPart} />}>
-      {part === 'model' ? <ModelPart /> : part === 'badges' ? <BadgesPart /> : <MorePart />}
-    </Screen>
   );
 }
 

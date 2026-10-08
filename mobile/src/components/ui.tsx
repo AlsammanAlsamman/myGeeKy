@@ -1,32 +1,9 @@
 // Small building blocks shared by the screens, in myGeeKy's style.
-import { router } from 'expo-router';
-import { ReactNode, useEffect, useState } from 'react';
-import { Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { timeAgo, useApp } from '../lib/app-state';
-import { earned, logClick, TIER_COLORS } from '../lib/badges';
+import { ReactNode } from 'react';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { timeAgo } from '../lib/app-state';
+import { logClick } from '../lib/badges';
 import { BADGES, C } from '../lib/theme';
-
-/** Your best few badges, top right of every screen; tap for all of them. */
-function BadgeStrip() {
-  const { settings } = useApp();
-  const [icons, setIcons] = useState<{ emoji: string; tier: string }[]>([]);
-  useEffect(() => {
-    earned(settings?.keywords.length ?? 0).then((all) => {
-      const order = { gold: 0, silver: 1, bronze: 2 } as Record<string, number>;
-      setIcons(all.filter((b) => b.tier).sort((a, b) => order[a.tier] - order[b.tier]).slice(0, 4));
-    });
-  }, [settings]);
-  if (!icons.length) return null;
-  return (
-    <Pressable onPress={() => router.navigate({ pathname: '/you', params: { part: 'badges' } })} style={s.strip}
-               accessibilityLabel="Your badges">
-      {icons.map((b, i) => (
-        <View key={i} style={[s.stripIcon, { borderColor: TIER_COLORS[b.tier] }]}><Text style={{ fontSize: 13 }}>{b.emoji}</Text></View>
-      ))}
-    </Pressable>
-  );
-}
 
 /** A small switch between the parts of a tab (e.g. Headlines | Papers). */
 export function Segments<T extends string>({ value, options, onChange }: {
@@ -40,31 +17,6 @@ export function Segments<T extends string>({ value, options, onChange }: {
         </Pressable>
       ))}
     </View>
-  );
-}
-
-export function Screen({ title, subtitle, loading, onRefresh, updated, error, top, children }: {
-  title: string; subtitle?: string; loading?: boolean; onRefresh?: () => void; updated?: string | null;
-  error?: string | null; top?: ReactNode; children: ReactNode;
-}) {
-  return (
-    <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={s.header}>
-        <Image source={require('../../assets/icon.png')} style={s.logo} />
-        <Text style={s.title} numberOfLines={1}>{title}</Text>
-        <BadgeStrip />
-      </View>
-      {top}
-      <ScrollView
-        contentContainerStyle={s.scroll}
-        refreshControl={onRefresh ? <RefreshControl refreshing={!!loading} onRefresh={onRefresh} tintColor={C.pink} colors={[C.pink]} /> : undefined}
-      >
-        {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
-        {updated || loading ? <Text style={s.meta}>{loading ? 'updating…' : `updated ${timeAgo(updated)} · pull down to refresh`}</Text> : null}
-        {error ? <Text style={s.error}>{error}</Text> : null}
-        {children}
-      </ScrollView>
-    </SafeAreaView>
   );
 }
 

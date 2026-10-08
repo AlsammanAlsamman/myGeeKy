@@ -1,6 +1,7 @@
 // Research that's rising in your field, from OpenAlex -- a port of the
 // desktop's papers.refresh_trends: papers in your research topics (from your
 // ORCID) or matching your strongest interests, ranked by citations per month.
+import { fetchT } from './net';
 import { match, Profile } from './interests';
 
 export type Paper = {
@@ -43,7 +44,7 @@ export function toPaper(w: any): Paper | null {
 
 async function works(filter: string, perPage = 50): Promise<Paper[]> {
   const url = `https://api.openalex.org/works?filter=${encodeURIComponent(filter)}&sort=cited_by_count:desc&per-page=${perPage}&select=${SELECT}`;
-  const r = await fetch(url);
+  const r = await fetchT(url);
   if (!r.ok) throw new Error(`OpenAlex ${r.status}`);
   return ((await r.json()).results ?? []).map(toPaper).filter(Boolean) as Paper[];
 }

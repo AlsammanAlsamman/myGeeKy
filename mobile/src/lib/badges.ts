@@ -1,6 +1,7 @@
 // Badges, as on the desktop: myGeeKy's own (bronze/silver/gold, from what you
 // do in the app -- only the KIND of thing you open is counted, never titles or
 // links), plus your GitHub achievements read from your public profile.
+import { fetchT } from './net';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isStale, readCache, writeCache } from './storage';
 
@@ -89,7 +90,7 @@ export async function githubAchievements(user: string): Promise<Achievement[]> {
   const cached = await readCache<{ user: string; items: Achievement[] }>('achievements');
   if (cached && cached.data.user === user && !isStale(cached.at, 24 * 7)) return cached.data.items;
   try {
-    const r = await fetch(`https://github.com/${user}?tab=achievements`);
+    const r = await fetchT(`https://github.com/${user}?tab=achievements`);
     const items = r.ok ? parseAchievements(await r.text()) : cached?.data.items ?? [];
     await writeCache('achievements', { user, items });
     return items;

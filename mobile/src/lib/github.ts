@@ -1,3 +1,5 @@
+import { fetchT } from './net';
+
 // Read-only GitHub API calls. With the sign-in token the limit is 5,000 calls an
 // hour; without one it's 60, so screens that need many calls say so.
 export const NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
@@ -5,7 +7,7 @@ export const NAME_RE = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 export class GitHubError extends Error {}
 
 export async function gh<T = any>(path: string, token: string | null): Promise<T> {
-  const r = await fetch(`https://api.github.com${path}`, {
+  const r = await fetchT(`https://api.github.com${path}`, {
     headers: {
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
