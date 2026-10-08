@@ -3,6 +3,7 @@
 // slim dock; scrolling back to the top, or "Spin the rings", brings it back.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
          useWindowDimensions, View } from 'react-native';
@@ -82,10 +83,12 @@ export default function Home() {
     repos: [repos], models: [models], launches: [launches], you: [],
   };
 
-  const [sel, setSel] = useState<SectionId>('live');
-  const [collapsed, setCollapsed] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [youPart, setYouPart] = useState<YouPart>('model');
+  // a link can open a planet directly: mygeeky:///home?sel=news&fold=1&open=first
+  const params = useLocalSearchParams<{ sel?: string; fold?: string; open?: string; part?: string }>();
+  const [sel, setSel] = useState<SectionId>(params.sel && params.sel in SECTIONS ? params.sel as SectionId : 'live');
+  const [collapsed, setCollapsed] = useState(params.fold === '1');
+  const [openId, setOpenId] = useState<string | null>(params.open === 'first' ? 'first' : null);
+  const [youPart, setYouPart] = useState<YouPart>(params.part === 'badges' || params.part === 'more' ? params.part : 'model');
   const [hint, setHint] = useState(false);
   const [viewH, setViewH] = useState(0);
 
@@ -160,8 +163,8 @@ export default function Home() {
               <Text style={st.title}>Signals are on the desktop panel for now</Text>
               <Text style={[st.sub, { marginTop: 6 }]}>Private thank-yous and collab invites between myGeeKy users. They are coming to the phone.</Text>
             </Card>
-          ) : rows.length ? rows.map((r) => (
-            <RowView key={r.id} r={r} color={section.color} isOpen={openId === r.id}
+          ) : rows.length ? rows.map((r, i) => (
+            <RowView key={r.id} r={r} color={section.color} isOpen={openId === r.id || (openId === 'first' && i === 0)}
                      onPick={() => {
                        setOpenId(openId === r.id ? null : r.id);
                        setCollapsed(true);                // reading: the rings make room

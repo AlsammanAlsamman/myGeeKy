@@ -178,6 +178,28 @@ myGeeKy reminds you a week before either one expires, and `mygeeky auth status` 
   <sub><b>Folded</b>, it's just a small icon on your screen edge that now and then lets out a few floating hearts (turn them off in ⚙).</sub>
 </p>
 
+## 📱 On your phone
+
+Your world, in orbit: you in the middle, **your circle** (Live, People, Activity, Signals) on the inner ring and
+**the world** (News, Papers, Repos, AI models, Launches) on the outer one. Spin a ring with your thumb; the planet
+that locks into the lens opens above. Tap something to read and the rings fold into a slim dock.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/phone/hero-phone.png" width="760" alt="The myGeeKy phone app: the orbit, the news, and reading with the rings folded">
+</p>
+
+<table>
+<tr>
+<td align="center" width="25%"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/phone/live.png" width="180" alt="Live"><br><sub>Live: new faces and moves around you</sub></td>
+<td align="center" width="25%"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/phone/people.png" width="180" alt="People"><br><sub>People: spin to your circle</sub></td>
+<td align="center" width="25%"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/phone/read.png" width="180" alt="Reading"><br><sub>Reading: the rings fold away</sub></td>
+<td align="center" width="25%"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/phone/badges.png" width="180" alt="Badges"><br><sub>You: your model, badges, settings</sub></td>
+</tr>
+</table>
+
+Set it up in one scan (⚙ → **Connect your phone** on the desktop panel), or **Sign in with GitHub**. For Android,
+coming to Google Play soon.
+
 ## 🔤 Keywords that mean something
 
 Add **AI** and myGeeKy also looks for LLMs, deep learning and AI agents; add **GWAS** and it brings in

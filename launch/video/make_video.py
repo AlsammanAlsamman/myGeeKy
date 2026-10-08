@@ -481,6 +481,31 @@ def s_tour(t: float) -> Image.Image:
     return im
 
 
+PHONE = [
+    ("live.png", "Spin a ring with your thumb", "your circle inside, the world outside, you in the middle"),
+    ("news.png", "The planet in the lens opens above", "each planet shows how much it holds"),
+    ("read.png", "Tap to read, and the rings fold away", "news, papers, repos, AI models and launches"),
+]
+
+
+def s_phone(t: float) -> Image.Image:
+    im = background(t + 120).convert("RGBA")
+    if t < 3.0:
+        section_title(im, t, "ALSO", "On your phone", "your world, in orbit")
+        return im
+    t -= 3.0
+    for i, (shot, _, _) in enumerate(PHONE):
+        a = ease((t - i * 2.4) / 0.6)
+        if a <= 0:
+            continue
+        rise = 30 * (1 - a)
+        paste(im, img(SHOTS / "phone" / shot), (W / 2 + (i - 1) * 520, 455 + rise), 760, alpha=a, radius=44)
+    i = min(int(t // 2.4), len(PHONE) - 1)
+    a = fade(t, i * 2.4, i * 2.4 + 2.4 if i < len(PHONE) - 1 else 99, 0.4)
+    caption(im, PHONE[i][1], PHONE[i][2], a, y=900)
+    return im
+
+
 def s_close(t: float) -> Image.Image:
     im = background(t + 140).convert("RGBA")
     a = ease(t / 0.8)
@@ -502,7 +527,7 @@ def s_close(t: float) -> Image.Image:
 
 
 SCENES = [(s_hook, 13.0), (s_reveal, 6.0), (s_pillars, 16.5), (s_install, 23.6), (s_configure, 21.0),
-          (s_signals, 16.2), (s_tour, 44.0), (s_close, 8.0)]
+          (s_signals, 16.2), (s_tour, 44.0), (s_phone, 11.0), (s_close, 8.0)]
 
 
 def frame_at(t: float) -> Image.Image:

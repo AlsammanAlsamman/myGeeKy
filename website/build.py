@@ -26,6 +26,7 @@ IMAGES = {
     "model.png": ROOT / "docs/screenshots/model.png",
     "research.png": ROOT / "docs/screenshots/research.png",
     "news.png": ROOT / "docs/screenshots/news.png",
+    "phone.png": ROOT / "docs/screenshots/phone/hero-phone.png",
     "video-thumbnail.png": ROOT / "docs/video-thumbnail.png",
     "icon_64.png": ROOT / "src/mygeeky/gui/assets/icon_64.png",
     "icon_256.png": ROOT / "src/mygeeky/gui/assets/icon_256.png",
