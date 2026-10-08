@@ -1293,6 +1293,63 @@ class ExploreDonut(QWidget):
         painter.end()
 
 
+class FlowLayout(QLayout):
+    """Lays widgets out left to right, wrapping onto a new line when the row is
+    full (Qt's classic flow layout)."""
+
+    def __init__(self, parent: QWidget | None = None, spacing: int = 4) -> None:
+        super().__init__(parent)
+        self._items: list = []
+        self._spacing = spacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item) -> None:  # noqa: N802
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, i: int):  # noqa: N802
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i: int):  # noqa: N802
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):  # noqa: N802
+        return Qt.Orientations(0)
+
+    def hasHeightForWidth(self) -> bool:  # noqa: N802
+        return True
+
+    def heightForWidth(self, width: int) -> int:  # noqa: N802
+        return self._arrange(QRect(0, 0, width, 0), apply=False)
+
+    def setGeometry(self, rect) -> None:  # noqa: N802
+        super().setGeometry(rect)
+        self._arrange(rect, apply=True)
+
+    def sizeHint(self):  # noqa: N802
+        return self.minimumSize()
+
+    def minimumSize(self):  # noqa: N802
+        size = QSize(0, 0)
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        return size
+
+    def _arrange(self, rect, apply: bool) -> int:
+        x, y, line = rect.x(), rect.y(), 0
+        for item in self._items:
+            w, h = item.sizeHint().width(), item.sizeHint().height()
+            if x + w > rect.right() + 1 and line > 0:
+                x, y, line = rect.x(), y + line + self._spacing, 0
+            if apply:
+                item.setGeometry(QRect(x, y, w, h))
+            x += w + self._spacing
+            line = max(line, h)
+        return y + line - rect.y()
+
+
 class HeightGrip(QWidget):
     """A small handle at the bottom of the panel: drag it to make the panel taller
     or shorter (within limits). Double-click goes back to the default height."""
@@ -2847,19 +2904,16 @@ class MyGeekyPanel(QWidget):
             btn.setCursor(Qt.PointingHandCursor)
             btn.clicked.connect(lambda checked=False, n=name: self._switch_tab(n))
             self.tab_buttons[name] = btn
-        # Two rows, so every name has room in the narrow panel: the everyday tabs
-        # first, then the rest (and the icon-only ones, just wide enough for the icon).
-        second_row = QHBoxLayout()
-        for row, names in ((tabs_row, [n for n, _ in tabs[:5]]), (second_row, [n for n, _ in tabs[5:]])):
-            row.setSpacing(4)
-            for name in names:
-                btn = self.tab_buttons[name]
-                if len(btn.text()) <= 2:
-                    btn.setFixedWidth(34)
-                    row.addWidget(btn, 0)
-                else:
-                    row.addWidget(btn, 1)
-            panel_layout.addLayout(row)
+        # Compact tabs, each just as wide as its name, flowing onto a second line
+        # only when the narrow panel's row is full.
+        tabs_box = QWidget()
+        flow = FlowLayout(tabs_box, spacing=3)
+        for name, _ in tabs:
+            btn = self.tab_buttons[name]
+            btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            flow.addWidget(btn)
+        panel_layout.addWidget(tabs_box)
+        del tabs_row
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
@@ -4014,8 +4068,9 @@ class MyGeekyPanel(QWidget):
             bg = theme["tab_active"] if active else theme["card_bg"]
             btn.setStyleSheet(
                 f"QPushButton {{ background:{bg}; color:{theme['text']}; border:none; "
-                f"border-radius:8px; padding:6px 0; font-size:11px; }}"
+                f"border-radius:7px; padding:3px 7px; font-size:11px; }}"
             )
+            btn.adjustSize()                            # hug the name (the padding just changed)
 
     def _on_theme_clicked(self, name: str) -> None:
         if logic.set_theme(self.cfg, name):
