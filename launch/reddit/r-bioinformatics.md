@@ -46,7 +46,7 @@ one-click installer on the releases page.
 
 GitHub: https://github.com/AlsammanAlsamman/myGeeKy
 
-Video (2.5 min, install + tour): https://youtu.be/QCOSKe494oE
+Video (2.5 min, install + tour): https://youtu.be/NTYDY7IGufw
 
 It's early, and I'd really value feedback from people here: are the matches
 from your publications any good for your subfield, and what would make the
