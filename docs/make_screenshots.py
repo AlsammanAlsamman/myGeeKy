@@ -24,7 +24,8 @@ SHOTS = ROOT / "docs" / "screenshots"
 
 TABS = [  # (file, tab, market mode)
     ("live", "live", None), ("suggestions", "suggestions", None), ("repos", "repos", None),
-    ("market", "market", "repos"), ("research", "market", "research"), ("news", "news", None),
+    ("market", "market", "repos"), ("research", "market", "research"), ("models", "market", "models"),
+    ("news", "news", None),
     ("activity", "activity", None), ("signals", "signals", None), ("model", "model", None),
 ]
 
@@ -66,7 +67,8 @@ def render() -> dict[str, Path]:
     logic.save_config = lambda c: None
     logic.get_signals = example_signals
     logic.is_admin = lambda cfg: False      # the maker's private tab stays out of public pictures
-    for name in ("news_refresh_due", "trends_due", "market_refresh_due"):
+    logic.sync_enabled = lambda cfg: False
+    for name in ("news_refresh_due", "trends_due", "market_refresh_due", "hf_models_due"):
         setattr(logic, name, lambda cfg: False)
     from mygeeky.gui.qt_panel import MyGeekyPanel
 
