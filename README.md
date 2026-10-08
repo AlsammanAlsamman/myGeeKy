@@ -66,7 +66,7 @@
 
 🔬 **Reads the literature.** Papers gaining citations fastest, new tools with their code, and the people behind them. A green **P** marks repos with a published paper.
 
-🗞️ **Brings the news.** New arXiv, bioRxiv and Hacker News items about *your* topics.
+🗞️ **Brings the news.** Headlines from AI labs, journals and the tech press, ranked for *your* work, plus new arXiv, bioRxiv and Hacker News items about your topics.
 
 🙏 **Says thanks, privately.** Small signals between myGeeKy users (thanks, "I learned from your work",
 "I used your tool"), sealed so **only the recipient can read them**. No reply is ever expected, and 🤝

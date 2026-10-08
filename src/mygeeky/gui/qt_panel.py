@@ -748,6 +748,42 @@ def _explore_chip(theme: dict[str, Any]) -> QLabel:
 NEWS_BADGES = {"arxiv": ("arXiv", "#b31b1b"), "biorxiv": ("bioRxiv", "#bd2736"), "hackernews": ("HN", "#ff6600")}
 
 
+HEADLINE_COLORS = {"ai": "#ff6fd8", "science": "#34d399", "tech": "#7fd8ff"}
+
+
+class HeadlineRow(QFrame):
+    """One headline: a small source tag and the title. Click to read it."""
+
+    def __init__(self, item: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+        super().__init__()
+        self.setObjectName("headlineRow")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(8, 5, 8, 5)
+        lay.setSpacing(7)
+        color = HEADLINE_COLORS.get(item.get("category", ""), theme["muted"])
+        tag = QLabel(("\U0001f30d " if item.get("explore") else "") + item.get("source", ""))
+        tag.setTextFormat(Qt.PlainText)
+        tag.setFixedWidth(92)
+        tag.setStyleSheet(f"color:{color}; font-size:9.5px; font-weight:700; background:transparent;")
+        tag.setToolTip("\U0001f30d the big picture: outside your usual interests" if item.get("explore")
+                       else "for you: " + ", ".join(item.get("match") or []))
+        lay.addWidget(tag, 0, Qt.AlignTop)
+        title = QLabel(item.get("title", ""))
+        title.setTextFormat(Qt.PlainText)
+        title.setWordWrap(True)
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        title.setStyleSheet(f"color:{theme['text']}; font-size:11px; background:transparent;")
+        lay.addWidget(title, 1)
+        when = QLabel(_time_ago(item.get("published", "")))
+        when.setStyleSheet(f"color:{theme['muted']}; font-size:9.5px; background:transparent;")
+        lay.addWidget(when, 0, Qt.AlignTop)
+        self.setStyleSheet(f"QFrame#headlineRow {{ background:transparent; border-radius:8px; }}"
+                           f"QFrame#headlineRow:hover {{ background:{theme['card_bg']}; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        link = item.get("link", "")
+        self.mousePressEvent = lambda ev: on_open(link)  # noqa: ARG005
+
+
 class NewsCard(QFrame):
     """One news item: source badge, title, why it's here (matching terms, or
     🔭 new territory) and when. Text from the source is shown as plain text.
@@ -2835,15 +2871,34 @@ class MyGeekyPanel(QWidget):
         actions_row.addWidget(self.news_updated_label, 1)
         actions_row.addWidget(self.refresh_news_btn)
         layout.addLayout(actions_row)
-        self.news_hint = QLabel("New papers and discussions about your interests, from arXiv, bioRxiv and "
-                                "Hacker News. \U0001f52d = outside your usual interests, on purpose.")
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(4)
+        self.news_mode_buttons: dict[str, QPushButton] = {}
+        for mode, label in (("headlines", "Headlines"), ("papers", "Papers && discussions")):
+            b = QPushButton(label)
+            b.setCursor(Qt.PointingHandCursor)
+            b.clicked.connect(lambda checked=False, m=mode: self._set_news_mode(m))
+            self.news_mode_buttons[mode] = b
+            mode_row.addWidget(b)
+        mode_row.addStretch(1)
+        layout.addLayout(mode_row)
+        self.news_hint = QLabel("")
         self.news_hint.setWordWrap(True)
         layout.addWidget(self.news_hint)
+        headlines_box = QWidget()
+        self.headlines_area = QVBoxLayout(headlines_box)
+        self.headlines_area.setContentsMargins(0, 0, 0, 0)
+        self.headlines_area.setSpacing(1)
+        layout.addWidget(headlines_box)
+        self.headlines_box = headlines_box
         container = QWidget()
         self.news_area = QVBoxLayout(container)
         self.news_area.setContentsMargins(0, 0, 0, 0)
         self.news_area.setSpacing(6)
         layout.addWidget(container)
+        self.news_box = container
+        self._news_mode = "headlines"
+        QTimer.singleShot(0, lambda: self._set_news_mode("headlines"))
         layout.addStretch(1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -3588,6 +3643,8 @@ class MyGeekyPanel(QWidget):
             self._render_brain()
             self._render_suggestions_from_cache()
             self._load_market()
+            self._load_news()
+            self._set_news_mode(self._news_mode)
 
     def _render_suggestions_from_cache(self) -> None:
         # Re-render already-loaded cards so their theme-dependent styling updates too.
@@ -3981,8 +4038,49 @@ class MyGeekyPanel(QWidget):
         self._refresh_signals(force=False)
 
     # ------------------------------------------------------------------ market
+    NEWS_HINTS = {
+        "headlines": "What's happening across your work, as titles: AI labs, journals and the tech press, ranked by "
+                     "your interests. \U0001f30d = the big picture, outside your usual interests.",
+        "papers": "New papers and discussions about your interests, from arXiv, bioRxiv and Hacker News. "
+                  "\U0001f52d = outside your usual interests, on purpose.",
+    }
+
+    def _set_news_mode(self, mode: str) -> None:
+        self._news_mode = mode
+        self.headlines_box.setVisible(mode == "headlines")
+        self.news_box.setVisible(mode == "papers")
+        self.news_hint.setText(self.NEWS_HINTS[mode])
+        theme = THEMES[self._theme_name()]
+        for m, b in self.news_mode_buttons.items():
+            active = m == mode
+            b.setStyleSheet(f"QPushButton {{ background:{theme['tab_active'] if active else theme['btn_bg']}; "
+                            f"color:{theme['text']}; border:none; border-radius:8px; padding:4px 10px; "
+                            f"font-size:11px; font-weight:{'600' if active else '400'}; }}")
+
     def _load_news(self) -> None:
         self._render_news(logic.get_news(self.cfg))
+        self._render_headlines(logic.get_headlines(self.cfg))
+
+    def _render_headlines(self, data: dict[str, Any]) -> None:
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.headlines_area)
+        items = data.get("items") or []
+        if data.get("error") or not items:
+            msg = QLabel(data.get("error") or "No headlines yet. They load in the background (or click Refresh).")
+            msg.setWordWrap(True)
+            msg.setStyleSheet(f"color:{theme['muted']}; font-size:11px; background:transparent;")
+            self.headlines_area.addWidget(msg)
+        mine = [x for x in items if not x.get("explore")]
+        wide = [x for x in items if x.get("explore")]
+        for label, group in (("FOR YOUR WORK", mine), ("\U0001f30d THE BIG PICTURE", wide)):
+            if not group:
+                continue
+            head = QLabel(label)
+            head.setStyleSheet(f"color:{theme['text']}; font-size:10px; font-weight:700; letter-spacing:0.5px; "
+                               "margin-top:6px; background:transparent;")
+            self.headlines_area.addWidget(head)
+            for item in group:
+                self.headlines_area.addWidget(HeadlineRow(item, theme, self._opener("headline", item)))
 
     def _maybe_refresh_news(self) -> None:
         if logic.news_refresh_due(self.cfg):
@@ -3994,12 +4092,14 @@ class MyGeekyPanel(QWidget):
         self._news_running = True
         self.refresh_news_btn.setEnabled(False)
         self.news_updated_label.setText("updating\u2026")
-        self._run_async(lambda: logic.refresh_news(self.cfg, force=force), self._on_news_ready)
+        self._run_async(lambda: logic.refresh_news_and_headlines(self.cfg, force=force), self._on_news_ready)
 
     def _on_news_ready(self, data: Any) -> None:
         self._news_running = False
         self.refresh_news_btn.setEnabled(True)
-        self._render_news(data if isinstance(data, dict) else {})
+        data = data if isinstance(data, dict) else {}
+        self._render_news(data.get("news") or {})
+        self._render_headlines(data.get("headlines") or {})
 
     def _render_news(self, data: dict[str, Any]) -> None:
         theme = THEMES[self._theme_name()]

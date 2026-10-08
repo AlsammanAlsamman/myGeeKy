@@ -250,7 +250,7 @@ def record_click(cfg: MyGeekyConfig, kind: str, item: dict[str, Any]) -> None:
             interests.record("repo", f"{name.replace('/', ' ')} {item.get('description') or ''} "
                                      f"{item.get('language') or ''}", topics=item.get("topics") or [],
                              source=name, cfg=cfg)
-        elif kind in ("news", "paper"):
+        elif kind in ("news", "paper", "headline"):
             interests.record("news", item.get("title", ""), topics=item.get("match") or [],
                              source=item.get("id", ""), cfg=cfg)
     except Exception:
@@ -420,9 +420,30 @@ def get_news(cfg: MyGeekyConfig) -> dict[str, Any]:
     return news.load_state()
 
 
+def get_headlines(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """The saved headlines -- local only, no network."""
+    from .. import headlines
+    return headlines.load_state()
+
+
+def refresh_headlines(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    from .. import headlines
+    try:
+        return headlines.refresh(cfg, force=force)
+    except Exception as exc:   # surfaced in the tab, not a crash
+        from ..errors import describe
+        return {**headlines.load_state(), "error": f"Couldn't update the headlines: {describe(exc)}"}
+
+
+def refresh_news_and_headlines(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    return {"news": refresh_news(cfg, force=force), "headlines": refresh_headlines(cfg, force=force)}
+
+
 def news_refresh_due(cfg: MyGeekyConfig) -> bool:
     from .. import news
-    return bool(cfg.news_sources) and news.refresh_due(cfg, news.load_state())
+    from .. import headlines
+    return (bool(cfg.news_sources) and news.refresh_due(cfg, news.load_state())) or \
+        (cfg.headlines_enabled and headlines.refresh_due(cfg, headlines.load_state()))
 
 
 def refresh_news(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
@@ -767,7 +788,8 @@ LINK_PREFIXES = ("https://github.com/", "https://www.producthunt.com/posts/", "h
 
 def open_link(url: str) -> bool:
     """Like open_profile, but also lets Product Hunt launch pages through."""
-    if not isinstance(url, str) or not url.startswith(LINK_PREFIXES):
+    from .. import headlines
+    if not isinstance(url, str) or not (url.startswith(LINK_PREFIXES) or headlines.allowed_link(url)):
         return False
     from PySide6.QtCore import QUrl
     from PySide6.QtGui import QDesktopServices

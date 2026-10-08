@@ -1323,6 +1323,28 @@ def admin_stats() -> None:
         click.echo(f"  {k:<22} {'-' if v is None else v}")
 
 
+@main.command("headlines")
+@click.option("--refresh", is_flag=True, help="Read the feeds again now.")
+@click.option("--json", "as_json", is_flag=True)
+def headlines_cmd(refresh: bool, as_json: bool) -> None:
+    """What's happening across your work, as titles: AI labs, journals and the tech press, ranked for you."""
+    from . import headlines as hl
+    cfg = load_config()
+    state = hl.refresh(cfg, force=refresh, log=lambda m: click.echo(f"[mygeeky] {m}", err=True))
+    items = state.get("items") or []
+    if as_json:
+        click.echo(json.dumps(items, indent=2))
+        return
+    if not items:
+        click.echo("No headlines yet: `mygeeky headlines --refresh`.")
+    for label, group in (("For your work", [x for x in items if not x.get("explore")]),
+                         ("The big picture", [x for x in items if x.get("explore")])):
+        if group:
+            click.secho(f"\n{label}", bold=True)
+        for x in group:
+            click.echo(f"  {x['source'][:16]:<16} {x['title']}")
+
+
 # --------------------------------------------------------------------------- keywords
 @main.group("keywords", invoke_without_command=True)
 @click.pass_context

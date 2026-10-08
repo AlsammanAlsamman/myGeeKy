@@ -282,6 +282,26 @@ mygeeky trends --refresh    # ask OpenAlex again now (otherwise daily)
 
 ## News for your field (`mygeeky news`)
 
+**Headlines** (the default view in the News tab, or `mygeeky headlines`): just
+titles, so you know what's happening across your work at a glance. Every three
+hours myGeeKy reads the public feeds of AI labs (OpenAI, Google AI and DeepMind,
+Hugging Face, MIT Technology Review, The Verge, TechCrunch), journals (Nature,
+Nature Genetics, Nature Biotechnology, Science, Quanta, ScienceDaily, Ars
+Technica) and the tech press (Ars Technica, GitHub, The Register). It ranks
+them with **your model**: your topics and keywords (with their meanings), your
+CV and papers, and what you've clicked lately.
+
+- **For your work:** headlines with real evidence, meaning two of your terms, a
+  multi-word one, or a topic or keyword you chose. One stray word doesn't count.
+- **🌍 The big picture:** the newest of the rest, taking turns across AI, science
+  and tech, and always at least `headlines_ai_min` (3) from AI.
+- Settings: `headlines_categories` (`ai`, `science`, `tech`), `headlines_size` (30),
+  `headlines_days` (4), `headlines_refresh_hours` (3), `headlines_enabled`.
+- Only feeds are downloaded; nothing about you is sent. Titles are plain text,
+  and a link only opens if it points at that feed's own site.
+
+**Papers & discussions** (the other view):
+
 <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/news.png" width="280" align="right" alt="News tab">
 
 New preprints and discussions that match your interests, from free and

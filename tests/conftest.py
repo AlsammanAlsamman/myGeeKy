@@ -26,6 +26,7 @@ import mygeeky.news  # noqa: F401
 import mygeeky.papers  # noqa: F401
 import mygeeky.admin  # noqa: F401
 import mygeeky.keywords  # noqa: F401
+import mygeeky.headlines  # noqa: F401
 import mygeeky.config as config_module
 import mygeeky.gui.app  # noqa: F401
 import mygeeky.storage  # noqa: F401

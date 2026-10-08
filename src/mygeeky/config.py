@@ -40,6 +40,7 @@ INTEREST_SEEN_FILE = DATA_DIR / "interest_seen.json"        # your stars/forks a
 NEWS_FILE = DATA_DIR / "news.json"
 TRENDS_FILE = DATA_DIR / "trends.json"                 # research trends from OpenAlex
 PAPERS_CACHE_FILE = DATA_DIR / "papers_cache.json"     # repo -> its published paper (the [P] badge)
+HEADLINES_FILE = DATA_DIR / "headlines.json"          # AI, science and tech headlines, ranked for you
 ADMIN_FILE = DATA_DIR / "admin_prospects.json"         # the maker's admin tab: prospects and invites
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
 LOG_DIR = DATA_DIR / "logs"
@@ -178,6 +179,12 @@ class MyGeekyConfig:
     news_size: int = 25
     news_refresh_hours: float = 6.0
     news_days: int = 7                     # how far back to look
+    headlines_enabled: bool = True         # titles from AI labs, journals and the tech press
+    headlines_categories: list[str] = field(default_factory=lambda: ["ai", "science", "tech"])
+    headlines_size: int = 30
+    headlines_days: int = 4                # only this fresh
+    headlines_refresh_hours: float = 3.0
+    headlines_ai_min: int = 3              # always a few AI headlines, even if they don't match you
 
     # Research trends (Market tab -> Research): rising papers, tools with papers, people (OpenAlex)
     trends_months: int = 18                # how recent a paper must be
