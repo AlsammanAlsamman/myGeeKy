@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "myGeeKy",
-    "slug": "mygeeky",
+    "slug": "alsamman",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -34,6 +34,13 @@
     "backgroundColor": "#12121c",
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8bb7ceb0-5b6b-4b09-9fdc-6762b3359255"
+      }
+    },
+    "owner": "alsammans-team"
   }
 }
