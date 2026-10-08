@@ -38,7 +38,7 @@ def test_wrong_owner_and_bad_token():
 
 def test_kind_of():
     assert [tc.kind_of(t) for t in ("github_pat_x", "ghp_x", "gho_x", "x")] == \
-        ["fine-grained", "classic", "GitHub CLI", "other"]
+        ["fine-grained", "classic", "OAuth", "other"]
 
 
 class Resp:

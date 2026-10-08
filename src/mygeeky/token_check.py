@@ -46,7 +46,7 @@ def kind_of(token: str) -> str:
     if token.startswith("ghp_"):
         return "classic"
     if token.startswith("gho_"):
-        return "GitHub CLI"
+        return "OAuth"              # "Sign in with GitHub", or the GitHub CLI
     return "other"
 
 
@@ -164,7 +164,7 @@ def judge(role: str, caps: dict[str, Any], user: str, other_token: str | None = 
             warnings.append("This token can also follow people, which Signals doesn't need: remove the "
                             "Followers permission.")
     kind = caps.get("kind", "")
-    if kind in ("classic", "GitHub CLI") and not errors:
+    if kind in ("classic", "OAuth") and caps.get("scopes") and not errors:   # no scopes = public read-only
         warnings.append(f"This is a {kind} token, which can't be limited as tightly as a fine-grained one "
                         "(github_pat_…).")
     can = []

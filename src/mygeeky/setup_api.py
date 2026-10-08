@@ -161,6 +161,37 @@ def store_token(req: dict[str, Any]) -> dict[str, Any]:
             "notes": [f"Token 1 ✓ {verdict['summary']}"] + verdict["warnings"]}
 
 
+def github_login_start(req: dict[str, Any]) -> dict[str, Any]:
+    """Step 1 of "Sign in with GitHub": a code to type at github.com/login/device."""
+    from . import github_login as gl
+    try:
+        return {"ok": True, **gl.start()}
+    except gl.LoginError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def github_login_finish(req: dict[str, Any]) -> dict[str, Any]:
+    """Step 2: wait for the user to authorize, then keep the token in the keyring.
+    Only the username comes back -- the token never leaves this process."""
+    from . import github_login as gl
+    from .config import load_config, save_config
+    try:
+        token = gl.poll(str(req.get("device_code") or ""), int(req.get("interval") or 5),
+                        int(req.get("expires_in") or 900))
+        login = gl.who(token)
+    except gl.LoginError as exc:
+        return {"ok": False, "error": str(exc)}
+    cfg = load_config()
+    if cfg.github_username and login.lower() != cfg.github_username.lower():
+        return {"ok": False, "error": f"You signed in as {login}, but you told myGeeKy you're "
+                                      f"{cfg.github_username}. Sign in with that account, or go Back and change it."}
+    if not cfg.github_username:
+        cfg.github_username = login
+        save_config(cfg)
+    gl.store(token, login)
+    return {"ok": True, "login": login, "expiry": _expiry_note("read")}
+
+
 def token_report(req: dict[str, Any]) -> dict[str, Any]:
     """What each stored token can do, and anything wrong with it (nothing is changed)."""
     from . import auth, token_check
@@ -256,6 +287,8 @@ ACTIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "save_profile": save_profile,
     "check_token": check_token,
     "store_token": store_token,
+    "github_login_start": github_login_start,
+    "github_login_finish": github_login_finish,
     "token_report": token_report,
     "sync_init": sync_init,
     "beacon_init": beacon_init,

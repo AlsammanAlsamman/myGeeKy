@@ -366,12 +366,35 @@ main.add_command(auth_cmd, name="auth")
 
 
 @auth_cmd.command("login")
-def auth_login() -> None:
-    """Store a GitHub token securely in your OS keyring."""
+@click.option("--paste", is_flag=True, help="Paste a token you made yourself instead of signing in.")
+def auth_login(paste: bool) -> None:
+    """Sign in with GitHub (no token to create or copy)."""
     cfg = load_config()
-    if not cfg.github_username:
-        raise click.ClickException("Run `mygeeky init` first to set your GitHub username.")
-    auth.prompt_and_store_token(cfg.github_username)
+    if paste:
+        if not cfg.github_username:
+            raise click.ClickException("Run `mygeeky init` first to set your GitHub username.")
+        auth.prompt_and_store_token(cfg.github_username)
+    else:
+        from . import github_login as gl
+        try:
+            flow = gl.start()
+            click.echo(f"\n  1. Open {flow['verification_uri']}")
+            click.secho(f"  2. Enter this code:  {flow['user_code']}", bold=True)
+            click.echo("  3. Click Authorize myGeeKy. It can only read public data.\n")
+            click.launch(flow["verification_uri"])
+            click.echo("Waiting for you on github.com…")
+            token = gl.poll(flow["device_code"], flow["interval"], flow["expires_in"])
+            login = gl.who(token)
+        except gl.LoginError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if cfg.github_username and login.lower() != cfg.github_username.lower():
+            raise click.ClickException(f"You signed in as {login}, but myGeeKy is set up for "
+                                       f"{cfg.github_username}. Sign in with that account (or run `mygeeky init`).")
+        if not cfg.github_username:
+            cfg.github_username = login
+            save_config(cfg)
+        gl.store(token, login)
+        click.secho(f"Signed in as {login}.", fg="green")
     from . import tokens
     tokens.forget()
     for t in tokens.status(cfg, force=True):

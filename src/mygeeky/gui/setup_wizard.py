@@ -753,6 +753,33 @@ class TokenPage(Page):
                          "and can never follow anyone. Setup checks that: a token that can write to your "
                          "repos or follow people is refused here. (Signals, on a later page and optional, "
                          "uses a separate second token that can write to one repo only.)")
+        # the easy way: sign in with GitHub (no token to create or copy)
+        self.signin_card, signin_lay = _card("Easiest: sign in with GitHub")
+        signin_lay.addWidget(_label("Click the button, type the code on the GitHub page that opens, and click "
+                                    "Authorize. myGeeKy can then only read public data.", "muted"))
+        row = QHBoxLayout()
+        self.signin_btn = QPushButton("\U0001f511  Sign in with GitHub")
+        self.signin_btn.setObjectName("primary")
+        self.signin_btn.clicked.connect(self._sign_in)
+        row.addWidget(self.signin_btn)
+        row.addStretch(1)
+        signin_lay.addLayout(row)
+        self.code_row = QHBoxLayout()
+        self.code_label = QLabel("")
+        self.code_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.code_label.setStyleSheet("font-size:26px; font-weight:800; letter-spacing:4px; color:#ff6fd8;")
+        self.copy_code = QPushButton("Copy code")
+        self.copy_code.clicked.connect(lambda: QApplication.clipboard().setText(self.code_label.text()))
+        self.copy_code.setVisible(False)
+        self.code_row.addWidget(self.code_label)
+        self.code_row.addWidget(self.copy_code)
+        self.code_row.addStretch(1)
+        signin_lay.addLayout(self.code_row)
+        self.signin_status = _label("", "muted")
+        signin_lay.addWidget(self.signin_status)
+        self.add(self.signin_card)
+
+        self.add(_label("Or use a token you make yourself:", "muted"))
         self.keep = QRadioButton("")
         self.paste = QRadioButton("Paste a read-only token")
         self.add(self.keep)
@@ -781,6 +808,52 @@ class TokenPage(Page):
         token = self.token.text().strip()
         python = self.w.python
         return lambda wk: api(python, "store_token", {"token": token})
+
+    # ---- Sign in with GitHub
+    def _sign_in(self) -> None:
+        self.signin_btn.setEnabled(False)
+        self.signin_status.setText("Asking GitHub for a code\u2026")
+        python = self.w.python
+
+        def run(wk):
+            flow = api(python, "github_login_start", timeout=60)
+            if not flow.get("ok"):
+                return flow
+            wk.line.emit(json.dumps({"code": flow["user_code"], "uri": flow["verification_uri"]}))
+            return api(python, "github_login_finish", {"device_code": flow["device_code"],
+                                                        "interval": flow["interval"],
+                                                        "expires_in": flow["expires_in"]},
+                       timeout=flow["expires_in"] + 30)
+        self._signin_worker = Worker(run)
+        self._signin_worker.line.connect(self._show_code)
+        self._signin_worker.done.connect(self._signed_in)
+        self._signin_worker.start()
+
+    def _show_code(self, payload: str) -> None:
+        info = json.loads(payload)
+        self.code_label.setText(info["code"])
+        self.copy_code.setVisible(True)
+        QApplication.clipboard().setText(info["code"])
+        QDesktopServices.openUrl(QUrl(info["uri"]))
+        self.signin_status.setText(f"Your browser opened {info['uri']}. The code is already copied: paste it "
+                                   "there and click Authorize. Waiting for you\u2026")
+
+    def _signed_in(self, result: Any) -> None:
+        result = result if isinstance(result, dict) else {}
+        self.signin_btn.setEnabled(True)
+        self.copy_code.setVisible(False)
+        self.code_label.setText("")
+        if not result.get("ok"):
+            self.signin_status.setText(result.get("error") or "The sign-in didn't finish. Try again.")
+            return
+        self.signin_status.setText(f"\u2713 Signed in as {result['login']}. Click Next.")
+        if result.get("expiry"):
+            self.w.notes.append(result["expiry"])
+        self.w.refresh_state()
+        self.keep.setVisible(True)
+        self.keep.setText("Use my GitHub sign-in")
+        self.keep.setChecked(True)
+        self.signin_btn.setText("\u2713 Signed in")
 
     def on_result(self, result):
         if result.get("ok"):
