@@ -40,6 +40,7 @@ INTEREST_SEEN_FILE = DATA_DIR / "interest_seen.json"        # your stars/forks a
 NEWS_FILE = DATA_DIR / "news.json"
 TRENDS_FILE = DATA_DIR / "trends.json"                 # research trends from OpenAlex
 PAPERS_CACHE_FILE = DATA_DIR / "papers_cache.json"     # repo -> its published paper (the [P] badge)
+HF_MODELS_FILE = DATA_DIR / "hf_models.json"         # Hugging Face models trending in your field
 HEADLINES_FILE = DATA_DIR / "headlines.json"          # AI, science and tech headlines, ranked for you
 ADMIN_FILE = DATA_DIR / "admin_prospects.json"         # the maker's admin tab: prospects and invites
 SYNCED_CONFIG_FILE = DATA_DIR / "config.synced.json"
@@ -146,6 +147,9 @@ class MyGeekyConfig:
         "developer-tools", "open-source", "github", "artificial-intelligence", "science", "health"])
     market_ph_days: int = 30               # launches from the last N days
     market_ph_size: int = 10               # launches shown
+    market_hf_enabled: bool = True         # Hugging Face models on the Market (no key needed)
+    market_hf_size: int = 15               # models per list (in your field, trending everywhere)
+    market_hf_refresh_hours: float = 6.0
 
     # Cross-machine sync: your data dir is a clone of a PRIVATE GitHub repo
     # (`mygeeky sync init`). Uses your normal git/gh credentials, never

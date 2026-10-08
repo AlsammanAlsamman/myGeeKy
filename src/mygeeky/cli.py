@@ -1064,12 +1064,14 @@ def _run_market(cfg: MyGeekyConfig, force: bool = False, log=lambda m: None) -> 
 
 def _refresh_producthunt(cfg: MyGeekyConfig, client: GitHubClient, force: bool = False,
                          log=lambda m: None) -> None:
-    """Product Hunt launches in your field -- only with a token, and a
-    failure here never sinks the board itself."""
-    from . import producthunt
+    """Product Hunt launches in your field (the API with a token, the public feed
+    without), and Hugging Face models; a failure here never sinks the board itself."""
+    from . import hfmodels, producthunt
     token = auth.get_producthunt_token(cfg.github_username)
-    if not token:
-        return
+    try:
+        hfmodels.refresh(cfg, force=force, log=log)
+    except Exception as exc:
+        log(f"Hugging Face skipped: {exc}")
     try:
         producthunt.refresh(cfg, token, lambda: _market_terms(client, cfg), force=force, log=log)
     except Exception as exc:

@@ -250,6 +250,9 @@ def record_click(cfg: MyGeekyConfig, kind: str, item: dict[str, Any]) -> None:
             interests.record("repo", f"{name.replace('/', ' ')} {item.get('description') or ''} "
                                      f"{item.get('language') or ''}", topics=item.get("topics") or [],
                              source=name, cfg=cfg)
+        elif kind == "model":
+            interests.record("repo", f"{item.get('id', '').replace('/', ' ')} {item.get('pipeline', '')}",
+                             topics=item.get("tags") or [], source=item.get("id", ""), cfg=cfg)
         elif kind in ("news", "paper", "headline"):
             interests.record("news", item.get("title", ""), topics=item.get("match") or [],
                              source=item.get("id", ""), cfg=cfg)
@@ -626,6 +629,26 @@ def get_market(cfg: MyGeekyConfig) -> dict[str, Any]:
             "producthunt_token": bool(cfg.github_username and auth.get_producthunt_token(cfg.github_username))}
 
 
+def get_hf_models(cfg: MyGeekyConfig) -> dict[str, Any]:
+    """Hugging Face models (local only, no network)."""
+    from .. import hfmodels
+    return hfmodels.load_state()
+
+
+def refresh_hf_models(cfg: MyGeekyConfig, force: bool = False) -> dict[str, Any]:
+    from .. import hfmodels
+    try:
+        return hfmodels.refresh(cfg, force=force)
+    except Exception as exc:
+        from ..errors import describe
+        return {**hfmodels.load_state(), "error": f"Couldn't update the models: {describe(exc)}"}
+
+
+def hf_models_due(cfg: MyGeekyConfig) -> bool:
+    from .. import hfmodels
+    return cfg.market_hf_enabled and hfmodels.refresh_due(cfg, hfmodels.load_state())
+
+
 def market_refresh_due(cfg: MyGeekyConfig, now: datetime | None = None) -> bool:
     from ..market import load_state
     updated = load_state().get("updated_at")
@@ -792,6 +815,7 @@ def open_profile(url: str) -> bool:
 
 
 LINK_PREFIXES = ("https://github.com/", "https://www.producthunt.com/posts/", "https://arxiv.org/abs/",
+                 "https://www.producthunt.com/products/", "https://huggingface.co/",
                  "https://www.biorxiv.org/content/", "https://news.ycombinator.com/item?id=",
                  "https://doi.org/", "https://orcid.org/", "https://openalex.org/")
 

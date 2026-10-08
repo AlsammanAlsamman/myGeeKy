@@ -179,6 +179,25 @@ mygeeky market --refresh          # board + launches
 
 <br clear="right">
 
+### 🤗 Models trending on Hugging Face (Market → Models)
+
+Two lists, refreshed every 6 hours from Hugging Face's public API (no key needed):
+
+- **In your field:** models carrying the Hugging Face tags your interests point to
+  (e.g. GWAS and single cell lead to `biology` and `genomics`; your own keywords
+  count as tags too), sorted by Hugging Face's trending score and your interests.
+  First-attempt uploads with no trend and few likes are skipped.
+- **🌍 Trending everywhere:** the global top, so you see the big new models too.
+
+Settings: `market_hf_enabled`, `market_hf_size` (15), `market_hf_refresh_hours` (6).
+
+### Product Hunt, with or without a token
+
+Launches show up under the Repos board for everyone: without setup they come from
+Product Hunt's public feed (today's featured launches). `mygeeky auth producthunt`
+(a free developer token) switches to the API, which adds upvotes and topics and
+reaches further back.
+
 ## Your profile: CV + GitHub + ORCID/OpenAlex + Google Scholar
 
 ```bash

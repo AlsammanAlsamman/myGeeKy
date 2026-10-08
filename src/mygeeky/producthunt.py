@@ -1,9 +1,10 @@
 """Product Hunt launches in your field, for the Market board.
 
-Read-only, through Product Hunt's official GraphQL API (v2), which needs a
-free developer token: create an app at
-https://www.producthunt.com/v2/oauth/applications and copy its "Developer
-Token" (`mygeeky auth producthunt` stores it in the OS keyring).
+Read-only. Without any setup, from Product Hunt's public feed (today's
+featured launches). With a free developer token, through the official GraphQL
+API (v2) instead, which adds upvotes and topics and reaches back further:
+create an app at https://www.producthunt.com/v2/oauth/applications and copy
+its "Developer Token" (`mygeeky auth producthunt` stores it in the OS keyring).
 
 Product Hunt has no full-text search, so recent launches are pulled from a
 few topics (`market_ph_topics`), then scored against the same profile terms
@@ -27,6 +28,8 @@ from .config import PRODUCTHUNT_FILE, MyGeekyConfig, ensure_dirs
 from .market import _term_pattern
 
 API = "https://api.producthunt.com/v2/api/graphql"
+FEED = "https://www.producthunt.com/feed"
+_FEED_LINK = re.compile(r"^https://www\.producthunt\.com/(?:products|posts)/([a-z0-9][a-z0-9-]{0,120})(?:[/?#]|$)")
 TOKEN_URL = "https://www.producthunt.com/v2/oauth/applications"
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,120}$")
 
@@ -86,7 +89,7 @@ def clean_post(node: Any) -> dict[str, Any] | None:
 def field_hits(post: dict[str, Any], terms: list[str]) -> list[str]:
     """Which of your profile terms the launch mentions."""
     text = " ".join([post["name"], post["tagline"], post["description"], " ".join(post["topics"])])
-    return [t for t in terms if _term_pattern(t).search(text)]
+    return [t for t in terms if len(t) >= 3 and _term_pattern(t).search(text)]   # "r" would match anything
 
 
 def rank(posts: list[dict[str, Any]], terms: list[str], size: int) -> list[dict[str, Any]]:
@@ -95,6 +98,30 @@ def rank(posts: list[dict[str, Any]], terms: list[str], size: int) -> list[dict[
         p["match"] = field_hits(p, terms)
     ordered = sorted(posts, key=lambda p: (bool(p["match"]), len(p["match"]), p["votes"]), reverse=True)
     return ordered[:size]
+
+
+def fetch_feed(session: requests.Session | None = None) -> list[dict[str, Any]]:
+    """Today's featured launches from Product Hunt's public Atom feed (no token)."""
+    import html as html_mod
+    import xml.etree.ElementTree as ET
+    session = session or requests.Session()
+    r = session.get(FEED, timeout=25, headers={"User-Agent": "mygeeky (https://github.com/AlsammanAlsamman/myGeeKy)"})
+    r.raise_for_status()
+    atom = "{http://www.w3.org/2005/Atom}"
+    posts = []
+    for e in ET.fromstring(r.content).findall(f"{atom}entry")[:60]:
+        link_el = next((l for l in e.findall(f"{atom}link") if l.get("rel") in (None, "alternate")), None)
+        m = _FEED_LINK.match((link_el.get("href") if link_el is not None else "") or "")
+        name = _clip((e.findtext(f"{atom}title") or ""), 80)
+        if not m or not name:
+            continue
+        content = e.findtext(f"{atom}content") or ""
+        first_p = re.search(r"<p>(.*?)</p>", content, re.S)
+        tagline = _clip(html_mod.unescape(re.sub(r"<[^>]+>", " ", first_p.group(1) if first_p else "")), 140)
+        posts.append({"slug": m.group(1), "name": name, "tagline": tagline, "description": "", "votes": 0,
+                      "comments": 0, "created_at": _clip(e.findtext(f"{atom}published"), 40), "thumbnail": "",
+                      "topics": [], "url": f"https://www.producthunt.com/products/{m.group(1)}", "from_feed": True})
+    return posts
 
 
 def fetch_posts(token: str, topics: list[str], days: int, pages: int = 2,
@@ -154,14 +181,17 @@ def refresh_due(cfg: MyGeekyConfig, state: dict[str, Any], now: datetime | None 
     return ((now or datetime.now(timezone.utc)) - updated).total_seconds() >= cfg.market_refresh_hours * 3600
 
 
-def refresh(cfg: MyGeekyConfig, token: str, terms_fn: Callable[[], list[str]], force: bool = False,
+def refresh(cfg: MyGeekyConfig, token: str | None, terms_fn: Callable[[], list[str]], force: bool = False,
             log: Callable[[str], None] = lambda m: None,
             session: requests.Session | None = None) -> dict[str, Any]:
     state = load_state()
     if not force and not refresh_due(cfg, state):
         return state
     log("reading Product Hunt launches")
-    posts = fetch_posts(token, cfg.market_ph_topics, cfg.market_ph_days, session=session, log=log)
+    if token:
+        posts = fetch_posts(token, cfg.market_ph_topics, cfg.market_ph_days, session=session, log=log)
+    else:   # no token: today's featured launches, from the public feed
+        posts = fetch_feed(session)
     state = {"updated_at": datetime.now(timezone.utc).isoformat(),
              "posts": rank(posts, terms_fn(), cfg.market_ph_size)}
     save_state(state)

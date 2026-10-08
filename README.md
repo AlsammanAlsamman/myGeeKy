@@ -62,7 +62,7 @@
 
 🛠️ **Finds projects that want you.** Active repos in your field with starter issues, ranked by how often their maintainers merge outside pull requests.
 
-📈 **Feels the pulse.** Your field's repos as a daily stock race: stars, commits, PyPI downloads, who moved up.
+📈 **Feels the pulse.** Your field's repos as a daily stock race (stars, commits, PyPI downloads, who moved up), 🤗 Hugging Face models trending in your field, and new Product Hunt launches.
 
 🔬 **Reads the literature.** Papers gaining citations fastest, new tools with their code, and the people behind them. One letter, one meaning: 🟩 **P** a paper, 🟨 **N** in the news, 🟦 **D** discussed on Hacker News, 🟪 **A** an announcement.
 

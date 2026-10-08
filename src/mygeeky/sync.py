@@ -40,6 +40,7 @@ update_check.json
 token_check.json
 news.json
 headlines.json
+hf_models.json
 keywords.json
 trends.json
 papers_cache.json

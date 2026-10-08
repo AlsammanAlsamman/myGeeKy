@@ -1886,6 +1886,49 @@ class MarketRow(QFrame):
 PH_ORANGE = "#ff6154"
 
 
+class ModelRow(QFrame):
+    """One Hugging Face model: name, what it does, likes, downloads, how hot it is."""
+
+    def __init__(self, m: dict[str, Any], theme: dict[str, Any], on_open: Callable[[str], bool]) -> None:
+        super().__init__()
+        self.setObjectName("modelRow")
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(8, 6, 8, 6)
+        outer.setSpacing(8)
+        icon = QLabel("\U0001f917")
+        icon.setStyleSheet("font-size:15px; background:transparent;")
+        outer.addWidget(icon, 0, Qt.AlignTop)
+        body = QVBoxLayout()
+        body.setSpacing(1)
+        owner, _, name = m.get("id", "").partition("/")
+        title = QLabel(f"<b>{html.escape(name)}</b> <span style='color:{theme['muted']}'>{html.escape(owner)}</span>")
+        title.setTextFormat(Qt.RichText)
+        title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        title.setStyleSheet(f"color:{theme['text']}; font-size:11.5px; background:transparent;")
+        body.addWidget(title)
+        bits = [m["pipeline"].replace("-", " ")] if m.get("pipeline") else []
+        bits += [f"\u2665 {_fmt_count(m.get('likes'))}", f"\u2193 {_fmt_count(m.get('downloads'))}"]
+        if m.get("match"):
+            bits.append("matches " + ", ".join(m["match"][:3]))
+        sub = QLabel(" \u00b7 ".join(bits))
+        sub.setTextFormat(Qt.PlainText)
+        sub.setWordWrap(True)
+        sub.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        sub.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
+        body.addWidget(sub)
+        outer.addLayout(body, 1)
+        hot = QLabel(f"\U0001f525 {_fmt_count(m.get('trending'))}")
+        hot.setToolTip("Hugging Face's trending score: how fast it's gaining likes and downloads right now")
+        hot.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:600; background:transparent;")
+        outer.addWidget(hot, 0, Qt.AlignTop)
+        self.setStyleSheet(f"QFrame#modelRow {{ background:{theme['card_bg']}; border-radius:10px; }}"
+                           f"QFrame#modelRow:hover {{ background:{theme['btn_bg']}; }}")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(", ".join(m.get("tags") or [])[:300])
+        url = m.get("url", "")
+        self.mousePressEvent = lambda ev: on_open(url)  # noqa: ARG005
+
+
 class ProductHuntRow(QFrame):
     """One Product Hunt launch under the Market board: thumbnail, name,
     tagline, upvotes, and a 'your field' tag when it mentions your terms.
@@ -1927,10 +1970,11 @@ class ProductHuntRow(QFrame):
         body.addWidget(tagline)
         outer.addLayout(body, 1)
 
-        votes = QLabel(f"▲ {_fmt_count(post.get('votes'))}")
-        votes.setToolTip(f"{post.get('votes', 0)} upvotes · {post.get('comments', 0)} comments")
-        votes.setStyleSheet(f"color:{PH_ORANGE}; font-size:11px; font-weight:700; background:transparent;")
-        outer.addWidget(votes, 0, Qt.AlignVCenter)
+        if not post.get("from_feed"):          # the public feed has no vote counts
+            votes = QLabel(f"▲ {_fmt_count(post.get('votes'))}")
+            votes.setToolTip(f"{post.get('votes', 0)} upvotes · {post.get('comments', 0)} comments")
+            votes.setStyleSheet(f"color:{PH_ORANGE}; font-size:11px; font-weight:700; background:transparent;")
+            outer.addWidget(votes, 0, Qt.AlignVCenter)
 
         self.setStyleSheet(f"QFrame#phRow {{ background:{theme['card_bg']}; border-radius:10px; }}"
                            f"QFrame#phRow:hover {{ background:{theme['btn_bg']}; }}")
@@ -2795,7 +2839,7 @@ class MyGeekyPanel(QWidget):
         switch = QHBoxLayout()
         switch.setSpacing(4)
         self.market_mode_buttons: dict[str, QPushButton] = {}
-        for mode, label in (("repos", "Repos"), ("research", "Research")):
+        for mode, label in (("repos", "Repos"), ("research", "Research"), ("models", "\U0001f917 Models")):
             b = QPushButton(label)
             b.setCursor(Qt.PointingHandCursor)
             b.clicked.connect(lambda checked=False, m=mode: self._set_market_mode(m))
@@ -2806,16 +2850,21 @@ class MyGeekyPanel(QWidget):
         self.market_stack = QStackedWidget()
         self.market_stack.addWidget(self._build_market_repos())
         self.market_stack.addWidget(self._build_research_view())
+        self.market_stack.addWidget(self._build_models_view())
         outer.addWidget(self.market_stack, 1)
         self._market_mode = "repos"
         return container
 
     def _set_market_mode(self, mode: str) -> None:
         self._market_mode = mode
-        self.market_stack.setCurrentIndex(0 if mode == "repos" else 1)
+        self.market_stack.setCurrentIndex({"repos": 0, "research": 1, "models": 2}[mode])
         self._style_market_switch()
         if mode == "research" and logic.trends_due(self.cfg):
             self._refresh_research(force=False)
+        if mode == "models":
+            self._render_models(logic.get_hf_models(self.cfg))
+            if logic.hf_models_due(self.cfg):
+                self._refresh_models(force=False)
 
     def _style_market_switch(self) -> None:
         theme = THEMES[self._theme_name()]
@@ -2824,6 +2873,84 @@ class MyGeekyPanel(QWidget):
             b.setStyleSheet(f"QPushButton {{ background:{theme['tab_active'] if active else theme['card_bg']}; "
                             f"color:{theme['text']}; border:none; border-radius:8px; padding:4px 12px; "
                             f"font-size:11px; font-weight:{'700' if active else '400'}; }}")
+
+    # ------------------------------------------------------------------ Hugging Face models
+    def _build_models_view(self) -> QScrollArea:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 4, 0)
+        actions = QHBoxLayout()
+        self.models_updated_label = QLabel("")
+        self.refresh_models_btn = QPushButton("Refresh")
+        self.refresh_models_btn.setCursor(Qt.PointingHandCursor)
+        self.refresh_models_btn.clicked.connect(lambda: self._refresh_models(force=True))
+        actions.addWidget(self.models_updated_label, 1)
+        actions.addWidget(self.refresh_models_btn)
+        layout.addLayout(actions)
+        self.models_hint = QLabel("Models trending on Hugging Face: first the ones in your field (from your "
+                                  "interests), then the big picture. Click one to open it.")
+        self.models_hint.setWordWrap(True)
+        layout.addWidget(self.models_hint)
+        box = QWidget()
+        self.models_area = QVBoxLayout(box)
+        self.models_area.setContentsMargins(0, 0, 0, 0)
+        self.models_area.setSpacing(5)
+        layout.addWidget(box)
+        layout.addStretch(1)
+        self._models_running = False
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setWidget(page)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("background:transparent; border:none;")
+        scroll.viewport().setAutoFillBackground(False)
+        page.setAutoFillBackground(False)
+        return scroll
+
+    def _refresh_models(self, force: bool) -> None:
+        if self._models_running:
+            return
+        self._models_running = True
+        self.refresh_models_btn.setEnabled(False)
+        self.models_updated_label.setText("updating\u2026")
+        self._run_async(lambda: logic.refresh_hf_models(self.cfg, force=force), self._on_models_ready)
+
+    def _on_models_ready(self, data: Any) -> None:
+        self._models_running = False
+        self.refresh_models_btn.setEnabled(True)
+        self._render_models(data if isinstance(data, dict) else {})
+
+    def _render_models(self, data: dict[str, Any]) -> None:
+        theme = THEMES[self._theme_name()]
+        _clear_layout(self.models_area)
+        muted = f"color:{theme['muted']}; font-size:10.5px; background:transparent;"
+        for lbl in (self.models_hint, self.models_updated_label):
+            lbl.setStyleSheet(muted)
+        self.refresh_models_btn.setStyleSheet(
+            f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
+            f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}")
+        if not self._models_running:
+            updated = data.get("updated_at")
+            self.models_updated_label.setText(data.get("error") or ("updated " + _time_ago(updated) if updated else ""))
+        field, trending = data.get("field") or [], data.get("trending") or []
+        if not field and not trending:
+            msg = QLabel("No models yet. They load in the background (or click Refresh).")
+            msg.setStyleSheet(muted)
+            self.models_area.addWidget(msg)
+            return
+        tags = ", ".join(data.get("tags") or [])
+        for label, group in ((f"IN YOUR FIELD" + (f" · {tags}" if tags else ""), field),
+                             ("\U0001f30d TRENDING EVERYWHERE", trending)):
+            if not group:
+                continue
+            head = QLabel(label)
+            head.setWordWrap(True)
+            head.setStyleSheet(f"color:{theme['text']}; font-size:10px; font-weight:700; letter-spacing:0.5px; "
+                               "margin-top:6px; background:transparent;")
+            self.models_area.addWidget(head)
+            for m in group:
+                self.models_area.addWidget(ModelRow(m, theme, self._opener("model", m)))
 
     def _build_research_view(self) -> QScrollArea:
         page = QWidget()
@@ -3678,6 +3805,7 @@ class MyGeekyPanel(QWidget):
             self._load_market()
             self._load_news()
             self._set_news_mode(self._news_mode)
+            self._render_models(logic.get_hf_models(self.cfg))
 
     def _render_suggestions_from_cache(self) -> None:
         # Re-render already-loaded cards so their theme-dependent styling updates too.
@@ -4274,10 +4402,7 @@ class MyGeekyPanel(QWidget):
                              f"margin-top:8px; color:{theme['text']}; background:transparent;")
         self.market_area.addWidget(header)
         if not posts:
-            hint = QLabel("Add launches from Product Hunt: run `mygeeky auth producthunt` in a terminal "
-                          "(a free developer token), then click Refresh."
-                          if not data.get("producthunt_token") else
-                          "No launches yet. They load with the next board refresh (or click Refresh).")
+            hint = QLabel("No launches yet. They load with the next board refresh (or click Refresh).")
             hint.setWordWrap(True)
             hint.setStyleSheet(f"color:{theme['muted']}; font-size:10.5px; background:transparent;")
             self.market_area.addWidget(hint)
