@@ -157,12 +157,17 @@ myGeeKy reminds you a week before either one expires, and `mygeeky auth status` 
 <tr>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="260" alt="Market tab"><br><b>Market</b><br><sub>Your field's repos as a stock race: stars, commits, downloads</sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/research.png" width="260" alt="Research view"><br><b>Market → Research</b><br><sub>Rising papers, their code, and the people behind them (OpenAlex)</sub></td>
-<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/news.png" width="260" alt="News tab"><br><b>News</b><br><sub>arXiv, bioRxiv and Hacker News about your interests</sub></td>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/news.png" width="260" alt="News tab"><br><b>News</b><br><sub>Headlines from AI labs, journals and the tech press, ranked for your work; plus papers and discussions</sub></td>
 </tr>
 <tr>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/activity.png" width="260" alt="Activity tab"><br><b>Activity</b><br><sub>One card per person: what they're building right now</sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="260" alt="Signals tab"><br><b>Signals</b><br><sub>Private 🙏 📚 👀 from fellow users; 🤝 only when you both choose it <i>(example people)</i></sub></td>
 <td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/model.png" width="260" alt="Model tab"><br><b>Model</b><br><sub>What myGeeKy knows about you: your interest map, what teaches it, room to explore</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/models.png" width="260" alt="Models view"><br><b>Market → 🤗 Models</b><br><sub>Hugging Face models trending in your field, and everywhere</sub></td>
+<td></td>
+<td align="center"><a href="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/launch/poster/mygeeky-poster.pdf"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/launch/poster/mygeeky-poster-preview.png" width="200" alt="The myGeeKy wall poster"></a><br><b>Wall poster</b><br><sub>Print it for your lab or department (A3, PDF)</sub></td>
 </tr>
 </table>
 
