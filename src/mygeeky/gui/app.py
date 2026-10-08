@@ -140,6 +140,20 @@ def set_opacity(cfg: MyGeekyConfig, opacity: float) -> bool:
     return True
 
 
+MIN_PANEL_HEIGHT = 0.35     # share of the screen: never so short it's useless...
+MAX_PANEL_HEIGHT = 0.90     # ...nor so tall it covers the whole screen
+
+
+def clamp_panel_height(fraction: float) -> float:
+    return round(min(max(float(fraction), MIN_PANEL_HEIGHT), MAX_PANEL_HEIGHT), 3)
+
+
+def set_panel_height(cfg: MyGeekyConfig, fraction: float) -> float:
+    cfg.gui_panel_height_fraction = clamp_panel_height(fraction)
+    save_config(cfg)
+    return cfg.gui_panel_height_fraction
+
+
 def get_update_info(cfg: MyGeekyConfig) -> dict[str, Any]:
     """Whether to show the update banner: a newer release on PyPI that the
     user hasn't said "Later" to. Checks PyPI at most once a day."""
@@ -891,7 +905,7 @@ def _panel_geometry(cfg: MyGeekyConfig, folded: bool, screen_rect,
     if folded:
         width, height = cfg.gui_folded_width, cfg.gui_folded_height
     else:
-        width, height = cfg.gui_expanded_width, int(screen_rect.height() * cfg.gui_panel_height_fraction)
+        width, height = cfg.gui_expanded_width, int(screen_rect.height() * clamp_panel_height(cfg.gui_panel_height_fraction))
     width = min(max(width, min_width), screen_rect.width())
     height = min(max(height, min_height), screen_rect.height())
     y = screen_rect.y() + (screen_rect.height() - height) // 2

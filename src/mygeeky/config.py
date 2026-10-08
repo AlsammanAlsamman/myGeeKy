@@ -219,9 +219,8 @@ class MyGeekyConfig:
     gui_hearts_enabled: bool = True           # folded icon lets a few small hearts drift up now and then
     gui_hearts_interval_minutes: float = 3.0  # how often; they fade out in ~3 s, never while the panel is open
     gui_folded_opacity: float = 0.5           # folded icon's opacity; it turns fully opaque while hovered
-    gui_panel_height_fraction: float = 0.25   # fraction of screen height the panel occupies -- a short
-                                               # docked strip rather than a full sidebar; the Live tab's
-                                               # rotating spotlight is designed to fit this compact height
+    gui_panel_height_fraction: float = 0.6    # share of the screen's height the open panel takes; adjust
+                                               # it in ⚙ or by dragging the panel's bottom edge (35%-90%)
     gui_activity_refresh_minutes: int = 5     # min minutes between automatic activity-feed refreshes
     gui_activity_limit: int = 30              # how many recent activity events to show
     gui_activity_match_people: int = 12       # also show activity of this many top suggestions (matched to your
@@ -237,7 +236,7 @@ class MyGeekyConfig:
     # Bumped when a default changes in a way existing configs should pick up
     # (see _migrate). Every saved config carries every key, so a new default
     # alone never reaches people who already ran myGeeKy.
-    config_version: int = 2
+    config_version: int = 3
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -270,6 +269,10 @@ def _migrate(values: dict[str, Any], version: int) -> dict[str, Any]:
         # 0.4: the folded icon grew from 58px; keep any size someone chose themselves
         if values.get("gui_folded_width") == 58 and values.get("gui_folded_height") == 58:
             values["gui_folded_width"] = values["gui_folded_height"] = 76
+    if version < 3:
+        # 0.14: the panel grew from a short strip; keep any height someone chose themselves
+        if values.get("gui_panel_height_fraction") == 0.25:
+            values["gui_panel_height_fraction"] = 0.6
     values["config_version"] = MyGeekyConfig.config_version
     return values
 

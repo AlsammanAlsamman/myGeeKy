@@ -1293,6 +1293,51 @@ class ExploreDonut(QWidget):
         painter.end()
 
 
+class HeightGrip(QWidget):
+    """A small handle at the bottom of the panel: drag it to make the panel taller
+    or shorter (within limits). Double-click goes back to the default height."""
+
+    def __init__(self, on_drag: Callable[[float, float, bool], None], current: Callable[[], float]) -> None:
+        super().__init__()
+        self._on_drag, self._current = on_drag, current
+        self._start_y: float | None = None
+        self._start_fraction = 0.6
+        self.setFixedSize(64, 12)
+        self.setCursor(Qt.SizeVerCursor)
+        self.setToolTip("Drag to make the panel taller or shorter (double-click: back to normal)")
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 110 if self.underMouse() or self._start_y is not None else 55))
+        painter.drawRoundedRect(QRectF(12, 4, self.width() - 24, 4), 2, 2)
+        painter.end()
+
+    def enterEvent(self, event) -> None:  # noqa: N802
+        self.update()
+
+    def leaveEvent(self, event) -> None:  # noqa: N802
+        self.update()
+
+    def mousePressEvent(self, event) -> None:  # noqa: N802
+        self._start_y = event.globalPosition().y()
+        self._start_fraction = self._current()
+
+    def mouseMoveEvent(self, event) -> None:  # noqa: N802
+        if self._start_y is not None:
+            self._on_drag(event.globalPosition().y() - self._start_y, self._start_fraction, False)
+
+    def mouseReleaseEvent(self, event) -> None:  # noqa: N802
+        if self._start_y is not None:
+            self._on_drag(event.globalPosition().y() - self._start_y, self._start_fraction, True)
+        self._start_y = None
+        self.update()
+
+    def mouseDoubleClickEvent(self, event) -> None:  # noqa: N802
+        self._on_drag(0, 0.6, True)
+
+
 class QrWidget(QWidget):
     """Paints a QR code (a matrix of dark modules) crisply at any size."""
 
@@ -2818,6 +2863,8 @@ class MyGeekyPanel(QWidget):
 
         self.content_stack = QStackedWidget()
         panel_layout.addWidget(self.content_stack, 1)
+        self.height_grip = HeightGrip(self._resize_from_grip, lambda: self.cfg.gui_panel_height_fraction)
+        panel_layout.addWidget(self.height_grip, 0, Qt.AlignHCenter)
 
         self._tab_order = ["live", "suggestions", "repos", "market", "news", "activity", "signals", "model"]
         self.content_stack.addWidget(self._build_live_tab())
@@ -3594,6 +3641,26 @@ class MyGeekyPanel(QWidget):
         self.opacity_slider.sliderReleased.connect(self._on_opacity_committed)
         layout.addWidget(self.opacity_slider)
 
+        height_row = QHBoxLayout()
+        height_label = QLabel("Panel height")
+        height_label.setStyleSheet("font-size:11px; font-weight:600; background:transparent;")
+        self.height_value_label = QLabel("")
+        self.height_value_label.setStyleSheet("font-size:10.5px; background:transparent;")
+        height_row.addWidget(height_label)
+        height_row.addStretch(1)
+        height_row.addWidget(self.height_value_label)
+        layout.addLayout(height_row)
+        self.height_slider = QSlider(Qt.Horizontal)
+        self.height_slider.setRange(int(logic.MIN_PANEL_HEIGHT * 100), int(logic.MAX_PANEL_HEIGHT * 100))
+        self.height_slider.setCursor(Qt.PointingHandCursor)
+        self.height_slider.setToolTip("How much of the screen's height the open panel takes "
+                                      "(you can also drag its bottom edge)")
+        self.height_slider.setValue(int(round(logic.clamp_panel_height(self.cfg.gui_panel_height_fraction) * 100)))
+        self.height_value_label.setText(f"{self.height_slider.value()}% of the screen")
+        self.height_slider.valueChanged.connect(self._on_height_preview)
+        self.height_slider.sliderReleased.connect(self._on_height_committed)
+        layout.addWidget(self.height_slider)
+
         self.hearts_check = QCheckBox("Floating hearts on the folded icon")
         self.hearts_check.setCursor(Qt.PointingHandCursor)
         self.hearts_check.setChecked(self.cfg.gui_hearts_enabled)
@@ -3682,6 +3749,32 @@ class MyGeekyPanel(QWidget):
     @staticmethod
     def _opacity_to_slider(opacity: float) -> int:
         return int(round((1.0 - opacity) * 100))
+
+    # ------------------------------------------------------------------ panel height
+    def _on_height_preview(self, value: int) -> None:
+        """Live while dragging the slider; saved on release."""
+        self.cfg.gui_panel_height_fraction = logic.clamp_panel_height(value / 100)
+        self.height_value_label.setText(f"{value}% of the screen")
+        if not self.folded_widget.isVisible():
+            self._dock(folded=False)
+
+    def _on_height_committed(self) -> None:
+        logic.set_panel_height(self.cfg, self.height_slider.value() / 100)
+
+    def _resize_from_grip(self, dy: float, start_fraction: float, done: bool) -> None:
+        """The bottom-edge grip: the panel is centred on the screen edge, so it grows
+        at the top and the bottom alike -- twice the drag, as a share of the screen."""
+        screen_h = max(self._home_screen().availableGeometry().height(), 1)
+        fraction = logic.clamp_panel_height(start_fraction + 2 * dy / screen_h)
+        self.cfg.gui_panel_height_fraction = fraction
+        self._dock(folded=False)
+        if hasattr(self, "height_slider"):
+            self.height_slider.blockSignals(True)
+            self.height_slider.setValue(int(round(fraction * 100)))
+            self.height_slider.blockSignals(False)
+            self.height_value_label.setText(f"{int(round(fraction * 100))}% of the screen")
+        if done:
+            logic.set_panel_height(self.cfg, fraction)
 
     def _on_opacity_preview(self, value: int) -> None:
         """Applied live while dragging -- only persisted on release

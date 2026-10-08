@@ -44,7 +44,7 @@ def test_folded_icon_migrates_from_old_default_only(tmp_path):
     config_module.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     config_module.CONFIG_FILE.write_text(json.dumps(raw), encoding="utf-8")
     cfg = load_config()
-    assert (cfg.gui_folded_width, cfg.gui_folded_height, cfg.config_version) == (76, 76, 2)
+    assert (cfg.gui_folded_width, cfg.gui_folded_height, cfg.config_version) == (76, 76, MyGeekyConfig.config_version)
     raw.update(gui_folded_width=90, gui_folded_height=90)       # a size someone chose stays
     config_module.CONFIG_FILE.write_text(json.dumps(raw), encoding="utf-8")
     assert load_config().gui_folded_width == 90
@@ -115,3 +115,59 @@ def test_installer_sync_page_installs_git_when_you_choose_sync(monkeypatch):
     w.state.update(git=True, gh=True)
     page.initializePage()
     assert page.enable.isChecked()
+
+
+def test_panel_height_grows_from_the_old_default_and_stays_within_limits(tmp_path):
+    import mygeeky.config as config_module
+    from mygeeky.gui import app as logic
+    raw = MyGeekyConfig().to_dict()
+    raw.update(config_version=2, gui_panel_height_fraction=0.25)          # the old default: grows
+    config_module.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    config_module.CONFIG_FILE.write_text(json.dumps(raw), encoding="utf-8")
+    assert load_config().gui_panel_height_fraction == 0.6
+    raw.update(gui_panel_height_fraction=0.45)                             # one someone chose: stays
+    config_module.CONFIG_FILE.write_text(json.dumps(raw), encoding="utf-8")
+    assert load_config().gui_panel_height_fraction == 0.45
+    assert logic.clamp_panel_height(0.1) == logic.MIN_PANEL_HEIGHT and logic.clamp_panel_height(2) == logic.MAX_PANEL_HEIGHT
+    cfg = MyGeekyConfig()
+    assert logic.set_panel_height(cfg, 0.99) == 0.9 and load_config().gui_panel_height_fraction == 0.9
+
+
+def test_dragging_the_grip_and_the_slider_change_the_height_within_limits(monkeypatch):
+    pytest.importorskip("PySide6")
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+
+    for name, value in (("get_contributions", lambda cfg: []),
+                        ("get_suggestions", lambda cfg: {"followback": [], "domain_highlights": []}),
+                        ("get_activity", lambda cfg, force=False: {"events": []}),
+                        ("get_model_history", lambda: []),
+                        ("get_friend_stats", lambda cfg: {"total_friends": 0, "new_this_week": 0,
+                                                          "follow_back_rate": None, "total_labeled": 0})):
+        monkeypatch.setattr(logic, name, value)
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="me"))
+    try:
+        panel.show()
+        start = panel.height()
+        screen_h = panel._home_screen().availableGeometry().height()
+        panel._resize_from_grip(screen_h * 0.05, 0.6, done=True)        # drag down: taller
+        assert panel.cfg.gui_panel_height_fraction == 0.7 and panel.height() > start
+        assert panel.height_slider.value() == 70 and load_config().gui_panel_height_fraction == 0.7
+        panel._resize_from_grip(screen_h * 5, 0.6, done=True)           # way too far: stops at the limit
+        assert panel.cfg.gui_panel_height_fraction == logic.MAX_PANEL_HEIGHT
+        panel.height_slider.setValue(40)                                 # the ⚙ slider
+        panel._on_height_committed()
+        assert load_config().gui_panel_height_fraction == 0.4
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard, panel._sync_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(2000)
+        panel.close()
+        panel.deleteLater()
