@@ -353,7 +353,7 @@ def api(python: str, action: str, payload: dict[str, Any] | None = None, timeout
 def stop_running_panels() -> int:
     """Close open myGeeKy panels so they restart on the new version."""
     ps = ("Get-CimInstance Win32_Process -Filter \"Name like 'python%'\" | "
-          "Where-Object { $_.CommandLine -match 'mygeeky\\.gui' -and $_.CommandLine -notmatch 'setup_wizard' } | "
+          "Where-Object { $_.CommandLine -match 'mygeeky\\.gui' -and $_.CommandLine -notmatch 'setup_wizard|uninstall_wizard' } | "
           "ForEach-Object { Stop-Process -Id $_.ProcessId -Force; 1 } | Measure-Object | "
           "Select-Object -ExpandProperty Count")
     try:
@@ -1270,18 +1270,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     app = QApplication.instance() or QApplication([])
     app.setFont(QFont("Segoe UI", 10))
-    if "--uninstall" in argv:
-        from PySide6.QtWidgets import QMessageBox
-        python = sys.executable if not FROZEN else (find_python() or "")
-        erase = "--erase" in argv
-        # "--confirmed": the panel's ⚙ already asked
-        if "--confirmed" not in argv and QMessageBox.question(
-                None, "Uninstall myGeeKy",
-                "Remove myGeeKy from this computer?\n\nYour data, settings and tokens are kept, "
-                "so a reinstall picks up where you left off.") != QMessageBox.Yes:
-            return 1
-        QMessageBox.information(None, "myGeeKy uninstalled", "\n\n".join(uninstall(python, erase=erase)))
-        return 0
+    if "--uninstall" in argv:            # Windows' Apps list: the step-by-step uninstall wizard
+        from .uninstall_wizard import main as uninstall_main
+        return uninstall_main()
     import platform
     log(f"=== myGeeKy setup started (bundled wheel: {wheel_version(bundled_wheel()) or 'none'}, "
         f"frozen: {FROZEN}, Windows {platform.version()})")

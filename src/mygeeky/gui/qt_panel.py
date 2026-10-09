@@ -4151,35 +4151,15 @@ class MyGeekyPanel(QWidget):
         self.hearts.puff(QRect(top_left, self.folded_widget.size()), self.cfg.gui_dock_side)
 
     def _uninstall(self) -> None:
-        """⚙ → Uninstall: ask keep-or-erase here, then hand over to the uninstaller
-        (a separate process: the panel closes first, so nothing is in use)."""
-        box = QMessageBox(self)
-        box.setWindowFlag(Qt.WindowStaysOnTopHint, True)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle("Uninstall myGeeKy")
-        box.setText("Remove myGeeKy from this computer?")
-        box.setInformativeText(
-            "Keep my data: your settings, history and tokens stay here, so a reinstall picks up where you left off.\n\n"
-            "Erase everything: also deletes your myGeeKy data folder and the tokens and Signals key saved in your "
-            "system keyring.\n\nNothing on GitHub is deleted either way (your sync and beacon repos stay).")
-        keep = box.addButton("Uninstall, keep my data", QMessageBox.AcceptRole)
-        erase = box.addButton("Uninstall and erase everything", QMessageBox.DestructiveRole)
-        box.addButton("Cancel", QMessageBox.RejectRole)
-        box.exec()
-        clicked = box.clickedButton()
-        if clicked not in (keep, erase):
-            return
-        args = ["-m", "mygeeky.gui.setup_wizard", "--uninstall", "--confirmed"] + (["--erase"] if clicked is erase else [])
+        """⚙ → Uninstall: opens the step-by-step uninstall wizard. The panel stays
+        open until you confirm there (cancelling changes nothing)."""
         exe = sys.executable
         if exe.lower().endswith("python.exe") and os.path.exists(exe[:-len("python.exe")] + "pythonw.exe"):
             exe = exe[:-len("python.exe")] + "pythonw.exe"
         from .. import winproc
-        winproc.popen([exe] + args, creationflags=0x00000008 if sys.platform == "win32" else 0, close_fds=True,
+        winproc.popen([exe, "-m", "mygeeky.gui.uninstall_wizard"],
+                      creationflags=0x00000008 if sys.platform == "win32" else 0, close_fds=True,
                       **({} if sys.platform == "win32" else {"start_new_session": True}))
-        if clicked is erase:
-            QApplication.quit()          # no last sync: everything here is about to be erased
-        else:
-            self._quit()
 
     def _toggle_settings(self) -> None:
         self.settings_panel.setVisible(not self.settings_panel.isVisible())

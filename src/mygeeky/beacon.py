@@ -789,6 +789,29 @@ def go_live(cfg: MyGeekyConfig, writer: BeaconWriter | None = None) -> None:
     save_config(cfg)
 
 
+WITHDRAWN_README = """# mygeeky-beacon
+
+This myGeeKy beacon has been withdrawn: its owner left Signals. It holds no keys
+and no signals, so nothing can be sent here. (Earlier versions remain in this
+repository's history until the owner deletes the repository.)
+"""
+
+
+def withdraw(cfg: MyGeekyConfig, writer: BeaconWriter | None = None) -> None:
+    """Leave Signals: publish an empty beacon (no keys, no signals, no interests),
+    so other users stop seeing you and can't send you anything. The repo itself
+    stays: deleting a repository needs a permission myGeeKy never asks for."""
+    from . import auth
+    if writer is None:
+        token = auth.get_beacon_token(cfg.github_username)
+        if not token:
+            raise BeaconError("There's no Signals token on this computer, so the beacon can't be withdrawn from here.")
+        writer = BeaconWriter(token, cfg.github_username)
+    writer.publish({"mygeeky_beacon": SCHEMA_VERSION, "keys": [], "status": "", "quiet": True,
+                    "interests": [], "sealed": [], "withdrawn": True})
+    writer.write(README_PATH, WITHDRAWN_README, "myGeeKy beacon withdrawn")
+
+
 # --------------------------------------------------------------------------- the setup guide (one text for CLI, installer and README)
 NEW_REPO_URL = ("https://github.com/new?name=mygeeky-beacon&visibility=public"
                 "&description=My+myGeeKy+beacon+(private+signals)")
