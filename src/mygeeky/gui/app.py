@@ -901,6 +901,14 @@ def get_friend_stats(cfg: MyGeekyConfig) -> dict[str, Any]:
     }
 
 
+def person_card(login: str) -> dict[str, Any]:
+    """Someone at a glance (see profile_card.py); uses your read token if any."""
+    from .. import profile_card
+    cfg = load_config()
+    token = auth.get_token(cfg.github_username) if cfg.github_username else None
+    return profile_card.fetch(login, token)
+
+
 def open_profile(url: str) -> bool:
     if not isinstance(url, str) or not url.startswith("https://github.com/"):
         return False

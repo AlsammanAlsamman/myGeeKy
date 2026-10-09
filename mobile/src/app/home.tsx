@@ -3,7 +3,7 @@
 // slim dock; scrolling back to the top, or "Spin the rings", brings it back.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
          useWindowDimensions, View } from 'react-native';
@@ -54,9 +54,16 @@ function RowView({ r, color, isOpen, onPick }: { r: Row; color: string; isOpen: 
       </Pressable>
       {isOpen ? (
         <View style={st.actions}>
-          <Pressable onPress={() => open(r.url, r.kind, r.cat, r.explore)} style={[st.go, { backgroundColor: color }]}>
+          <Pressable onPress={() => (r.kind === 'person' && r.login ? router.push(`/person/${r.login}`)
+                                      : open(r.url, r.kind, r.cat, r.explore))}
+                     style={[st.go, { backgroundColor: color }]}>
             <Text style={st.goText}>{r.action}</Text>
           </Pressable>
+          {r.kind !== 'person' && r.login ? (
+            <Pressable onPress={() => router.push(`/person/${r.login}`)} style={st.close} accessibilityLabel={`${r.login}'s profile`}>
+              <Ionicons name="person-outline" size={18} color={C.text} />
+            </Pressable>
+          ) : null}
           <Pressable onPress={onPick} style={st.close} accessibilityLabel="Close"><Text style={st.closeText}>×</Text></Pressable>
         </View>
       ) : null}

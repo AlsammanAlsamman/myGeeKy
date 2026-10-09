@@ -1540,6 +1540,195 @@ class PairDialog(QDialog):
         self._left -= 1
 
 
+# a person's links elsewhere: (short mark, colour, name)
+LINK_MARKS = {
+    "linkedin": ("in", "#0a66c2", "LinkedIn"), "orcid": ("iD", "#a6ce39", "ORCID"),
+    "scholar": ("G", "#4285f4", "Google Scholar"), "researchgate": ("RG", "#00ccbb", "ResearchGate"),
+    "facebook": ("f", "#1877f2", "Facebook"), "x": ("X", "#3a3a44", "X"), "web": ("\U0001f310", "#4b5563", "Website"),
+}
+
+
+class ActivityChart(QWidget):
+    """Thirty small bars: someone's public GitHub activity per day."""
+
+    def __init__(self, counts: list[int], color: str) -> None:
+        super().__init__()
+        self.counts, self.color = counts, QColor(color)
+        self.setFixedHeight(46)
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        n = max(len(self.counts), 1)
+        top = max(self.counts or [1]) or 1
+        w = self.width() / n
+        for i, c in enumerate(self.counts):
+            h = 3 if c == 0 else 6 + (self.height() - 8) * c / top
+            col = QColor(self.color)
+            col.setAlpha(60 if c == 0 else 230)
+            p.setPen(Qt.NoPen)
+            p.setBrush(col)
+            p.drawRoundedRect(QRectF(i * w + 1, self.height() - h, max(w - 2, 1), h), 1.5, 1.5)
+        p.end()
+
+
+class ProfileDialog(QDialog):
+    """Someone at a glance, before you (maybe) open GitHub to follow them: their
+    two most active repos, their most-starred one, a 30-day activity chart,
+    their interests and their links elsewhere."""
+
+    def __init__(self, parent: "MyGeekyPanel", login: str, theme: dict[str, Any]) -> None:
+        super().__init__(parent)
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)   # in front of the always-on-top panel
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
+        self.setWindowTitle(f"{login} on GitHub")
+        self.setFixedWidth(400)
+        self.login, self.theme, self.panel = login, theme, parent
+        self.setStyleSheet(f"QDialog {{ background:#17171f; }} QLabel {{ color:{theme['text']}; font-size:11.5px; }}"
+                           f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
+                           f"border-radius:8px; padding:7px 12px; }} QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+        self.lay = QVBoxLayout(self)
+        self.lay.setContentsMargins(18, 16, 18, 16)
+        self.lay.setSpacing(8)
+        self.status = QLabel(f"Looking up {login}\u2026")
+        self.lay.addWidget(self.status)
+        parent._run_async(lambda: self._fetch(login), self._show)
+
+    @staticmethod
+    def _fetch(login: str) -> dict[str, Any]:
+        try:
+            card = logic.person_card(login)
+        except Exception as exc:
+            return {"error": str(exc)}
+        try:
+            import requests
+            url = card.get("avatar", "")
+            if url.startswith("https://"):
+                r = requests.get(url + ("&" if "?" in url else "?") + "s=128", timeout=15)
+                card["avatar_bytes"] = r.content if r.ok else b""
+        except Exception:
+            card["avatar_bytes"] = b""
+        return card
+
+    def _muted(self, text: str, size: float = 11) -> QLabel:
+        lab = QLabel(text)
+        lab.setWordWrap(True)
+        lab.setStyleSheet(f"color:{self.theme['muted']}; font-size:{size}px;")
+        return lab
+
+    def _section(self, text: str) -> None:
+        lab = QLabel(text)
+        lab.setStyleSheet(f"color:{self.theme['muted']}; font-size:10px; font-weight:700; letter-spacing:1px; margin-top:6px;")
+        self.lay.addWidget(lab)
+
+    def _repo_row(self, r: dict[str, Any], right: str) -> None:
+        import html as h
+        lab = QLabel(f"<a href='{h.escape(r['url'])}' style='color:{self.theme['text']}; text-decoration:none'>"
+                     f"<b>{h.escape(r['name'])}</b></a>"
+                     f"<span style='color:{self.theme['muted']}'>  {h.escape(r.get('language') or '')}  {right}</span>"
+                     + (f"<br><span style='color:{self.theme['muted']}; font-size:10.5px'>{h.escape(r['description'])}</span>"
+                        if r.get("description") else ""))
+        lab.setTextFormat(Qt.RichText)
+        lab.setWordWrap(True)
+        lab.setCursor(Qt.PointingHandCursor)
+        lab.linkActivated.connect(lambda url: logic.open_link(url))
+        box = QFrame()                              # real margins (CSS padding makes QLabel mis-measure its height)
+        box.setObjectName("repoBox")
+        box.setStyleSheet(f"QFrame#repoBox {{ background:{self.theme['card_bg']}; border-radius:8px; }}")
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(9, 7, 9, 7)
+        bl.addWidget(lab)
+        self.lay.addWidget(box)
+
+    def _show(self, card: dict[str, Any]) -> None:
+        import html as h
+        self.status.hide()
+        if card.get("error"):
+            self.lay.addWidget(self._muted(card["error"]))
+            self._buttons()
+            return
+        head = QHBoxLayout()
+        pic = QLabel()
+        pix = QPixmap()
+        if card.get("avatar_bytes") and pix.loadFromData(card["avatar_bytes"]):
+            pic.setPixmap(_circular_pixmap(pix, 56))
+        pic.setFixedSize(56, 56)
+        head.addWidget(pic)
+        names = QVBoxLayout()
+        title = QLabel(f"<b style='font-size:15px'>{h.escape(card.get('name') or card['login'])}</b>"
+                       + (f"  <span style='color:{self.theme['muted']}'>@{h.escape(card['login'])}</span>"
+                          if card.get("name") else ""))
+        title.setTextFormat(Qt.RichText)
+        names.addWidget(title)
+        meta = [m for m in (card.get("location"), card.get("company"),
+                            f"{card.get('followers', 0):,} followers", f"{card.get('public_repos', 0)} repos",
+                            f"on GitHub since {card['since']}" if card.get("since") else "") if m]
+        names.addWidget(self._muted("  \u00b7  ".join(meta), 10.5))
+        head.addLayout(names, 1)
+        self.lay.addLayout(head)
+        if card.get("bio"):
+            self.lay.addWidget(self._muted(card["bio"]))
+        if card.get("links"):                          # only the ones they have
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            for link in card["links"]:
+                mark, color, name = LINK_MARKS.get(link["kind"], LINK_MARKS["web"])
+                b = QPushButton(mark)
+                b.setFixedSize(34, 34)
+                b.setCursor(Qt.PointingHandCursor)
+                b.setToolTip(f"{name}: {link['url']}")
+                b.setStyleSheet(f"QPushButton {{ background:{color}; color:white; border:none; border-radius:17px; "
+                                f"font-weight:800; font-size:12px; padding:0; }} QPushButton:hover {{ border:2px solid white; }}")
+                b.clicked.connect(lambda checked=False, u=link["url"]: QDesktopServices.openUrl(QUrl(u))
+                                  if u.startswith("https://") else None)
+                row.addWidget(b)
+            row.addStretch(1)
+            self.lay.addLayout(row)
+        if card.get("active"):
+            self._section("MOST ACTIVE")
+            for r in card["active"]:
+                self._repo_row(r, f"pushed {_time_ago(r['pushed_at'])}" if r.get("pushed_at") else "")
+        if card.get("top"):
+            self._section("MOST STARRED")
+            self._repo_row(card["top"], f"\u2605 {card['top']['stars']:,}")
+        self._section(f"ACTIVITY, LAST 30 DAYS \u00b7 {sum(card.get('daily') or [])} public events")
+        self.lay.addWidget(ActivityChart(card.get("daily") or [], self.theme["accent"]))
+        if card.get("interests"):
+            self._section("INTERESTS")
+            chips = QLabel("".join(f"<span style='background:{self.theme['card_bg']}; color:{self.theme['text']}'>"
+                                   f"&nbsp;{h.escape(t)}&nbsp;</span>&nbsp; " for t in card["interests"]))
+            chips.setTextFormat(Qt.RichText)
+            chips.setWordWrap(True)
+            self.lay.addWidget(chips)
+        self._buttons(card.get("url"))
+
+    def _buttons(self, url: str | None = None) -> None:
+        row = QHBoxLayout()
+        if url:
+            go = QPushButton("Open on GitHub to follow")
+            go.setCursor(Qt.PointingHandCursor)
+            go.setStyleSheet(f"QPushButton {{ background:#7a5cff; color:white; border:none; border-radius:8px; "
+                             f"padding:8px 14px; font-weight:700; }} QPushButton:hover {{ background:#8d73ff; }}")
+            go.clicked.connect(lambda: (self.panel._opened_profile(url), self.close()))
+            row.addWidget(go, 1)
+        close = QPushButton("Close")
+        close.setCursor(Qt.PointingHandCursor)
+        close.clicked.connect(self.close)
+        row.addWidget(close)
+        self.lay.addSpacing(4)
+        self.lay.addLayout(row)
+        # size to the content once the styles are applied (word-wrapped labels only
+        # know their height then); twice, as the first pass can still be short
+        QTimer.singleShot(0, self._fit)
+        QTimer.singleShot(120, self._fit)
+
+    def _fit(self) -> None:
+        self.lay.activate()
+        need = self.lay.totalHeightForWidth(self.width())
+        screen = self.screen().availableGeometry().height() if self.screen() else 900
+        self.setFixedHeight(min(max(need, 200), screen - 40))
+
+
 class IdeaDialog(QDialog):
     """The 💡: an idea, a problem or a question, sent as a prefilled GitHub issue
     that the user submits themselves (nothing is sent from here)."""
@@ -4417,7 +4606,7 @@ class MyGeekyPanel(QWidget):
 
     def _on_suggestion_clicked(self, item: dict[str, Any]) -> None:
         logic.record_click(self.cfg, "person", item)
-        logic.open_profile(item.get("profile_url", ""))
+        self._open_github(item.get("profile_url", ""))
         logic.mark_suggestion_seen(item.get("username", ""))
         # re-render on the next event-loop turn: the clicked card is still
         # inside its own mousePressEvent right now
@@ -4596,8 +4785,28 @@ class MyGeekyPanel(QWidget):
             card.setStyleSheet(f"QFrame#badgeCard {{ background:{theme['card_bg']}; border-radius:10px; }}")
             self.badges_area.addWidget(card)
 
+    _PROFILE_URL = re.compile(r"^https://github\.com/([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})/?$")
+
+    def _open_github(self, url: str) -> bool:
+        """A person's profile opens their card (their abstract) first; repos and
+        everything else open in the browser as before."""
+        m = self._PROFILE_URL.match(url or "")
+        if not m:
+            return logic.open_profile(url)
+        dlg = ProfileDialog(self, m.group(1), THEMES[self._theme_name()])
+        dlg.show()
+        return True
+
+    def _opened_profile(self, url: str) -> None:
+        """'Open on GitHub to follow' from a card."""
+        logic.open_profile(url)
+        suggestion = next((s for s in self._last_suggestions if s.get("profile_url") == url), None)
+        if suggestion:
+            logic.mark_suggestion_seen(suggestion.get("username", ""))
+            QTimer.singleShot(0, self._load_suggestions)
+
     def _on_ticker_clicked(self, url: str) -> bool:
-        opened = logic.open_profile(url)
+        opened = self._open_github(url)
         suggestion = next((s for s in self._last_suggestions if s.get("profile_url") == url), None)
         if suggestion:  # activity cards are people you already follow -- only suggestions get dropped
             logic.mark_suggestion_seen(suggestion.get("username", ""))
@@ -4663,7 +4872,7 @@ class MyGeekyPanel(QWidget):
             self.activity_area.addWidget(empty)
         else:
             for group in logic.group_activity(events):
-                card = ActivityGroup(group, theme, logic.open_profile, self.avatar_loader,
+                card = ActivityGroup(group, theme, self._open_github, self.avatar_loader,
                                      expanded=group["actor"].lower() in self._expanded_actors)
                 card.toggled.connect(self._on_activity_group_toggled)
                 self.activity_area.addWidget(card)
@@ -4743,7 +4952,7 @@ class MyGeekyPanel(QWidget):
             empty.setStyleSheet(muted)
             self.signals_area.addWidget(empty)
         for item in incoming:
-            self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader,
+            self.signals_area.addWidget(SignalCard(item, theme, self._open_github, on_send, self.avatar_loader,
                                                    on_mute=self._on_mute_signals))
         people = data.get("people") or []
         header("FELLOW GEEKS ON MYGEEKY")
@@ -4754,7 +4963,7 @@ class MyGeekyPanel(QWidget):
         for item in people:
             if item.get("muted"):
                 continue
-            self.signals_area.addWidget(SignalCard(item, theme, logic.open_profile, on_send, self.avatar_loader))
+            self.signals_area.addWidget(SignalCard(item, theme, self._open_github, on_send, self.avatar_loader))
 
     def _on_send_signal(self, card: "SignalCard", login: str, gesture: str) -> None:
         card.set_busy(True)

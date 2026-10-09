@@ -34,7 +34,7 @@ export const RING_NAME = { inner: 'YOUR CIRCLE', outer: 'THE WORLD', you: 'THE C
 
 export type Row = {
   id: string; title: string; sub: string; right?: string; url: string; action: string;
-  avatar?: string; letter?: string; letterBg?: string; letterFg?: string;
+  avatar?: string; letter?: string; letterBg?: string; letterFg?: string; login?: string;
   kind: string; cat?: string; explore?: boolean;      // what opening it counts as, for badges
 };
 
@@ -45,12 +45,12 @@ function eventRow(e: Event): Row {
   return {
     id: `e${e.id}`, title: e.actor, sub: `${e.icon} ${e.verb}${e.repo ? ` · ${e.repo.split('/')[1] ?? e.repo}` : ''}`,
     right: timeAgo(e.at), url: e.repo ? `https://github.com/${e.repo}` : profile(e.actor),
-    action: e.repo ? `Open ${e.repo.split('/')[1] ?? e.repo} on GitHub` : 'Open profile on GitHub', avatar: e.avatar, kind: 'repo',
+    action: e.repo ? `Open ${e.repo.split('/')[1] ?? e.repo} on GitHub` : 'Open profile on GitHub', avatar: e.avatar, kind: 'repo', login: e.actor,
   };
 }
 
 function personRow(p: Person, why = p.why): Row {
-  return { id: `p${p.login}`, title: p.login, sub: why, url: profile(p.login), action: 'Open profile on GitHub', avatar: p.avatar, kind: 'person' };
+  return { id: `p${p.login}`, title: p.login, sub: why, url: profile(p.login), action: 'View profile', avatar: p.avatar, kind: 'person', login: p.login };
 }
 
 export type Feeds = {
