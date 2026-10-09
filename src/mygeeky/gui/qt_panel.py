@@ -1972,7 +1972,7 @@ class ProspectCard(QFrame):
         style = (f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
                  f"border-radius:7px; padding:3px 8px; font-size:10.5px; }}"
                  f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
-        actions = [("Profile ↗", "profile"), ("✉ Email" if person.get("email") else "⧉ Copy invite",
+        actions = [("Profile ↗", "profile"), ("✉ Gmail" if person.get("email") else "⧉ Copy invite",
                                               "email" if person.get("email") else "copy"),
                    ("Invited ✓", "invited"), ("Not now", "declined")]
         for label, action in actions:
@@ -3987,8 +3987,8 @@ class MyGeekyPanel(QWidget):
             return
         if action in ("email", "copy"):
             invite = logic.admin_invite(self.cfg, person)
-            if action == "email" and invite.get("mailto"):
-                QDesktopServices.openUrl(QUrl(invite["mailto"]))
+            if action == "email" and invite.get("gmail"):
+                QDesktopServices.openUrl(QUrl(invite["gmail"]))          # Gmail in your browser, filled in
             else:
                 QApplication.clipboard().setText(f"{invite['subject']}\n\n{invite['body']}")
                 logic.open_link(f"https://github.com/{login}")

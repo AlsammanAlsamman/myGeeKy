@@ -228,7 +228,7 @@ def _opening(why: list[str]) -> str:
 
 
 def invite(person: dict[str, Any], cfg: MyGeekyConfig) -> dict[str, str]:
-    """A short, personal invite (and a mailto link when they list an email)."""
+    """A short, personal invite (and Gmail / mailto links when they list an email)."""
     first = (person.get("name") or person.get("login") or "").split()[0] if (person.get("name") or person.get("login")) else ""
     why = _opening(person.get("why", []))
     subject = "A tool for researchers to find each other: would you try it?"
@@ -247,6 +247,10 @@ def invite(person: dict[str, Any], cfg: MyGeekyConfig) -> dict[str, str]:
     out = {"subject": subject, "body": body}
     if person.get("email"):
         out["mailto"] = f"mailto:{person['email']}?subject={quote(subject)}&body={quote(body)}"
+        # Gmail's own compose window, in the browser (a mailto: link opens whatever mail app Windows
+        # picks, usually Outlook); everything filled in, nothing sent until you press Send
+        out["gmail"] = (f"https://mail.google.com/mail/?view=cm&fs=1&to={quote(person['email'])}"
+                        f"&su={quote(subject)}&body={quote(body)}")
     return out
 
 

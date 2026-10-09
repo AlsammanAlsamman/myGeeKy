@@ -86,6 +86,8 @@ def test_prospects_rank_reach_skip_orgs_and_track_joins(monkeypatch):
     assert state["people"]["forker"]["features"]["active"] == 0
     assert state["people"]["toolmaker"]["email"] == ""             # malformed email dropped
     assert admin.invite(state["people"]["fan"], cfg)["mailto"].startswith("mailto:fan@uni.edu?subject=")
+    gmail = admin.invite(state["people"]["fan"], cfg)["gmail"]
+    assert gmail.startswith("https://mail.google.com/mail/?view=cm&fs=1&to=fan%40uni.edu&su=") and "&body=Hi%20" in gmail
     assert "mailto" not in admin.invite(state["people"]["toolmaker"], cfg)
     # invited, then they turn up on Signals: counted as joined
     assert admin.mark("toolmaker", "invited")["ok"]
