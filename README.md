@@ -104,12 +104,22 @@ asks who you are, checks your tokens, connects private sync, and adds a Start-me
 </td>
 <td width="50%" valign="top">
 
-### 🐍 macOS · Linux · Windows
+### 🐧 Linux · macOS: one line
+
+```bash
+curl -fsSL https://mygeeky.org/install.sh | sh
+```
+
+It installs myGeeKy in its own folder (no sudo, no clash with conda or your system Python), adds it to your
+applications menu, then asks: set up in a **window** (the same as Windows: Next → Next → Finish, with
+**Sign in with GitHub**) or right there in the **terminal**. Run it again to update.
+
+### 🐍 Or with pip, anywhere
 
 ```bash
 pip install mygeeky
-mygeeky init      # who you are + token 1
-mygeeky gui       # open the panel
+mygeeky init      # who you are, then Sign in with GitHub
+mygeeky gui       # open the panel   (mygeeky setup opens the setup window instead)
 ```
 
 Only your **GitHub username** is required. Your **CV**, **ORCID** and **Google Scholar** profile are optional,

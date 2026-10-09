@@ -1254,6 +1254,9 @@ class SetupWizard(QWizard):
         have = self.info.get("version")
         if not self.python:
             return "No Python found. Setup will install Python 3.12 for you first."
+        if not WINDOWS and not FROZEN and have:
+            return (f"Found myGeeKy {have}. Setup connects your GitHub account and keeps all your settings. "
+                    "(To update myGeeKy later, run the install line again.)")
         if self.info.get("editable"):
             return f"Found your developer install ({have}). Setup keeps it unless you choose otherwise."
         if have:

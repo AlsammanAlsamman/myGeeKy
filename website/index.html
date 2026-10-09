@@ -308,7 +308,7 @@
       <a class="btn" href="https://github.com/AlsammanAlsamman/myGeeKy">★ GitHub</a>
     </div>
     <div class="pip mono"><span class="dollar">$</span><code id="pip">pip install mygeeky</code><button type="button" id="copy">Copy</button></div>
-    <p class="note">Free and open source (MIT) · v{{VERSION}} · Windows installer, or pip on Windows, Linux and macOS</p>
+    <p class="note">Free and open source (MIT) · v{{VERSION}} · Windows installer · <a href="#start">one line on Linux and macOS</a> · or pip anywhere</p>
     <p class="note signpath">Windows releases are currently unsigned. We have applied to the <a href="https://signpath.org">SignPath Foundation</a> for free open-source code signing, and future releases will be signed once approved. See our <a href="#code-signing">code signing policy</a>.</p>
     <div class="hero-shot" id="heroShot"><picture>
       <source media="(max-width: 600px)" srcset="img/model.png">
@@ -547,7 +547,8 @@
   </div>
   <div class="wrap three steps">
     <div class="card reveal"><h3>Install</h3><p>On Windows, run the installer: Next → Next → Finish. It sets up Python and Git
-      if you don't have them. Anywhere else:</p><pre>pip install mygeeky</pre></div>
+      if you don't have them. On Linux and macOS, one line, then the same setup window (or the terminal, if you prefer):</p>
+      <pre>curl -fsSL https://mygeeky.org/install.sh | sh</pre><p>Or anywhere, with pip:</p><pre>pip install mygeeky</pre></div>
     <div class="card reveal"><h3>Tell it who you are</h3><p>Your GitHub username, plus your CV, ORCID or Scholar profile
       if you like, and token 1.</p><pre>mygeeky init</pre></div>
     <div class="card reveal"><h3>Open the panel</h3><p>Everything, live. The first run sets up the GUI by itself.</p>
