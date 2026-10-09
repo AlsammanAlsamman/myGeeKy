@@ -3860,6 +3860,12 @@ class MyGeekyPanel(QWidget):
         self.admin_refresh_btn.setCursor(Qt.PointingHandCursor)
         self.admin_refresh_btn.clicked.connect(self._refresh_admin)
         actions.addWidget(self.admin_updated, 1)
+        self.admin_undo_btn = QPushButton("Undo")
+        self.admin_undo_btn.setCursor(Qt.PointingHandCursor)
+        self.admin_undo_btn.setToolTip("Didn't send it after all? Put them back on the list")
+        self.admin_undo_btn.clicked.connect(self._undo_invite)
+        self.admin_undo_btn.hide()
+        actions.addWidget(self.admin_undo_btn)
         actions.addWidget(self.admin_refresh_btn)
         layout.addLayout(actions)
         self.admin_headers = [QLabel("\U0001f4c8 ADOPTION"), QLabel("\U0001f4ec IDEAS INBOX"),
@@ -3964,6 +3970,9 @@ class MyGeekyPanel(QWidget):
         self.admin_refresh_btn.setStyleSheet(
             f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; border:none; "
             f"border-radius:8px; padding:6px 10px; font-size:11.5px; }}")
+        self.admin_undo_btn.setStyleSheet(
+            f"QPushButton {{ background:transparent; color:{theme['link']}; border:none; padding:4px 6px; "
+            f"font-size:11px; text-decoration:underline; }}")
 
     def _refresh_admin(self) -> None:
         if getattr(self, "_admin_running", False):
@@ -3988,7 +3997,16 @@ class MyGeekyPanel(QWidget):
         if action in ("email", "copy"):
             invite = logic.admin_invite(self.cfg, person)
             if action == "email" and invite.get("gmail"):
+                # opening the email is inviting them: mark it now (within the daily limit)
+                marked = logic.admin_mark(login, "invited")
+                if not marked.get("ok"):
+                    self.admin_updated.setText(marked.get("message", ""))
+                    return
                 QDesktopServices.openUrl(QUrl(invite["gmail"]))          # Gmail in your browser, filled in
+                self._render_admin()
+                self._last_invited = login
+                self.admin_updated.setText(f"{login} marked as invited. Didn't send it?")
+                self.admin_undo_btn.show()
             else:
                 QApplication.clipboard().setText(f"{invite['subject']}\n\n{invite['body']}")
                 logic.open_link(f"https://github.com/{login}")
@@ -3998,6 +4016,15 @@ class MyGeekyPanel(QWidget):
         if not result.get("ok"):
             self.admin_updated.setText(result.get("message", ""))
         self._render_admin()
+
+    def _undo_invite(self) -> None:
+        login = getattr(self, "_last_invited", "")
+        self.admin_undo_btn.hide()
+        if login:
+            logic.admin_mark(login, "new")
+            self._last_invited = ""
+            self.admin_updated.setText(f"{login} is back on the list.")
+            self._render_admin()
 
     def _build_settings_panel(self) -> QFrame:
         panel = QFrame()

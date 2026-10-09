@@ -182,3 +182,39 @@ def test_the_invite_opens_in_plain_words_and_tells_why_it_exists():
     assert "Facebook or LinkedIn" in body and "install it and give it a try" in body
     assert "(published)" not in body and "works in your field" not in body
     assert admin.invite({"login": "fan", "why": ["starred myGeeKy"]}, cfg)["body"].split("\n")[2].startswith("Thank you")
+
+
+def test_opening_the_gmail_invite_marks_them_invited_with_undo_and_the_limit(monkeypatch):
+    pytest.importorskip("PySide6")
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.gui import app as logic
+    from mygeeky.gui import qt_panel
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+    opened = []
+    monkeypatch.setattr(qt_panel.QDesktopServices, "openUrl", lambda url: opened.append(url.toString()) or True)
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="AlsammanAlsamman"))
+    try:
+        person = {"login": "ada", "name": "Ada", "email": "ada@uni.edu", "why": ["works in your field"]}
+        panel._on_prospect_action("email", person)
+        assert opened and opened[0].startswith("https://mail.google.com/")
+        assert admin.load()["people"]["ada"]["status"] == "invited" and admin.invited_today() == 1
+        panel._undo_invite()
+        assert admin.load()["people"]["ada"]["status"] == "new" and admin.invited_today() == 0
+        for i in range(admin.INVITE_DAILY_LIMIT):
+            admin.mark(f"p{i}", "invited")
+        opened.clear()
+        panel._on_prospect_action("email", person)                   # over today's limit: Gmail stays shut
+        assert not opened and admin.load()["people"]["ada"]["status"] == "new"
+        assert "tomorrow" in panel.admin_updated.text()
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard, panel._sync_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(3000)
+        panel.close()
+        panel.deleteLater()

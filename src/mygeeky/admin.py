@@ -198,6 +198,8 @@ def mark(login: str, status: str) -> dict[str, Any]:
         if invited_today(state) >= INVITE_DAILY_LIMIT:
             return {"ok": False, "message": f"That's {INVITE_DAILY_LIMIT} invites today. Pace it: try tomorrow."}
         entry["invited_at"] = _now().isoformat()
+    elif status == "new":
+        entry.pop("invited_at", None)       # undo: it doesn't count toward today's limit
     entry["status"] = status
     save(state)
     return {"ok": True}
