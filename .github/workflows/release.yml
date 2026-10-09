@@ -1,0 +1,71 @@
+name: Release installer
+
+# Pushing a version tag (v0.17.2, ...) builds MyGeeKySetup-<version>.exe on a
+# clean Windows machine with installer/build.py (which self-tests the .exe) and
+# attaches it to that tag's GitHub release, creating the release if needed.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build the installer for, e.g. v0.17.1"
+        required: true
+
+permissions:
+  contents: write          # to create the release and upload the installer
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools and myGeeKy's dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller build "PySide6-Essentials>=6.5"
+          python -m pip install .
+
+      - name: The tag matches the version being built
+        shell: bash
+        run: |
+          VERSION=$(python -c "import sys; sys.path.insert(0, 'src'); import mygeeky; print(mygeeky.__version__)")
+          if [ "v$VERSION" != "$TAG" ]; then
+            echo "::error::Tag $TAG doesn't match myGeeKy $VERSION in src/mygeeky/__init__.py"; exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Build MyGeeKySetup.exe (and self-test it)
+        run: python installer/build.py
+
+      - name: Attach it to the release
+        shell: bash
+        run: |
+          EXE="dist/MyGeeKySetup-${VERSION}.exe"
+          test -f "$EXE"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --title "myGeeKy $VERSION" --notes "myGeeKy $VERSION. Download **MyGeeKySetup-$VERSION.exe** below, or \`pip install --upgrade mygeeky\`."
+          fi
+          gh release upload "$TAG" "$EXE" --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MyGeeKySetup-${{ env.VERSION }}
+          path: dist/MyGeeKySetup-*.exe
+          retention-days: 30

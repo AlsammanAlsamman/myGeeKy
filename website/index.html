@@ -92,6 +92,8 @@
   .pip button { cursor: pointer; border: none; border-radius: 8px; padding: 6px 10px; color: var(--text);
                 background: rgba(255,255,255,.1); font: 600 12.5px Inter, sans-serif; }
   .note { font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .note.signpath { margin-top: 6px; }
+  .note a { color: inherit; }
   .hero-shot { margin: 60px auto 0; max-width: 1080px; perspective: 1600px; }
   .hero-shot img { border-radius: 22px; transform: rotateX(10deg) scale(.96); transform-origin: 50% 0;
                    transition: transform 1.2s cubic-bezier(.2,.8,.2,1); box-shadow: 0 50px 120px rgba(0,0,0,.6); }
@@ -307,6 +309,7 @@
     </div>
     <div class="pip mono"><span class="dollar">$</span><code id="pip">pip install mygeeky</code><button type="button" id="copy">Copy</button></div>
     <p class="note">Free and open source (MIT) · v{{VERSION}} · Windows installer, or pip on Windows, Linux and macOS</p>
+    <p class="note signpath">Free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
     <div class="hero-shot" id="heroShot"><picture>
       <source media="(max-width: 600px)" srcset="img/model.png">
       <img src="img/hero.png" alt="myGeeKy panel tabs: People, what myGeeKy knows about you, and research rising in your field" width="1400" height="560">
@@ -551,7 +554,8 @@
       <a class="btn primary" href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest/download/MyGeeKySetup-{{VERSION}}.exe">⬇ Download for Windows</a>
       <a class="btn" href="https://pypi.org/project/mygeeky/">🐍 pip install mygeeky</a>
     </div>
-    <p class="note">The installer isn't code-signed yet. If Windows warns you, click <em>More info → Run anyway</em>.</p>
+    <p class="note signpath">Free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+    <p class="note">Until a signed installer reaches you, Windows may warn you: click <em>More info → Run anyway</em>.</p>
   </div>
 </section>
 
