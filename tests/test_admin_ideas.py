@@ -171,3 +171,12 @@ def test_panel_returns_to_its_edge_after_windows_moves_it(monkeypatch):
             w.wait(2000)
         panel.close()
         panel.deleteLater()
+
+
+def test_the_invite_opens_in_plain_words_and_tells_why_it_exists():
+    cfg = MyGeekyConfig(github_username="AlsammanAlsamman")
+    body = admin.invite({"name": "Ada Lovelace", "why": ["builds lab/tool (published)"]}, cfg)["body"]
+    assert body.startswith("Hi Ada,\n\nI came across lab/tool on GitHub, the tool behind your published paper.")
+    assert "Facebook or LinkedIn" in body and "install it and give it a try" in body
+    assert "(published)" not in body and "works in your field" not in body
+    assert admin.invite({"login": "fan", "why": ["starred myGeeKy"]}, cfg)["body"].split("\n")[2].startswith("Thank you")

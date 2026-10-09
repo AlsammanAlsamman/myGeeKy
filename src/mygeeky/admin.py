@@ -212,19 +212,38 @@ def funnel(state: dict[str, Any] | None = None) -> dict[str, int]:
     return count
 
 
+def _opening(why: list[str]) -> str:
+    """The first line, in plain words, from the strongest reason they're on the list."""
+    reasons = " ".join(why)
+    if "starred myGeeKy" in reasons:
+        return "Thank you for starring myGeeKy on GitHub!"
+    if "forked myGeeKy" in reasons:
+        return "I saw you forked myGeeKy on GitHub, thank you!"
+    m = re.search(r"builds (\S+) \(published\)", reasons)
+    if m:
+        return f"I came across {m.group(1)} on GitHub, the tool behind your published paper."
+    if "works in your field" in reasons:
+        return "I came across your work on GitHub, and it's close to my own field."
+    return "I came across your work on GitHub."
+
+
 def invite(person: dict[str, Any], cfg: MyGeekyConfig) -> dict[str, str]:
     """A short, personal invite (and a mailto link when they list an email)."""
     first = (person.get("name") or person.get("login") or "").split()[0] if (person.get("name") or person.get("login")) else ""
-    why = "; ".join(person.get("why", [])[:2])
-    subject = "myGeeKy: your corner of GitHub, for research"
+    why = _opening(person.get("why", []))
+    subject = "A tool for researchers to find each other: would you try it?"
     body = (f"Hi {first},\n\n"
-            f"I came across your work on GitHub ({why}). I've built myGeeKy, a free, open-source tool for "
-            "researchers who code: from your CV and papers it finds people in your field worth following, "
-            "repos you could contribute to, rising papers and tools, and what's new in your area, all in a "
-            "small panel on your screen. It never acts for you.\n\n"
-            "If it sounds useful: https://mygeeky.org (or pip install mygeeky). I'd love your feedback, "
-            "and there's a 💡 button in the app for ideas.\n\n"
-            f"Best,\n{cfg.github_username}")
+            f"{why}\n\n"
+            "I built myGeeKy because of a problem I kept running into. I'm not on Facebook or LinkedIn (I find "
+            "them distracting), but I still want to connect with people in research: people I can learn from, "
+            "and who might learn something from me. So I made a tool for researchers in data science and "
+            "computer science. It looks at your GitHub, your CV and your papers, groups the people and projects "
+            "in your field, and shows you who's worth following, what's rising and what's new, in one small "
+            "panel on your screen. It only suggests: it never posts or follows anyone for you.\n\n"
+            "Would you be willing to install it and give it a try? https://mygeeky.org (a Windows installer, "
+            "one line on Linux, or pip install mygeeky). Any feedback would mean a lot, and there's a 💡 button "
+            "in the app for ideas.\n\n"
+            f"Best,\nAlsamman\n(github.com/{cfg.github_username})")
     out = {"subject": subject, "body": body}
     if person.get("email"):
         out["mailto"] = f"mailto:{person['email']}?subject={quote(subject)}&body={quote(body)}"
