@@ -38,6 +38,7 @@ from PySide6.QtGui import (
     QColor,
     QGuiApplication,
     QIcon,
+    QCursor,
     QLinearGradient,
     QPainter,
     QPainterPath,
@@ -136,6 +137,15 @@ def _build_spotlight_items(activity_events: list[dict[str, Any]],
             interleaved.append(suggestion_items[j])
             j += 1
     return interleaved
+
+
+def _alive(w: QWidget) -> bool:
+    """False once Qt has deleted the widget behind this Python object."""
+    try:
+        w.objectName()
+        return True
+    except RuntimeError:
+        return False
 
 
 def _time_ago(iso: str) -> str:
@@ -1572,28 +1582,99 @@ class ActivityChart(QWidget):
         p.end()
 
 
-class ProfileDialog(QDialog):
-    """Someone at a glance, before you (maybe) open GitHub to follow them: their
-    two most active repos, their most-starred one, a 30-day activity chart,
-    their interests and their links elsewhere."""
+class ShimmerBar(QWidget):
+    """A slim loading bar: a pink-to-violet glow sweeping across a faint track."""
 
-    def __init__(self, parent: "MyGeekyPanel", login: str, theme: dict[str, Any]) -> None:
-        super().__init__(parent)
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)   # in front of the always-on-top panel
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.setWindowTitle(f"{login} on GitHub")
-        self.setFixedWidth(400)
-        self.login, self.theme, self.panel = login, theme, parent
-        self.setStyleSheet(f"QDialog {{ background:#17171f; }} QLabel {{ color:{theme['text']}; font-size:11.5px; }}"
-                           f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
-                           f"border-radius:8px; padding:7px 12px; }} QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+    def __init__(self) -> None:
+        super().__init__()
+        self.setFixedHeight(5)
+        self._t = 0.0
+        self._timer = QTimer(self)
+        self._timer.setInterval(16)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def _tick(self) -> None:
+        self._t = (self._t + 0.012) % 1.0
+        self.update()
+
+    def stop(self) -> None:
+        self._timer.stop()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing, True)
+        r = QRectF(self.rect()).adjusted(0, 0.5, 0, -0.5)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(255, 255, 255, 28))
+        p.drawRoundedRect(r, 2.5, 2.5)
+        w = r.width() * 0.38
+        x = -w + (r.width() + w) * (0.5 - 0.5 * math.cos(math.pi * self._t))   # eases in and out
+        grad = QLinearGradient(x, 0, x + w, 0)
+        grad.setColorAt(0.0, QColor(255, 111, 216, 0))
+        grad.setColorAt(0.35, QColor("#ff6fd8"))
+        grad.setColorAt(0.75, QColor("#7a5cff"))
+        grad.setColorAt(1.0, QColor(122, 92, 255, 0))
+        p.setBrush(grad)
+        p.drawRoundedRect(QRectF(x, r.top(), w, r.height()), 2.5, 2.5)
+        p.end()
+
+
+class ProfileView(QFrame):
+    """Someone at a glance, unfolding right under the person you clicked: their
+    two most active repos, their most-starred one, a 30-day activity chart, their
+    interests and their links elsewhere. Then, if you like, GitHub to follow."""
+
+    def __init__(self, panel: "MyGeekyPanel", login: str, theme: dict[str, Any]) -> None:
+        super().__init__()
+        self.login, self.theme, self.panel = login, theme, panel
+        self.setObjectName("profileView")
+        self.setStyleSheet(f"QFrame#profileView {{ background:{theme['card_bg']}; border:1px solid {theme['accent']}; "
+                           f"border-radius:12px; }} QLabel {{ color:{theme['text']}; font-size:11.5px; background:transparent; }}")
         self.lay = QVBoxLayout(self)
-        self.lay.setContentsMargins(18, 16, 18, 16)
-        self.lay.setSpacing(8)
-        self.status = QLabel(f"Looking up {login}\u2026")
-        self.lay.addWidget(self.status)
-        parent._run_async(lambda: self._fetch(login), self._show)
+        self.lay.setContentsMargins(12, 10, 12, 12)
+        self.lay.setSpacing(7)
+        self.loading = QLabel(f"Looking up <b>{login}</b>\u2026")
+        self.loading.setTextFormat(Qt.RichText)
+        self.loading.setStyleSheet(f"color:{theme['muted']}; font-size:11px;")
+        self.bar = ShimmerBar()
+        self.lay.addWidget(self.loading)
+        self.lay.addWidget(self.bar)
+        self.setMaximumHeight(0)
+        self._anim = QPropertyAnimation(self, b"maximumHeight", self)
+        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._anim.finished.connect(self._settled)
+        QTimer.singleShot(0, lambda: self._grow_to(self._content_height()))
+        panel._run_async(lambda: self._fetch(login), self._show)
 
+    # ---- unfolding
+    def _content_height(self) -> int:
+        self.lay.activate()
+        # height-for-width only counts once something wraps; while loading nothing does
+        return max(self.lay.totalHeightForWidth(max(self.width(), 200)), self.lay.totalSizeHint().height())
+
+    def _grow_to(self, h: int, ms: int = 320) -> None:
+        self._anim.stop()
+        self._anim.setDuration(ms)
+        self._anim.setStartValue(self.maximumHeight() if self.maximumHeight() < 16777215 else self.height())
+        self._anim.setEndValue(h)
+        self._anim.start()
+
+    def _settled(self) -> None:
+        if self._anim.endValue() and self._anim.endValue() > 60 and not self.bar.isVisible():
+            self.setMaximumHeight(16777215)              # fully open: let it follow its content
+            area = self.panel._scroll_area_of(self)
+            if area is not None:
+                area.ensureWidgetVisible(self, 0, 10)
+        elif self._anim.endValue() == 0:
+            self.deleteLater()
+
+    def fold(self) -> None:
+        """Close it again (it removes itself when folded)."""
+        self.setMaximumHeight(self.height())
+        self._grow_to(0, 220)
+
+    # ---- content
     @staticmethod
     def _fetch(login: str) -> dict[str, Any]:
         try:
@@ -1618,7 +1699,7 @@ class ProfileDialog(QDialog):
 
     def _section(self, text: str) -> None:
         lab = QLabel(text)
-        lab.setStyleSheet(f"color:{self.theme['muted']}; font-size:10px; font-weight:700; letter-spacing:1px; margin-top:6px;")
+        lab.setStyleSheet(f"color:{self.theme['muted']}; font-size:9.5px; font-weight:700; letter-spacing:1px; margin-top:4px;")
         self.lay.addWidget(lab)
 
     def _repo_row(self, r: dict[str, Any], right: str) -> None:
@@ -1634,38 +1715,43 @@ class ProfileDialog(QDialog):
         lab.linkActivated.connect(lambda url: logic.open_link(url))
         box = QFrame()                              # real margins (CSS padding makes QLabel mis-measure its height)
         box.setObjectName("repoBox")
-        box.setStyleSheet(f"QFrame#repoBox {{ background:{self.theme['card_bg']}; border-radius:8px; }}")
+        box.setStyleSheet("QFrame#repoBox { background:rgba(255,255,255,0.05); border-radius:8px; }")
         bl = QVBoxLayout(box)
-        bl.setContentsMargins(9, 7, 9, 7)
+        bl.setContentsMargins(9, 6, 9, 6)
         bl.addWidget(lab)
         self.lay.addWidget(box)
 
     def _show(self, card: dict[str, Any]) -> None:
         import html as h
-        self.status.hide()
+        self.bar.stop()
+        self.bar.hide()
+        self.loading.hide()
+        top = QHBoxLayout()
         if card.get("error"):
-            self.lay.addWidget(self._muted(card["error"]))
-            self._buttons()
+            top.addWidget(self._muted(card["error"]), 1)
+            top.addWidget(self._close_btn())
+            self.lay.addLayout(top)
+            QTimer.singleShot(0, lambda: self._grow_to(self._content_height()))
             return
-        head = QHBoxLayout()
         pic = QLabel()
         pix = QPixmap()
         if card.get("avatar_bytes") and pix.loadFromData(card["avatar_bytes"]):
-            pic.setPixmap(_circular_pixmap(pix, 56))
-        pic.setFixedSize(56, 56)
-        head.addWidget(pic)
+            pic.setPixmap(_circular_pixmap(pix, 48))
+        pic.setFixedSize(48, 48)
+        top.addWidget(pic, 0, Qt.AlignTop)
         names = QVBoxLayout()
-        title = QLabel(f"<b style='font-size:15px'>{h.escape(card.get('name') or card['login'])}</b>"
+        title = QLabel(f"<b style='font-size:14px'>{h.escape(card.get('name') or card['login'])}</b>"
                        + (f"  <span style='color:{self.theme['muted']}'>@{h.escape(card['login'])}</span>"
                           if card.get("name") else ""))
         title.setTextFormat(Qt.RichText)
         names.addWidget(title)
         meta = [m for m in (card.get("location"), card.get("company"),
                             f"{card.get('followers', 0):,} followers", f"{card.get('public_repos', 0)} repos",
-                            f"on GitHub since {card['since']}" if card.get("since") else "") if m]
+                            f"since {card['since']}" if card.get("since") else "") if m]
         names.addWidget(self._muted("  \u00b7  ".join(meta), 10.5))
-        head.addLayout(names, 1)
-        self.lay.addLayout(head)
+        top.addLayout(names, 1)
+        top.addWidget(self._close_btn(), 0, Qt.AlignTop)
+        self.lay.addLayout(top)
         if card.get("bio"):
             self.lay.addWidget(self._muted(card["bio"]))
         if card.get("links"):                          # only the ones they have
@@ -1674,11 +1760,11 @@ class ProfileDialog(QDialog):
             for link in card["links"]:
                 mark, color, name = LINK_MARKS.get(link["kind"], LINK_MARKS["web"])
                 b = QPushButton(mark)
-                b.setFixedSize(34, 34)
+                b.setFixedSize(30, 30)
                 b.setCursor(Qt.PointingHandCursor)
                 b.setToolTip(f"{name}: {link['url']}")
-                b.setStyleSheet(f"QPushButton {{ background:{color}; color:white; border:none; border-radius:17px; "
-                                f"font-weight:800; font-size:12px; padding:0; }} QPushButton:hover {{ border:2px solid white; }}")
+                b.setStyleSheet(f"QPushButton {{ background:{color}; color:white; border:none; border-radius:15px; "
+                                f"font-weight:800; font-size:11px; padding:0; }} QPushButton:hover {{ border:2px solid white; }}")
                 b.clicked.connect(lambda checked=False, u=link["url"]: QDesktopServices.openUrl(QUrl(u))
                                   if u.startswith("https://") else None)
                 row.addWidget(b)
@@ -1695,38 +1781,31 @@ class ProfileDialog(QDialog):
         self.lay.addWidget(ActivityChart(card.get("daily") or [], self.theme["accent"]))
         if card.get("interests"):
             self._section("INTERESTS")
-            chips = QLabel("".join(f"<span style='background:{self.theme['card_bg']}; color:{self.theme['text']}'>"
+            chips = QLabel("".join(f"<span style='background:rgba(122,92,255,0.25); color:{self.theme['text']}'>"
                                    f"&nbsp;{h.escape(t)}&nbsp;</span>&nbsp; " for t in card["interests"]))
             chips.setTextFormat(Qt.RichText)
             chips.setWordWrap(True)
             self.lay.addWidget(chips)
-        self._buttons(card.get("url"))
+        go = QPushButton("Open on GitHub to follow")
+        go.setCursor(Qt.PointingHandCursor)
+        go.setStyleSheet("QPushButton { background:#7a5cff; color:white; border:none; border-radius:8px; "
+                         "padding:7px 12px; font-weight:700; font-size:11.5px; } QPushButton:hover { background:#8d73ff; }")
+        go.clicked.connect(lambda: self.panel._opened_profile(card.get("url", "")))
+        self.lay.addSpacing(2)
+        self.lay.addWidget(go)
+        # unfold to the full card (twice: word-wrapped labels only know their height once styled)
+        QTimer.singleShot(0, lambda: self._grow_to(self._content_height(), 420))
+        QTimer.singleShot(140, lambda: self._grow_to(self._content_height(), 280))
 
-    def _buttons(self, url: str | None = None) -> None:
-        row = QHBoxLayout()
-        if url:
-            go = QPushButton("Open on GitHub to follow")
-            go.setCursor(Qt.PointingHandCursor)
-            go.setStyleSheet(f"QPushButton {{ background:#7a5cff; color:white; border:none; border-radius:8px; "
-                             f"padding:8px 14px; font-weight:700; }} QPushButton:hover {{ background:#8d73ff; }}")
-            go.clicked.connect(lambda: (self.panel._opened_profile(url), self.close()))
-            row.addWidget(go, 1)
-        close = QPushButton("Close")
-        close.setCursor(Qt.PointingHandCursor)
-        close.clicked.connect(self.close)
-        row.addWidget(close)
-        self.lay.addSpacing(4)
-        self.lay.addLayout(row)
-        # size to the content once the styles are applied (word-wrapped labels only
-        # know their height then); twice, as the first pass can still be short
-        QTimer.singleShot(0, self._fit)
-        QTimer.singleShot(120, self._fit)
-
-    def _fit(self) -> None:
-        self.lay.activate()
-        need = self.lay.totalHeightForWidth(self.width())
-        screen = self.screen().availableGeometry().height() if self.screen() else 900
-        self.setFixedHeight(min(max(need, 200), screen - 40))
+    def _close_btn(self) -> QPushButton:
+        b = QPushButton("\u00d7")
+        b.setFixedSize(26, 26)
+        b.setCursor(Qt.PointingHandCursor)
+        b.setToolTip("Fold it away")
+        b.setStyleSheet(f"QPushButton {{ background:transparent; color:{self.theme['muted']}; border:none; font-size:16px; }}"
+                        f"QPushButton:hover {{ color:{self.theme['text']}; }}")
+        b.clicked.connect(self.panel._fold_profile)
+        return b
 
 
 class IdeaDialog(QDialog):
@@ -3231,7 +3310,7 @@ class MyGeekyPanel(QWidget):
         layout.setContentsMargins(0, 4, 0, 0)
 
         actions_row = QHBoxLayout()
-        hint = QLabel("Click someone to open their profile — they then leave this list. You follow manually.")
+        hint = QLabel("Click someone to see their card; follow them on GitHub from there (you always follow by hand).")
         hint.setWordWrap(True)
         self.refresh_sugg_btn = QPushButton("Refresh")
         self.refresh_sugg_btn.setCursor(Qt.PointingHandCursor)
@@ -4787,15 +4866,59 @@ class MyGeekyPanel(QWidget):
 
     _PROFILE_URL = re.compile(r"^https://github\.com/([A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38})/?$")
 
-    def _open_github(self, url: str) -> bool:
-        """A person's profile opens their card (their abstract) first; repos and
-        everything else open in the browser as before."""
+    def _open_github(self, url: str, anchor: tuple[QVBoxLayout, QWidget] | None = None) -> bool:
+        """A person's profile unfolds their card right under what you clicked;
+        repos and everything else open in the browser as before."""
         m = self._PROFILE_URL.match(url or "")
         if not m:
             return logic.open_profile(url)
-        dlg = ProfileDialog(self, m.group(1), THEMES[self._theme_name()])
-        dlg.show()
+        login = m.group(1)
+        view = getattr(self, "_profile_view", None)
+        if view is not None and _alive(view):
+            same = view.login.lower() == login.lower()
+            view.fold()
+            self._profile_view = None
+            if same:                                  # a second click on the same person folds it
+                return True
+        anchor = anchor or self._clicked_item()
+        if anchor is None:
+            return logic.open_profile(url)
+        layout, item = anchor
+        view = ProfileView(self, login, THEMES[self._theme_name()])
+        layout.insertWidget(layout.indexOf(item) + 1, view)
+        self._profile_view = view
         return True
+
+    def _clicked_item(self) -> tuple[QVBoxLayout, QWidget] | None:
+        """The list item under the mouse (a card in a scrolling list, or the Live
+        spotlight), and the layout it sits in."""
+        w = QApplication.widgetAt(QCursor.pos())
+        page = self.content_stack.currentWidget()
+        fallback = None
+        while w is not None and w is not page:
+            parent = w.parentWidget()
+            lay = parent.layout() if parent is not None else None
+            if isinstance(lay, QVBoxLayout) and lay.indexOf(w) >= 0:
+                grand = parent.parentWidget()
+                if grand is not None and isinstance(grand.parentWidget(), QScrollArea):
+                    return lay, w                     # a card in a scrolling list
+                if parent is page or (isinstance(page, QScrollArea) and parent is page.widget()):
+                    fallback = (lay, w)               # e.g. the Live spotlight
+            w = parent
+        return fallback
+
+    def _scroll_area_of(self, w: QWidget) -> QScrollArea | None:
+        while w is not None:
+            if isinstance(w, QScrollArea):
+                return w
+            w = w.parentWidget()
+        return None
+
+    def _fold_profile(self) -> None:
+        view = getattr(self, "_profile_view", None)
+        if view is not None and _alive(view):
+            view.fold()
+        self._profile_view = None
 
     def _opened_profile(self, url: str) -> None:
         """'Open on GitHub to follow' from a card."""

@@ -3,12 +3,13 @@
 // slim dock; scrolling back to the top, or "Spin the rings", brings it back.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Image, NativeScrollEvent, NativeSyntheticEvent, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
          useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Orbit, orbitHeight } from '../components/orbit';
+import { PersonCard } from '../components/person-card';
 import { Card, Empty, open, Segments } from '../components/ui';
 import { BadgesPart, ModelPart, MorePart } from '../components/you-parts';
 import { timeAgo, useApp, useFeed } from '../lib/app-state';
@@ -38,6 +39,7 @@ const EMPTY: Partial<Record<SectionId, string>> = {
 };
 
 function RowView({ r, color, isOpen, onPick }: { r: Row; color: string; isOpen: boolean; onPick: () => void }) {
+  const [card, setCard] = useState(false);          // an activity's person, unfolded on demand
   return (
     <View style={[st.rowBox, isOpen && st.rowOpen]}>
       <Pressable onPress={onPick} style={st.row} accessibilityRole="button" accessibilityLabel={`${r.title}. ${r.sub}`}>
@@ -52,16 +54,16 @@ function RowView({ r, color, isOpen, onPick }: { r: Row; color: string; isOpen: 
         </View>
         {r.right ? <Text style={st.right}>{r.right}</Text> : null}
       </Pressable>
-      {isOpen ? (
+      {isOpen && r.kind === 'person' && r.login ? <PersonCard login={r.login} onClose={onPick} /> : null}
+      {isOpen && r.kind !== 'person' && card && r.login ? <PersonCard login={r.login} onClose={() => setCard(false)} /> : null}
+      {isOpen && r.kind !== 'person' ? (
         <View style={st.actions}>
-          <Pressable onPress={() => (r.kind === 'person' && r.login ? router.push(`/person/${r.login}`)
-                                      : open(r.url, r.kind, r.cat, r.explore))}
-                     style={[st.go, { backgroundColor: color }]}>
+          <Pressable onPress={() => open(r.url, r.kind, r.cat, r.explore)} style={[st.go, { backgroundColor: color }]}>
             <Text style={st.goText}>{r.action}</Text>
           </Pressable>
-          {r.kind !== 'person' && r.login ? (
-            <Pressable onPress={() => router.push(`/person/${r.login}`)} style={st.close} accessibilityLabel={`${r.login}'s profile`}>
-              <Ionicons name="person-outline" size={18} color={C.text} />
+          {r.login ? (
+            <Pressable onPress={() => setCard(!card)} style={st.close} accessibilityLabel={`${r.login} at a glance`}>
+              <Ionicons name={card ? 'person' : 'person-outline'} size={18} color={C.text} />
             </Pressable>
           ) : null}
           <Pressable onPress={onPick} style={st.close} accessibilityLabel="Close"><Text style={st.closeText}>×</Text></Pressable>

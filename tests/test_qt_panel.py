@@ -370,3 +370,45 @@ def test_the_panel_never_lifts_itself_over_its_own_dialogs(monkeypatch):
             w.wait(2000)
         panel.close()
         panel.deleteLater()
+
+
+def test_clicking_a_person_unfolds_their_card_in_place_and_again_folds_it(monkeypatch):
+    pytest.importorskip("PySide6")
+    import time
+    from PySide6.QtWidgets import QApplication, QLabel, QVBoxLayout, QWidget
+    app = QApplication.instance() or QApplication([])
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel, ProfileView
+    monkeypatch.setattr(logic, "person_card", lambda login: {
+        "login": login, "name": "Someone", "avatar": "", "bio": "", "company": "", "location": "", "followers": 1,
+        "public_repos": 1, "since": "2020", "url": f"https://github.com/{login}", "active": [], "top": None,
+        "daily": [0] * 30, "interests": ["gwas"], "links": []})
+    opened = []
+    monkeypatch.setattr(logic, "open_profile", lambda url: opened.append(url) or True)
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="me"))
+    try:
+        host = QWidget()
+        lay = QVBoxLayout(host)
+        item = QLabel("a person")
+        lay.addWidget(item)
+        lay.addWidget(QLabel("the next one"))
+        assert panel._open_github("https://github.com/someone", anchor=(lay, item))
+        view = lay.itemAt(1).widget()
+        assert isinstance(view, ProfileView) and view.login == "someone" and not opened
+        end = time.time() + 2
+        while time.time() < end and view.loading.isVisible():
+            app.processEvents()
+        panel._open_github("https://github.com/someone", anchor=(lay, item))   # same person again: folds
+        assert panel._profile_view is None
+        panel._open_github("https://github.com/someone/repo")                  # a repo still opens in the browser
+        assert opened == ["https://github.com/someone/repo"]
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard, panel._sync_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(2000)
+        panel.close()
+        panel.deleteLater()

@@ -50,7 +50,7 @@ function eventRow(e: Event): Row {
 }
 
 function personRow(p: Person, why = p.why): Row {
-  return { id: `p${p.login}`, title: p.login, sub: why, url: profile(p.login), action: 'View profile', avatar: p.avatar, kind: 'person', login: p.login };
+  return { id: `p${p.login}`, title: p.login, sub: why, url: profile(p.login), action: 'At a glance', avatar: p.avatar, kind: 'person', login: p.login };
 }
 
 export type Feeds = {
