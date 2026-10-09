@@ -4518,6 +4518,22 @@ class MyGeekyPanel(QWidget):
             self._load_news()
             self._set_news_mode(self._news_mode)
             self._render_models(logic.get_hf_models(self.cfg))
+            self._restyle_rest()
+
+    def _restyle_rest(self) -> None:
+        """Everything else that was coloured when it was drawn, redrawn in the new
+        theme -- or it keeps the old theme's text colour (dark text on dark)."""
+        steps = [self._style_market_switch, self._render_badges, self._render_badge_strip,
+                 self._render_keywords, self._update_tab_styles, self._fold_profile]
+        if self._is_admin:
+            steps.append(self._render_admin)
+        if self.settings_panel.isVisible() and getattr(self, "_setup", None):
+            steps.append(lambda: self._render_setup(self._setup))
+        for step in steps:
+            try:
+                step()
+            except Exception:        # one part failing to restyle must not stop the rest
+                pass
 
     def _render_suggestions_from_cache(self) -> None:
         # Re-render already-loaded cards so their theme-dependent styling updates too.

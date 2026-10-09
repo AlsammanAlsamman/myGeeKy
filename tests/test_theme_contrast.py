@@ -40,3 +40,29 @@ def test_every_text_role_is_defined_and_readable(name):
     assert not missing, f"{name} has no colour for {missing}"
     weak = {r: round(contrast(_rgb(theme[r], bg), bg), 2) for r in ROLES if contrast(_rgb(theme[r], bg), bg) < 4.5}
     assert not weak, f"{name}: too faint to read on its background: {weak}"
+
+
+def test_switching_theme_restyles_the_market_buttons(monkeypatch):
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui import app as logic
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+    monkeypatch.setattr(logic, "set_theme", lambda cfg, name: setattr(cfg, "gui_theme", name) or True)
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="me", gui_theme="frosted"))
+    try:
+        panel._set_market_mode("repos")
+        assert THEMES["frosted"]["text"] in panel.market_mode_buttons["repos"].styleSheet()
+        panel._on_theme_clicked("midnight")
+        style = panel.market_mode_buttons["repos"].styleSheet()
+        assert THEMES["midnight"]["text"] in style and THEMES["frosted"]["text"] not in style
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard, panel._sync_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(3000)
+        panel.close()
+        panel.deleteLater()
