@@ -64,9 +64,33 @@ WEIGHTS = {
     "field_match": 1.5,         # x domain fit, from your People suggestions
     "public_email": 1.0,        # reachable at all
     "research_bio": 1.0,
-    "recently_active": 0.5,
+    "active": 2.0,              # x how busy they are on GitHub lately (real public events, not profile edits)
     "reachable_size": 0.5,      # not a celebrity, not empty
 }
+ACTIVE_DAYS = 60                # no public activity in this long: not suggested at all
+BUSY_EVENTS = 15                # this many public events in 30 days counts as fully active
+
+
+def activity(client, login: str) -> tuple[int, str]:
+    """(public events in the last 30 days, when they were last active) from their
+    public GitHub events: pushes, pull requests, issues, releases, reviews..."""
+    resp = client._get(f"/users/{login}/events/public", params={"per_page": 100})
+    events = resp.json() if resp.status_code == 200 else []
+    stamps = []
+    for e in events if isinstance(events, list) else []:
+        try:
+            stamps.append(datetime.fromisoformat(str(e.get("created_at", "")).replace("Z", "+00:00")))
+        except ValueError:
+            pass
+    month = _now() - timedelta(days=30)
+    return sum(1 for t in stamps if t >= month), (max(stamps).isoformat() if stamps else "")
+
+
+def is_active(entry: dict[str, Any]) -> bool:
+    try:
+        return _now() - datetime.fromisoformat(entry["last_active"]) < timedelta(days=ACTIVE_DAYS)
+    except (KeyError, ValueError, TypeError):
+        return False
 
 
 def score(features: dict[str, float]) -> float:
@@ -125,7 +149,8 @@ def refresh_prospects(client, cfg: MyGeekyConfig, max_lookups: int = 40,
         key = p["login"].lower()
         entry = people.setdefault(key, {"login": p["login"], "status": "new"})
         entry["why"], base = p["why"], dict(p["features"])
-        fresh = entry.get("looked_up_at") and _now() - datetime.fromisoformat(entry["looked_up_at"]) < timedelta(days=7)
+        fresh = (entry.get("looked_up_at") and "events_30d" in entry          # older lookups lack real activity
+                 and _now() - datetime.fromisoformat(entry["looked_up_at"]) < timedelta(days=7))
         if not fresh and lookups < max_lookups:
             lookups += 1
             user = client.get_user(p["login"]) or {}
@@ -133,21 +158,18 @@ def refresh_prospects(client, cfg: MyGeekyConfig, max_lookups: int = 40,
             if user.get("type") == "Organization":     # you invite people, not organizations
                 entry.update({"status": "org", "looked_up_at": _now().isoformat()})
                 continue
+            n30, last = activity(client, p["login"])
             entry.update({
                 "name": str(user.get("name") or "")[:80], "bio": str(user.get("bio") or "")[:200],
                 "email": email if _EMAIL.match(email) else "", "followers": int(user.get("followers") or 0),
                 "updated_at": user.get("updated_at") or "", "avatar": user.get("avatar_url") or "",
-                "looked_up_at": _now().isoformat()})
+                "events_30d": n30, "last_active": last, "looked_up_at": _now().isoformat()})
         if entry.get("status") == "org":
             continue
         if entry.get("looked_up_at"):
             base["public_email"] = 1 if entry.get("email") else 0
             base["research_bio"] = 1 if _RESEARCH_BIO.search(entry.get("bio", "")) else 0
-            try:
-                active = _now() - datetime.fromisoformat(entry["updated_at"].replace("Z", "+00:00")) < timedelta(days=90)
-            except (KeyError, ValueError):
-                active = False
-            base["recently_active"] = 1 if active else 0
+            base["active"] = round(min(1.0, entry.get("events_30d", 0) / BUSY_EVENTS), 3) if is_active(entry) else 0
             base["reachable_size"] = 1 if 5 <= entry.get("followers", 0) <= 5000 else 0
         entry["features"], entry["score"] = base, score(base)
     state["updated_at"] = _now().isoformat()
@@ -158,7 +180,8 @@ def refresh_prospects(client, cfg: MyGeekyConfig, max_lookups: int = 40,
 
 def prospects(state: dict[str, Any] | None = None, n: int = 30) -> list[dict[str, Any]]:
     people = (state or load()).get("people", {}).values()
-    return sorted((p for p in people if p.get("status") == "new" and p.get("looked_up_at")),
+    # only people active on GitHub lately: someone quiet for months won't see an invite
+    return sorted((p for p in people if p.get("status") == "new" and p.get("looked_up_at") and is_active(p)),
                   key=lambda p: p.get("score", 0), reverse=True)[:n]
 
 

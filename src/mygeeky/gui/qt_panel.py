@@ -1948,6 +1948,12 @@ class ProspectCard(QFrame):
         why.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         why.setStyleSheet(f"color:{theme['muted']}; font-size:10px; background:transparent;")
         box.addWidget(why)
+        if person.get("last_active"):
+            n = person.get("events_30d", 0)
+            act = QLabel(f"\U0001f525 {n} public event{'s' if n != 1 else ''} in 30 days \u00b7 "
+                         f"last active {_time_ago(person['last_active'])}")
+            act.setStyleSheet(f"color:{theme['good'] if n >= 5 else theme['muted']}; font-size:10px; background:transparent;")
+            box.addWidget(act)
         if person.get("bio"):
             bio = QLabel(person["bio"][:110])
             bio.setTextFormat(Qt.PlainText)

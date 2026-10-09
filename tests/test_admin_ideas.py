@@ -37,18 +37,21 @@ def test_only_the_maker_is_admin():
 
 
 class FakeClient:
-    def __init__(self, users):
-        self.users = users
+    def __init__(self, users, events=None):
+        self.users, self.events = users, events or {}
 
     def list_stargazers(self, repo, max_pages=3):
         return ["fan"]
 
     def _get(self, path, params=None):
+        data = ([{"created_at": t} for t in self.events.get(path.split("/")[2], [])] if "/events/public" in path
+                else [{"owner": {"login": "forker"}}])
+
         class R:
             status_code = 200
 
             def json(self):
-                return [{"owner": {"login": "forker"}}]
+                return data
         return R()
 
     def get_user(self, login):
@@ -68,17 +71,26 @@ def test_prospects_rank_reach_skip_orgs_and_track_joins(monkeypatch):
              "toolmaker": {"type": "User", "email": "not-an-email", "bio": "Bioinformatics lab", "followers": 300,
                            "updated_at": recent},
              "someorg": {"type": "Organization"}}
+    from datetime import datetime, timedelta, timezone
+    ago = lambda d: (datetime.now(timezone.utc) - timedelta(days=d)).isoformat()   # noqa: E731
+    events = {"fan": [ago(1)] * 20,                       # busy this month
+              "toolmaker": [ago(3), ago(40)],             # active, less so
+              "forker": [ago(200)]}                       # quiet for months: never suggested
     cfg = MyGeekyConfig(github_username="AlsammanAlsamman")
-    state = admin.refresh_prospects(FakeClient(users), cfg)
+    state = admin.refresh_prospects(FakeClient(users, events), cfg)
     ranked = [p["login"] for p in admin.prospects(state)]
-    assert ranked[0] == "fan" and "someorg" not in ranked and set(ranked) == {"fan", "forker", "toolmaker"}
+    assert ranked[0] == "fan" and "someorg" not in ranked and set(ranked) == {"fan", "toolmaker"}
+    fan = state["people"]["fan"]
+    assert fan["events_30d"] == 20 and fan["features"]["active"] == 1.0
+    assert state["people"]["toolmaker"]["features"]["active"] == round(1 / admin.BUSY_EVENTS, 3)
+    assert state["people"]["forker"]["features"]["active"] == 0
     assert state["people"]["toolmaker"]["email"] == ""             # malformed email dropped
     assert admin.invite(state["people"]["fan"], cfg)["mailto"].startswith("mailto:fan@uni.edu?subject=")
     assert "mailto" not in admin.invite(state["people"]["toolmaker"], cfg)
     # invited, then they turn up on Signals: counted as joined
     assert admin.mark("toolmaker", "invited")["ok"]
     monkeypatch.setattr(beacon, "load_cache", lambda: {"users": {"toolmaker": {}}})
-    state = admin.refresh_prospects(FakeClient(users), cfg)
+    state = admin.refresh_prospects(FakeClient(users, events), cfg)
     assert state["people"]["toolmaker"]["status"] == "joined" and admin.funnel(state)["joined"] == 1
 
 
