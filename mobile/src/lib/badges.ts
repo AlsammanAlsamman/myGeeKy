@@ -20,6 +20,13 @@ const BADGES: Record<string, [string, string, string, number[]]> = {
   explorer: ['🔭', 'Explorer', 'things you opened from outside your usual interests', [3, 15, 50]],
   wordsmith: ['🔤', 'Wordsmith', "keywords you've set", [3, 8, 15]],
   early: ['🌱', 'Early Adopter', 'joined myGeeKy before 2027', [1]],
+  // earned on your computer (they come along with "Connect your phone")
+  networker: ['🤝', 'Networker', "people you've followed", [1, 10, 30]],
+  stargazer: ['⭐', 'Stargazer', "repos you've starred", [1, 10, 50]],
+  builder: ['🛠️', 'Builder', "repos you've forked to contribute", [1, 5, 20]],
+  grateful: ['🙏', 'Grateful', "signals you've sent", [1, 5, 20]],
+  ideas: ['💡', 'Idea Giver', "ideas and problems you've sent", [1, 3, 10]],
+  everywhere: ['☁️', 'Everywhere', 'computers in sync', [1]],
 };
 
 type Usage = { days: string[]; clicks: { kind: string; cat?: string; explore?: boolean }[]; first: string };
@@ -58,7 +65,13 @@ export function logClick(kind: string, cat?: string, explore?: boolean) {
 
 export type Earned = { id: string; emoji: string; name: string; what: string; count: number; tier: string; next: number | null };
 
-export async function earned(keywords: number): Promise<Earned[]> {
+/** Every badge, at the best tier earned here or on your computer. */
+export async function earned(keywords: number, desktop: string[] = []): Promise<Earned[]> {
+  const fromDesktop: Record<string, number> = {};
+  for (const b of desktop) {
+    const [id, tier] = b.split(':');
+    fromDesktop[id] = Math.max(fromDesktop[id] ?? 0, TIERS.indexOf(tier as typeof TIERS[number]) + 1);
+  }
   const u = await load();
   const k = (x: string) => u.clicks.filter((c) => c.kind === x).length;
   const counts: Record<string, number> = {
@@ -68,7 +81,7 @@ export async function earned(keywords: number): Promise<Earned[]> {
   };
   return Object.entries(BADGES).map(([id, [emoji, name, what, levels]]) => {
     const n = counts[id] ?? 0;
-    const reached = levels.filter((need) => n >= need).length;
+    const reached = Math.max(levels.filter((need) => n >= need).length, fromDesktop[id] ?? 0);
     return { id, emoji, name, what, count: n, tier: reached ? TIERS[reached - 1] : '', next: levels.find((need) => n < need) ?? null };
   });
 }

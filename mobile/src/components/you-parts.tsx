@@ -73,7 +73,7 @@ export function BadgesPart() {
   const [mine, setMine] = useState<Earned[]>([]);
   const [gh, setGh] = useState<Achievement[]>([]);
   useEffect(() => {
-    earned(settings?.keywords.length ?? 0).then(setMine);
+    earned(settings?.keywords.length ?? 0, settings?.desktopBadges ?? []).then(setMine);
     if (settings?.username) githubAchievements(settings.username).then(setGh);
   }, [settings]);
   return (
@@ -125,11 +125,20 @@ export function MorePart() {
     ['Signed in', token ? 'yes: Live and People refresh freely' : 'no (sign in below)', !!token],
     ['ORCID', settings.orcid || 'not set', !!settings.orcid],
     ['Keywords', settings.keywords.length ? settings.keywords.join(', ') : 'none yet (add them in Your model)', settings.keywords.length > 0],
+    ['From computer', Object.keys(settings.interests ?? {}).length
+      ? `${Object.keys(settings.interests).length} interests, ${settings.field?.length ?? 0} research topics, ${settings.desktopBadges?.length ?? 0} badges`
+      : 'nothing yet: scan the code above', Object.keys(settings.interests ?? {}).length > 0],
     ['Signals', 'on the desktop panel for now', false],
     ['App version', Constants.expoConfig?.version ?? '', true],
   ];
   return (
     <>
+      <Pressable onPress={() => router.push('/scan')} style={st.scan}>
+        <Text style={st.scanTitle}>📷  Scan from your computer</Text>
+        <Text style={st.scanSub}>On your computer: ⚙ → Connect your phone. One scan brings over your profile, your
+          interests and your badges (do it again any time to refresh them).</Text>
+      </Pressable>
+
       <Section>⚙️ YOUR SETUP</Section>
       <Card>
         {rows.map(([k, v, on]) => (
@@ -189,6 +198,10 @@ const st = StyleSheet.create({
   addText: { color: '#fff', fontWeight: '800' },
   body: { color: C.text, fontSize: 14, lineHeight: 20 },
   link: { color: C.cyan, fontSize: 14, marginTop: 8 },
+  scan: { backgroundColor: 'rgba(255,111,216,0.12)', borderColor: 'rgba(255,111,216,0.45)', borderWidth: 1,
+          borderRadius: 16, padding: 14, marginTop: 6 },
+  scanTitle: { color: C.text, fontSize: 16, fontWeight: '800' },
+  scanSub: { color: C.muted, fontSize: 12.5, marginTop: 5, lineHeight: 17 },
   setupRow: { flexDirection: 'row', paddingVertical: 4, gap: 10 },
   setupKey: { color: C.muted, fontSize: 13, width: 92 },
   setupVal: { color: C.text, fontSize: 13, flex: 1 },

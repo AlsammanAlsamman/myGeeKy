@@ -10,8 +10,11 @@ def test_payload_round_trips_and_is_ascii():
     text = pairing.payload(CFG, "github_pat_" + "a" * 40)
     assert text.startswith("mygeeky:1:") and text.isascii() and "=" not in text
     data = pairing.decode(text)
-    assert data == {"u": "me", "o": "0000-0002-1825-0097", "k": ["GWAS", "café"], "t": ["genomics"],
-                    "tok": "github_pat_" + "a" * 40}
+    assert {k: data[k] for k in ("u", "o", "k", "t", "tok")} == {
+        "u": "me", "o": "0000-0002-1825-0097", "k": ["GWAS", "café"], "t": ["genomics"], "tok": "github_pat_" + "a" * 40}
+    # what this computer learned about you goes along too
+    assert data["w"].get("gwas") == 1.0 and all(0 <= v <= 1 for v in data["w"].values())
+    assert isinstance(data["f"], list) and isinstance(data["b"], list)
     assert "tok" not in pairing.decode(pairing.payload(CFG))
 
 

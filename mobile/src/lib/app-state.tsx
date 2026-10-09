@@ -21,7 +21,8 @@ const Ctx = createContext<AppState | null>(null);
 export function quickProfile(s: Settings): Profile {
   const weights: Record<string, number> = {};
   for (const t of [...s.keywords, ...s.topics]) weights[t.toLowerCase()] = 1;
-  return { weights, topicIds: [], field: [] };
+  for (const [t, w] of Object.entries(s.interests ?? {})) weights[t] = Math.max(weights[t] ?? 0, w);
+  return { weights, topicIds: [], field: [...(s.field ?? [])] };
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {

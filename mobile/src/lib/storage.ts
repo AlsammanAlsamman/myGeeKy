@@ -11,9 +11,15 @@ export type Settings = {
   keywords: string[];
   topics: string[];
   exploreShare: number;
+  // what your computer learned about you (from "Connect your phone")
+  interests: Record<string, number>;
+  field: string[];
+  desktopBadges: string[];
 };
 
-export const DEFAULT_SETTINGS: Settings = { username: '', orcid: '', keywords: [], topics: [], exploreShare: 0.2 };
+export const DEFAULT_SETTINGS: Settings = {
+  username: '', orcid: '', keywords: [], topics: [], exploreShare: 0.2, interests: {}, field: [], desktopBadges: [],
+};
 const SETTINGS_KEY = 'mygeeky.settings';
 const TOKEN_KEY = 'mygeeky_read_token';
 

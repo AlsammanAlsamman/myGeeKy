@@ -24,6 +24,7 @@ export async function loadDictionary(): Promise<Dict | null> {
 
 export async function profileFromSources(s: Settings, token: string | null, dict: Dict | null): Promise<Profile> {
   const weights: Weights = { ...expand(dict, [...s.keywords, ...s.topics]) };
+  for (const [t, w] of Object.entries(s.interests ?? {})) weights[t] = Math.max(weights[t] ?? 0, w);   // learned on your computer
   for (const t of [...s.keywords, ...s.topics]) weights[t.toLowerCase()] = 1;
   const field: string[] = [];
   const topicIds: { id: string; name: string }[] = [];
@@ -62,11 +63,12 @@ export async function profileFromSources(s: Settings, token: string | null, dict
       /* fine */
     }
   }
+  if (!field.length) field.push(...(s.field ?? []));
   return { weights, topicIds, field };
 }
 
 export async function buildProfile(s: Settings, token: string | null, force = false): Promise<Profile> {
-  const key = JSON.stringify([s.username, s.orcid, s.keywords, s.topics]);
+  const key = JSON.stringify([s.username, s.orcid, s.keywords, s.topics, s.interests ?? {}]);
   const cached = await readCache<Profile & { key: string }>('profile');
   if (!force && cached && !isStale(cached.at, 24) && cached.data.key === key) return cached.data;
   const profile = await profileFromSources(s, token, await loadDictionary());

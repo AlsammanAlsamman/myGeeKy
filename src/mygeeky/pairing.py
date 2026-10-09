@@ -1,11 +1,13 @@
 """Connect your phone: a QR code that sets up the myGeeKy phone app in one scan.
 
-The code carries your profile -- GitHub username, ORCID, keywords, topics --
+The code carries your profile -- GitHub username, ORCID, keywords, topics, and
+what this computer has learned about you (weighted interests, research field,
+badges) --
 and, only when it is strictly read-only (can't follow anyone, can't write to
 any repo), your GitHub token. The Signals token and key never go into a QR code.
 It's shown only when you ask for it, and only for a couple of minutes.
 
-Format: `mygeeky:1:` + base64url(JSON {u, o, k, t, tok?}), ASCII only, which
+Format: `mygeeky:1:` + base64url(JSON {u, o, k, t, w, f, b, tok?}), ASCII only, which
 the phone app checks field by field (mobile/src/lib/pairing.ts).
 """
 
@@ -21,9 +23,41 @@ PREFIX = "mygeeky:1:"
 SHOW_SECONDS = 120
 
 
+def _learned(cfg: MyGeekyConfig) -> tuple[dict[str, float], list[str], list[str]]:
+    """What this computer has learned about you, so the phone knows you too:
+    your weighted interest terms, your research field, and your badges."""
+    terms: dict[str, float] = {}
+    field: list[str] = []
+    badges: list[str] = []
+    try:
+        from . import interests
+        langs = {x.lower() for x in cfg.languages}
+        ranked = sorted(interests.profile_terms(cfg).items(), key=lambda kv: -kv[1])
+        for term, w in ranked:
+            if 2 <= len(term) <= 40 and term.isascii() and any(c.isalpha() for c in term) and term not in langs:
+                terms[term] = round(min(max(w, 0.0), 1.0), 2)
+            if len(terms) >= 30:
+                break
+    except Exception:
+        pass
+    try:
+        from .gui import app as logic
+        field = [f[:80] for f in logic.get_brain(cfg).get("field", []) if f.isascii()][:6]
+    except Exception:
+        pass
+    try:
+        from . import achievements
+        badges = [f"{b['id']}:{b['tier']}" for b in achievements.earned_only(cfg)][:20]
+    except Exception:
+        pass
+    return terms, field, badges
+
+
 def payload(cfg: MyGeekyConfig, token: str | None = None) -> str:
+    terms, field, badges = _learned(cfg)
     data: dict[str, Any] = {"u": cfg.github_username, "o": cfg.orcid_id or "",
-                            "k": list(cfg.keywords)[:40], "t": list(cfg.topics)[:40]}
+                            "k": list(cfg.keywords)[:40], "t": list(cfg.topics)[:40],
+                            "w": terms, "f": field, "b": badges}
     if token:
         data["tok"] = token
     raw = json.dumps(data, separators=(",", ":"), ensure_ascii=True).encode("ascii")
