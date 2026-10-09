@@ -1532,6 +1532,14 @@ def sync_init(repo: str | None) -> None:
         raise click.ClickException("Run `mygeeky init` first, or pass --repo owner/name.")
     repo = repo or f"{cfg.github_username}/mygeeky-data"
     click.echo(f"Syncing with PRIVATE repo {repo} -- it will hold your CV text and history.")
+    if not sync_mod._has_gh() and sync_mod.public_on_github(repo) is False and not sync_mod._repo_exists(repo):
+        click.echo("\nFirst, create it on GitHub (only you will be able to see it):")
+        for i, step in enumerate(sync_mod.create_steps(repo), 1):
+            click.echo(f"  {i}. {step}")
+        click.launch(sync_mod.new_repo_url(repo))
+        click.echo("\nmyGeeKy writes your data there with your own Git login (Git may ask you to sign in to GitHub\n"
+                   "the first time). Your read-only myGeeKy token is never used for it.")
+        click.pause("\nPress any key once you've created it...")
     click.echo(_sync_call(sync_mod.init, repo))
     cfg = load_config()  # may have just been replaced by the synced config
     cfg.sync_repo = repo

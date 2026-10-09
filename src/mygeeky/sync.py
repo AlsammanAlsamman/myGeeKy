@@ -119,6 +119,34 @@ def remote_url(repo: str) -> str:
     return f"https://github.com/{repo}.git"
 
 
+def new_repo_url(repo: str) -> str:
+    """GitHub's 'new repository' page with the name filled in and Private chosen."""
+    name = repo.split("/", 1)[-1]
+    return (f"https://github.com/new?name={name}&visibility=private"
+            "&description=Private+myGeeKy+data+(synced+by+mygeeky)")
+
+
+def create_steps(repo: str) -> list[str]:
+    """How to make the sync repo yourself (one text for the installer and the terminal)."""
+    return [f"Open {new_repo_url(repo)} (the name {repo.split('/', 1)[-1]} is filled in).",
+            "Choose Private. Don't add a README, .gitignore or license: it must start empty.",
+            "Click Create repository, then come back."]
+
+
+def public_on_github(repo: str) -> bool | None:
+    """True if anyone can see the repo (asked without logging in: a private repo
+    looks like it doesn't exist), False if not, None if GitHub didn't say."""
+    try:
+        import requests
+        r = requests.get(f"https://api.github.com/repos/{repo}", timeout=15,
+                         headers={"Accept": "application/vnd.github+json"})
+    except Exception:
+        return None
+    if r.status_code == 200:
+        return not r.json().get("private", False)
+    return False if r.status_code == 404 else None
+
+
 def _repo_exists(repo: str) -> bool:
     if not _has_gh():
         return _git("ls-remote", remote_url(repo), check=False).returncode == 0
@@ -128,7 +156,7 @@ def _repo_exists(repo: str) -> bool:
 
 def _repo_is_private(repo: str) -> bool | None:
     if not _has_gh():
-        return None
+        return False if public_on_github(repo) else None
     r = winproc.run(["gh", "repo", "view", repo, "--json", "visibility", "-q", ".visibility"],
                        capture_output=True, text=True)
     if r.returncode != 0:
@@ -138,11 +166,9 @@ def _repo_is_private(repo: str) -> bool | None:
 
 def _create_private_repo(repo: str) -> None:
     if not _has_gh():
-        name = repo.split("/", 1)[-1]
-        raise SyncError(
-            f"The private repo {repo} doesn't exist yet. Create it at "
-            f"https://github.com/new?name={name}&visibility=private (keep it Private and empty), then try again."
-        )
+        raise SyncError(f"The private repo {repo} doesn't exist yet. Create it on GitHub:\n"
+                        + "\n".join(f"  {i}. {step}" for i, step in enumerate(create_steps(repo), 1))
+                        + "\nThen try again.")
     r = winproc.run(["gh", "repo", "create", repo, "--private",
                         "--description", "Private myGeeKy data (synced by mygeeky)"],
                        capture_output=True, text=True)
@@ -196,6 +222,9 @@ def init(repo: str) -> str:
     creating the repo (private) if it doesn't exist yet."""
     if "/" not in repo:
         raise SyncError("Give the repo as owner/name, e.g. octocat/mygeeky-data.")
+    if public_on_github(repo):   # checked first, with or without the GitHub CLI: your CV must never go public
+        raise SyncError(f"https://github.com/{repo} is PUBLIC. myGeeKy only syncs to a private repo: make it "
+                        "private (its Settings -> Danger Zone -> Change visibility) or pick another name.")
     _require_git()
     ensure_dirs()
     messages = []

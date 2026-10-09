@@ -921,6 +921,9 @@ class SyncPage(Page):
         self.repo = QLineEdit()
         self.add(self.repo)
         self.note = self.add(_label("", "muted"))
+        self.steps = self.add(_label("", "muted"))
+        self.steps.setTextFormat(Qt.RichText)
+        self.steps.setOpenExternalLinks(True)
         self.finish_layout()
 
     def initializePage(self) -> None:  # noqa: N802
@@ -929,6 +932,8 @@ class SyncPage(Page):
         self.repo.setText(s.get("sync_repo") or f"{s.get('github_username', 'you')}/mygeeky-data")
         already = bool(s.get("sync_repo") and s.get("sync_initialized"))
         self.note.setTextFormat(Qt.RichText)
+        self._show_steps(already)
+        self.repo.textChanged.connect(lambda: self._show_steps(already))
         # optional: on by default only where it can actually work
         self.enable.setChecked(already or bool(s.get("git") and s.get("gh")))
         if already:
@@ -942,11 +947,29 @@ class SyncPage(Page):
                               "setup <b>installs Git for you</b> (just for you, no admin, a minute or two), then "
                               "sets up sync. Everything else works without it.")
         elif not s.get("gh"):
-            self.note.setText("Creating a new repo needs the GitHub CLI (<code>gh</code>, from cli.github.com, "
-                              "then <code>gh auth login</code>). An existing private repo works with your usual "
-                              "git login.")
+            self.note.setText("<b>Optional.</b> Your settings, CV text and history then follow you to every "
+                              "computer you use myGeeKy on. Your tokens never go there.")
         else:
             self.note.setText("It's created as private if it doesn't exist. Tokens are never synced.")
+
+    def _show_steps(self, already: bool) -> None:
+        """Create the private repo first: myGeeKy can only do it for you when the GitHub CLI is signed in."""
+        if already or self.w.state.get("gh"):
+            self.steps.setText("")
+            return
+        from ..sync import new_repo_url
+        repo = self.repo.text().strip() or "you/mygeeky-data"
+        name = repo.split("/", 1)[-1]
+        self.steps.setText(
+            "<b>Before you click Next, create your private repo on GitHub:</b>"
+            "<ol style='margin:2px 0 6px -20px'>"
+            f"<li>Open <a {LINK} href='{new_repo_url(repo)}'>github.com → new repository ↗</a> "
+            f"(the name <b>{name}</b> is filled in).</li>"
+            "<li>Choose <b>Private</b>. Don't add a README, .gitignore or license: it must start empty.</li>"
+            "<li>Click <b>Create repository</b>, then come back here and click Next.</li></ol>"
+            "Only you can see it. myGeeKy writes your data there with your own Git login (the first time, Git "
+            "asks you to sign in to GitHub in your browser); your read-only token is never used for it. "
+            "A public repo is refused.")
 
     def job(self):
         if not self.enable.isChecked():
