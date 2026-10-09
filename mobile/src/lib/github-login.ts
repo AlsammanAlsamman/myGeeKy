@@ -1,6 +1,8 @@
 // Sign in with GitHub (the device flow) -- the same myGeeKy OAuth app as the
 // desktop. No scopes: the token can only read public data. No secret is needed
 // (or possible: the app is open source).
+import { fetchT } from './net';
+
 export const CLIENT_ID = 'Ov23liNyUzK9THj5uAyH';
 
 export type Flow = { deviceCode: string; userCode: string; uri: string; interval: number; expiresIn: number };
@@ -9,7 +11,7 @@ const form = (data: Record<string, string>) =>
   Object.entries(data).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
 
 async function post(url: string, data: Record<string, string>) {
-  const r = await fetch(url, {
+  const r = await fetchT(url, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
     body: form(data),
@@ -57,7 +59,7 @@ export async function waitForLogin(flow: Flow, cancelled: () => boolean): Promis
 }
 
 export async function whoAmI(token: string): Promise<string> {
-  const r = await fetch('https://api.github.com/user', {
+  const r = await fetchT('https://api.github.com/user', {
     headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
   });
   if (!r.ok) throw new Error("GitHub didn't accept the sign-in. Please try again.");

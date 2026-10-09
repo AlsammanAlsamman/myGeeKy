@@ -10,6 +10,7 @@ import math
 import os
 import sys
 import re
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -40,6 +41,7 @@ from PySide6.QtGui import (
     QColor,
     QGuiApplication,
     QIcon,
+    QImage,
     QCursor,
     QLinearGradient,
     QPainter,
@@ -190,23 +192,29 @@ def _avatar_label(username: str, size: int = 32) -> QLabel:
     return label
 
 
-def _circular_pixmap(source: QPixmap, size: int) -> QPixmap:
-    """Crop + mask a square photo into a smooth circle with transparent corners."""
+def _circular_image(source: QImage, size: int) -> QImage:
+    """Crop + mask a square photo into a smooth circle with transparent corners.
+    QImage, not QPixmap: this also runs in background threads, where Qt only
+    allows QImage (a QPixmap there can crash on some graphics drivers)."""
     scaled = source.scaled(size, size, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
     x = max(0, (scaled.width() - size) // 2)
     y = max(0, (scaled.height() - size) // 2)
     cropped = scaled.copy(x, y, size, size)
 
-    result = QPixmap(size, size)
+    result = QImage(size, size, QImage.Format_ARGB32_Premultiplied)
     result.fill(Qt.transparent)
     painter = QPainter(result)
     painter.setRenderHint(QPainter.Antialiasing)
     path = QPainterPath()
     path.addEllipse(0, 0, size, size)
     painter.setClipPath(path)
-    painter.drawPixmap(0, 0, cropped)
+    painter.drawImage(0, 0, cropped)
     painter.end()
     return result
+
+
+def _circular_pixmap(source: QPixmap, size: int) -> QPixmap:
+    return QPixmap.fromImage(_circular_image(source.toImage(), size))
 
 
 def _avatar_widget(username: str, avatar_url: str, size: int, loader: "AvatarLoader | None") -> QLabel:
@@ -240,16 +248,39 @@ class _Worker(QThread):
     `mygeeky run`, or an activity-feed fetch) never freezes the panel."""
 
     done = Signal(object)
+    # Qt aborts the whole program if a QThread object is destroyed while its thread
+    # still runs. `done` fires from inside the thread, before it has stopped, so the
+    # callers' own lists can't be what keeps it alive: hold every worker here until
+    # `finished` (delivered on the UI thread, after run() returned) says it stopped.
+    _alive: set = set()
 
     def __init__(self, fn: Callable[[], Any]) -> None:
         super().__init__()
         self._fn = fn
+        self.finished.connect(self._stopped)
+
+    def start(self, *args: Any) -> None:
+        _Worker._alive.add(self)
+        super().start(*args)
+
+    def _stopped(self) -> None:
+        self.wait()
+        _Worker._alive.discard(self)
+
+    @classmethod
+    def drain(cls, timeout_ms: int) -> int:
+        """On quit: give running work up to `timeout_ms` to finish; how many are still running."""
+        deadline = time.monotonic() + timeout_ms / 1000
+        for w in list(cls._alive):
+            w.wait(max(0, int((deadline - time.monotonic()) * 1000)))
+        return sum(1 for w in cls._alive if w.isRunning())
 
     def run(self) -> None:
         try:
             result = self._fn()
         except Exception as exc:  # keep the worker thread from ever crashing the app
-            result = {"error": str(exc)}
+            from ..errors import describe
+            result = {"error": describe(exc)}    # what happened in plain words (network, limits, files...)
         self.done.emit(result)
 
 
@@ -273,21 +304,21 @@ class AvatarLoader:
 
         disk_path = AVATAR_CACHE_DIR / (hashlib.sha1(cache_key.encode()).hexdigest() + ".png")
 
-        def fetch() -> QPixmap | None:
+        def fetch() -> QImage | None:          # runs in a worker thread: QImage only, never QPixmap
             if disk_path.exists():
-                pm = QPixmap(str(disk_path))
-                if not pm.isNull():
-                    return pm
+                cached_img = QImage(str(disk_path))
+                if not cached_img.isNull():
+                    return cached_img
             try:
                 import requests
                 resp = requests.get(url, timeout=6)
                 resp.raise_for_status()
             except Exception:
                 return None
-            raw = QPixmap()
+            raw = QImage()
             if not raw.loadFromData(resp.content):
                 return None
-            circular = _circular_pixmap(raw, size)
+            circular = _circular_image(raw, size)
             try:
                 AVATAR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
                 circular.save(str(disk_path), "PNG")
@@ -298,9 +329,10 @@ class AvatarLoader:
         worker = _Worker(fetch)
 
         def _finish(result: Any) -> None:
-            if isinstance(result, QPixmap) and not result.isNull():
-                self._memory[cache_key] = result
-                on_loaded(result)
+            if isinstance(result, QImage) and not result.isNull():
+                pixmap = QPixmap.fromImage(result)        # here, on the UI thread
+                self._memory[cache_key] = pixmap
+                on_loaded(pixmap)
             if worker in self._workers:
                 self._workers.remove(worker)
 

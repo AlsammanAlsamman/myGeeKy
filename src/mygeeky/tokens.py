@@ -17,6 +17,7 @@ from typing import Any
 import requests
 
 from .config import TOKEN_CHECK_FILE, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
 EXPIRY_HEADER = "github-authentication-token-expiration"
 SETTINGS_URL = "https://github.com/settings/personal-access-tokens"
@@ -97,7 +98,7 @@ def describe(entry: dict[str, Any], now: datetime | None = None) -> dict[str, An
 def status(cfg: MyGeekyConfig, force: bool = False, max_age_hours: float = 24.0) -> list[dict[str, Any]]:
     """Every stored token's expiry, from a cache of dates at most a day old."""
     try:
-        cache = json.loads(TOKEN_CHECK_FILE.read_text(encoding="utf-8"))
+        cache = json.loads(TOKEN_CHECK_FILE.read_text(encoding="utf-8-sig"))
         fresh = datetime.now(timezone.utc) - datetime.fromisoformat(cache["checked_at"]) < timedelta(hours=max_age_hours)
     except (OSError, ValueError, KeyError, TypeError):
         cache, fresh = {}, False
@@ -108,7 +109,7 @@ def status(cfg: MyGeekyConfig, force: bool = False, max_age_hours: float = 24.0)
         if any(t["state"] != "unreachable" for t in cache["tokens"].values()):
             try:
                 ensure_dirs()
-                TOKEN_CHECK_FILE.write_text(json.dumps(cache), encoding="utf-8")
+                write_json(TOKEN_CHECK_FILE, cache)
             except OSError:
                 pass
     return [describe({"name": name, **cache["tokens"][name]}) for name in TOKENS if name in cache["tokens"]]

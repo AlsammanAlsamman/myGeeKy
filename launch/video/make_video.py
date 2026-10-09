@@ -522,7 +522,7 @@ def s_close(t: float) -> Image.Image:
     im.alpha_composite(pill)
     text_center(im, "pip install mygeeky", 718, font(46, mono=True), CYAN, pa)
     text_center(im, "mygeeky.org", 840, font(54, bold=True), TEXT, ease((t - 2.6) / 0.7))
-    text_center(im, "github.com/AlsammanAlsamman/myGeeKy  ·  ideas welcome", 920, font(32), MUTED, ease((t - 3.0) / 0.7))
+    text_center(im, "github.com/mygeeky/myGeeKy  ·  ideas welcome", 920, font(32), MUTED, ease((t - 3.0) / 0.7))
     return im
 
 

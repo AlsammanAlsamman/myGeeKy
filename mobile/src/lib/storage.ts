@@ -39,7 +39,14 @@ export async function saveSettings(s: Settings): Promise<void> {
 
 export async function getToken(): Promise<string | null> {
   if (Platform.OS === 'web') return globalThis.localStorage?.getItem(TOKEN_KEY) ?? null;
-  return SecureStore.getItemAsync(TOKEN_KEY);
+  try {
+    return await SecureStore.getItemAsync(TOKEN_KEY);
+  } catch {
+    // after a reinstall or a phone-backup restore the stored token can't be decrypted:
+    // forget it and treat the app as signed out, instead of failing on start
+    await SecureStore.deleteItemAsync(TOKEN_KEY).catch(() => undefined);
+    return null;
+  }
 }
 
 export async function setToken(token: string | null): Promise<void> {

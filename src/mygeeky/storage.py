@@ -22,24 +22,18 @@ from .config import (
     TRAINING_LOG,
     ensure_dirs,
 )
+from . import files
+from .files import write_json
 
 
 def append_jsonl(path: Path, record: dict[str, Any]) -> None:
     ensure_dirs()
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record) + "\n")
+    files.append_jsonl(path, record)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    out = []
-    with path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if line:
-                out.append(json.loads(line))
-    return out
+    # a line cut short by a crash (or a sync merge) is skipped, not fatal for the whole history
+    return [r for r in files.read_jsonl(path) if isinstance(r, dict)]
 
 
 def log_suggestions(records: Iterable[dict[str, Any]]) -> None:
@@ -56,27 +50,25 @@ def load_training_examples() -> list[dict[str, Any]]:
 
 
 def load_following_snapshot() -> set[str]:
-    if not FOLLOWING_SNAPSHOT.exists():
-        return set()
-    return set(json.loads(FOLLOWING_SNAPSHOT.read_text(encoding="utf-8")))
+    data = files.read_json(FOLLOWING_SNAPSHOT, [])
+    return set(data) if isinstance(data, list) else set()
 
 
 def save_following_snapshot(usernames: Iterable[str]) -> None:
     ensure_dirs()
-    FOLLOWING_SNAPSHOT.write_text(json.dumps(sorted(set(usernames))), encoding="utf-8")
+    write_json(FOLLOWING_SNAPSHOT, sorted(set(usernames)))
 
 
 def load_excluded() -> set[str]:
-    if not EXCLUDED_FILE.exists():
-        return set()
-    return set(json.loads(EXCLUDED_FILE.read_text(encoding="utf-8")))
+    data = files.read_json(EXCLUDED_FILE, [])     # a damaged file is kept aside, not lost
+    return set(data) if isinstance(data, list) else set()
 
 
 def add_excluded(usernames: Iterable[str]) -> None:
     ensure_dirs()
     current = load_excluded()
     current.update(usernames)
-    EXCLUDED_FILE.write_text(json.dumps(sorted(current)), encoding="utf-8")
+    write_json(EXCLUDED_FILE, sorted(current))
 
 
 def last_suggestions(limit: int = 15, list_type: str | None = None,
@@ -131,7 +123,7 @@ def load_activity_cache() -> dict[str, Any] | None:
     if not ACTIVITY_CACHE_FILE.exists():
         return None
     try:
-        return json.loads(ACTIVITY_CACHE_FILE.read_text(encoding="utf-8"))
+        return json.loads(ACTIVITY_CACHE_FILE.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return None
 
@@ -142,7 +134,7 @@ def save_activity_cache(events: list[dict[str, Any]], fetched_at: str,
     payload: dict[str, Any] = {"fetched_at": fetched_at, "events": events}
     if following is not None:
         payload["following"] = sorted(following)
-    ACTIVITY_CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
+    write_json(ACTIVITY_CACHE_FILE, payload)
 
 
 def log_contributions(records: Iterable[dict[str, Any]]) -> None:

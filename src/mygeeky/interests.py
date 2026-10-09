@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import CV_TEXT_FILE, INTEREST_EVENTS_FILE, MyGeekyConfig, ensure_dirs
+from .files import append_jsonl, read_jsonl, write_json
 
 # how much one action says about your interests
 KIND_WEIGHTS = {
@@ -101,19 +102,11 @@ def record(kind: str, text: str = "", topics: Iterable[str] = (), source: str = 
     ensure_dirs()
     event = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "kind": kind,
              "source": source[:120], "terms": terms}
-    with INTEREST_EVENTS_FILE.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event) + "\n")
+    append_jsonl(INTEREST_EVENTS_FILE, event)
 
 
 def load_events() -> list[dict[str, Any]]:
-    if not INTEREST_EVENTS_FILE.exists():
-        return []
-    out = []
-    for line in INTEREST_EVENTS_FILE.read_text(encoding="utf-8").splitlines():
-        try:
-            out.append(json.loads(line))
-        except ValueError:
-            continue
+    out = [e for e in read_jsonl(INTEREST_EVENTS_FILE) if isinstance(e, dict)]
     return out
 
 
@@ -229,7 +222,7 @@ def mix(ranked: list[dict[str, Any]], n: int, cfg: MyGeekyConfig,
 def _load_seen() -> set[str]:
     from .config import INTEREST_SEEN_FILE
     try:
-        return set(json.loads(INTEREST_SEEN_FILE.read_text(encoding="utf-8")))
+        return set(json.loads(INTEREST_SEEN_FILE.read_text(encoding="utf-8-sig")))
     except (OSError, ValueError):
         return set()
 
@@ -237,7 +230,7 @@ def _load_seen() -> set[str]:
 def _save_seen(seen: set[str]) -> None:
     from .config import INTEREST_SEEN_FILE
     ensure_dirs()
-    INTEREST_SEEN_FILE.write_text(json.dumps(sorted(seen)[-500:]), encoding="utf-8")
+    write_json(INTEREST_SEEN_FILE, sorted(seen)[-500:])
 
 
 def learn_from_github(client, cfg: MyGeekyConfig, new_follows: Iterable[str] = (), max_lookups: int = 5) -> int:

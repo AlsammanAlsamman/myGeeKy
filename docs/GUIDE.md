@@ -1,9 +1,9 @@
-<p align="center"><a href="https://github.com/AlsammanAlsamman/myGeeKy"><img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/gui/assets/icon_256.png" width="72" alt="myGeeKy"></a></p>
+<p align="center"><a href="https://github.com/mygeeky/myGeeKy"><img src="https://raw.githubusercontent.com/mygeeky/myGeeKy/main/src/mygeeky/gui/assets/icon_256.png" width="72" alt="myGeeKy"></a></p>
 
 <h1 align="center">The myGeeKy guide</h1>
 
 <p align="center"><sub>Everything in detail: every command, every setting, how the models work, and what myGeeKy will never do.<br>
-New here? Start with the <a href="https://github.com/AlsammanAlsamman/myGeeKy#readme">README</a> (install in 3 steps).</sub></p>
+New here? Start with the <a href="https://github.com/mygeeky/myGeeKy#readme">README</a> (install in 3 steps).</sub></p>
 
 **Contents:** [How it works](#how-it-works) · [Finding people](#finding-people-mygeeky-run) ·
 [Repos you could improve](#repos-you-could-improve-mygeeky-contribute) ·
@@ -27,15 +27,15 @@ New here? Start with the <a href="https://github.com/AlsammanAlsamman/myGeeKy#re
 GitHub's Markdown renderer strips `<script>` tags (security), so it can't
 run a live JS diagram inline — the image below is a preview of a real,
 animated, click-to-expand HTML/JS page that ships in this repo at
-[`docs/flowchart.html`](https://github.com/AlsammanAlsamman/myGeeKy/blob/main/docs/flowchart.html):
+[`docs/flowchart.html`](https://github.com/mygeeky/myGeeKy/blob/main/docs/flowchart.html):
 
 <p align="center">
-  <a href="https://raw.githack.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart.html">
-    <img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart_preview.png" width="480" alt="How myGeeKy works — click for the live interactive version">
+  <a href="https://raw.githack.com/mygeeky/myGeeKy/main/docs/flowchart.html">
+    <img src="https://raw.githubusercontent.com/mygeeky/myGeeKy/main/docs/flowchart_preview.png" width="480" alt="How myGeeKy works — click for the live interactive version">
   </a>
 </p>
 
-**[▶ Open the live interactive version](https://raw.githack.com/AlsammanAlsamman/myGeeKy/main/docs/flowchart.html)**
+**[▶ Open the live interactive version](https://raw.githack.com/mygeeky/myGeeKy/main/docs/flowchart.html)**
 — real vanilla JS (click any step to expand it), served straight off this
 repo via [githack](https://raw.githack.com), no build step, no server.
 (If that link is ever slow/unavailable: clone the repo and open
@@ -123,7 +123,7 @@ code anywhere. You open the repo, fork it, and send the PR yourself.
 
 ## Your field's repos as a market board (`mygeeky market`)
 
-<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/market.png" width="300" align="right" alt="Market tab">
+<img src="https://raw.githubusercontent.com/mygeeky/myGeeKy/main/docs/screenshots/market.png" width="300" align="right" alt="Market tab">
 
 Not repos to contribute to — the projects your field actually runs on,
 ranked like a stock board by **momentum**:
@@ -266,7 +266,7 @@ computer: run `mygeeky beacon init` on each computer you want to send signals fr
 
 ## Research trends, and the papers behind repos (`mygeeky trends`)
 
-<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/research.png" width="280" align="right" alt="Research trends">
+<img src="https://raw.githubusercontent.com/mygeeky/myGeeKy/main/docs/screenshots/research.png" width="280" align="right" alt="Research trends">
 
 Tools in research live in two places: papers and GitHub. myGeeKy connects
 them, using [OpenAlex](https://openalex.org), a free, open index of the
@@ -333,7 +333,7 @@ title when it's distinctive (not "tools" or a field like "genomics").
 
 **Papers & discussions** (the other view):
 
-<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/news.png" width="280" align="right" alt="News tab">
+<img src="https://raw.githubusercontent.com/mygeeky/myGeeKy/main/docs/screenshots/news.png" width="280" align="right" alt="News tab">
 
 New preprints and discussions that match your interests, from free and
 constantly updated sources, with no accounts or keys:
@@ -535,7 +535,7 @@ mygeeky beacon quiet on              # not taking signals right now (off to undo
 mygeeky beacon sent | unsend alice | mute alice | block troll
 ```
 
-<img src="https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/docs/screenshots/signals.png" width="260" align="right" alt="Signals tab (example data)">
+<img src="https://raw.githubusercontent.com/mygeeky/myGeeKy/main/docs/screenshots/signals.png" width="260" align="right" alt="Signals tab (example data)">
 
 In the panel, the **Signals** tab shows what people sent you and who else
 is around, with one-click 🙏 📚 👀 🤝 buttons (hover one to see exactly what
@@ -626,7 +626,7 @@ the full details are saved for you to send:
 - **`mygeeky` command and panel:** the error says where it saved its report
   (an `error-<date>.txt` in myGeeKy's `logs` folder).
 
-Please attach that file when you [open an issue](https://github.com/AlsammanAlsamman/myGeeKy/issues).
+Please attach that file when you [open an issue](https://github.com/mygeeky/myGeeKy/issues).
 
 If you don't have Python, or only have the Microsoft Store Python, the
 installer sets up a regular Python 3.12 just for you: with winget when your PC
@@ -1012,12 +1012,12 @@ fit. Both lists go through the same activity-QC and bot/dormant filters.
 
 ## License
 
-MIT — see [LICENSE](https://github.com/AlsammanAlsamman/myGeeKy/blob/main/LICENSE).
+MIT — see [LICENSE](https://github.com/mygeeky/myGeeKy/blob/main/LICENSE).
 
 
 ## 💡 Ideas, problems and questions
 
 Click **💡** at the top of the panel (or run `mygeeky idea "your idea"`). Pick *Idea*, *Problem* or *Question*,
 write a line or two, and press **Open on GitHub**: your browser opens a ready-to-send issue in
-[myGeeKy-ideas](https://github.com/AlsammanAlsamman/myGeeKy-ideas), and you click **Submit**. Nothing is sent
+[myGeeKy-ideas](https://github.com/mygeeky/myGeeKy-ideas), and you click **Submit**. Nothing is sent
 until you do, and no token passes through myGeeKy. Issues there are public, so leave out tokens and private data.

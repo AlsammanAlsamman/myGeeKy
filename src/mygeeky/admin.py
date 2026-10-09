@@ -26,9 +26,10 @@ from urllib.parse import quote
 import requests
 
 from .config import ADMIN_FILE, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
 ADMINS = {"alsammanalsamman"}
-PROJECT_REPO = "AlsammanAlsamman/myGeeKy"
+PROJECT_REPO = "mygeeky/myGeeKy"
 INVITE_DAILY_LIMIT = 10
 _RESEARCH_BIO = re.compile(r"ph\.?d|postdoc|professor|lab\b|universit|institut|scientist|research|"
                            r"bioinformatic|genom|genetic|biolog|computational", re.I)
@@ -42,14 +43,14 @@ def is_admin(cfg: MyGeekyConfig) -> bool:
 # --------------------------------------------------------------------------- state
 def load() -> dict[str, Any]:
     try:
-        return json.loads(ADMIN_FILE.read_text(encoding="utf-8"))
+        return json.loads(ADMIN_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {"people": {}}
 
 
 def save(state: dict[str, Any]) -> None:
     ensure_dirs()
-    ADMIN_FILE.write_text(json.dumps(state, indent=1), encoding="utf-8")
+    write_json(ADMIN_FILE, state, indent=1)
 
 
 def _now() -> datetime:

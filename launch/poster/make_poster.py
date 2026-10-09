@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SHOTS = ROOT / "docs" / "screenshots"
 OUT = Path(__file__).parent
 W, H = 3508, 4961                      # A3 at 300 dpi
-QR_URL = "https://github.com/AlsammanAlsamman/myGeeKy"
+QR_URL = "https://github.com/mygeeky/myGeeKy"
 
 TEXT = (244, 244, 250)
 MUTED = (182, 184, 204)
@@ -228,7 +228,7 @@ def main() -> None:
         text(im, value, (tx + 290, ty), font(52, "mono" if value.startswith("pip") else "regular"), TEXT)
         ty += 78
 
-    text(im, "It only suggests. It never follows, stars or posts for you.   \u00b7   github.com/AlsammanAlsamman/myGeeKy",
+    text(im, "It only suggests. It never follows, stars or posts for you.   \u00b7   github.com/mygeeky/myGeeKy",
          (W // 2, H - 150), font(50, "semi"), MUTED, center=True)
 
     rgb = im.convert("RGB")

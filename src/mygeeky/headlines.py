@@ -33,8 +33,9 @@ import requests
 
 from . import interests
 from .config import HEADLINES_FILE, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
-UA = {"User-Agent": "mygeeky-headlines (https://github.com/AlsammanAlsamman/myGeeKy)"}
+UA = {"User-Agent": "mygeeky-headlines (https://github.com/mygeeky/myGeeKy)"}
 MAX_FEED_BYTES = 3 * 1024 * 1024
 PER_FEED = 40
 CATEGORIES = {"ai": "AI", "science": "Science", "tech": "Tech"}
@@ -218,14 +219,14 @@ def select(items: list[dict[str, Any]], cfg: MyGeekyConfig, weights: dict[str, f
 # --------------------------------------------------------------------------- state
 def load_state() -> dict[str, Any]:
     try:
-        return json.loads(HEADLINES_FILE.read_text(encoding="utf-8"))
+        return json.loads(HEADLINES_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
 
 def save_state(state: dict[str, Any]) -> None:
     ensure_dirs()
-    HEADLINES_FILE.write_text(json.dumps(state), encoding="utf-8")
+    write_json(HEADLINES_FILE, state)
 
 
 def refresh_due(cfg: MyGeekyConfig, state: dict[str, Any], now: datetime | None = None) -> bool:

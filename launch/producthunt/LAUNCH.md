@@ -9,11 +9,11 @@ myGeeKy
 The people, projects & pulse of your field on GitHub
 
 ## Links
-- Website (main link, for now): https://github.com/AlsammanAlsamman/myGeeKy
+- Website (main link, for now): https://github.com/mygeeky/myGeeKy
 - Later, once https://mygeeky.org has its HTTPS certificate and is a few weeks old
   (some networks block brand-new domains), switch the main link to it.
 - PyPI: https://pypi.org/project/mygeeky/
-- Windows installer: https://github.com/AlsammanAlsamman/myGeeKy/releases/latest
+- Windows installer: https://github.com/mygeeky/myGeeKy/releases/latest
 
 ## Video (the "YouTube video" field on the media step)
 https://youtu.be/NTYDY7IGufw

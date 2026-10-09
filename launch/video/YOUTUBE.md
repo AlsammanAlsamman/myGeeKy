@@ -32,8 +32,8 @@ It only suggests; it never follows, stars or forks anything for you. Free and op
 2:10 Get it
 
 🔗 Links
-GitHub: https://github.com/AlsammanAlsamman/myGeeKy
-Windows installer: https://github.com/AlsammanAlsamman/myGeeKy/releases/latest
+GitHub: https://github.com/mygeeky/myGeeKy
+Windows installer: https://github.com/mygeeky/myGeeKy/releases/latest
 PyPI: https://pypi.org/project/mygeeky/
 Website: https://mygeeky.org
 

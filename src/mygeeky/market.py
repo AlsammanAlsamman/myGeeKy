@@ -33,6 +33,7 @@ import requests
 
 from .config import MARKET_FILE, MyGeekyConfig
 from .github_client import GitHubClient
+from .files import write_json
 
 PYPISTATS = "https://pypistats.org/api/packages/{}/overall"
 PYPI_JSON = "https://pypi.org/pypi/{}/json"
@@ -52,14 +53,14 @@ def load_state() -> dict[str, Any]:
     if not MARKET_FILE.exists():
         return {}
     try:
-        return json.loads(MARKET_FILE.read_text(encoding="utf-8"))
+        return json.loads(MARKET_FILE.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return {}
 
 
 def save_state(state: dict[str, Any]) -> None:
     MARKET_FILE.parent.mkdir(parents=True, exist_ok=True)
-    MARKET_FILE.write_text(json.dumps(state), encoding="utf-8")
+    write_json(MARKET_FILE, state)
 
 
 def _today() -> str:

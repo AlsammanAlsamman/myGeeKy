@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 
 from . import __version__
 
-IDEAS_REPO = "AlsammanAlsamman/myGeeKy-ideas"
+IDEAS_REPO = "mygeeky/myGeeKy-ideas"
 KINDS = {
     "idea": ("💡", "Idea", "idea"),
     "problem": ("🐞", "Problem", "problem"),

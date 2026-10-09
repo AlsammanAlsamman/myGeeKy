@@ -26,6 +26,7 @@ import requests
 
 from .config import PRODUCTHUNT_FILE, MyGeekyConfig, ensure_dirs
 from .market import _term_pattern
+from .files import write_json
 
 API = "https://api.producthunt.com/v2/api/graphql"
 FEED = "https://www.producthunt.com/feed"
@@ -105,7 +106,7 @@ def fetch_feed(session: requests.Session | None = None) -> list[dict[str, Any]]:
     import html as html_mod
     import xml.etree.ElementTree as ET
     session = session or requests.Session()
-    r = session.get(FEED, timeout=25, headers={"User-Agent": "mygeeky (https://github.com/AlsammanAlsamman/myGeeKy)"})
+    r = session.get(FEED, timeout=25, headers={"User-Agent": "mygeeky (https://github.com/mygeeky/myGeeKy)"})
     r.raise_for_status()
     atom = "{http://www.w3.org/2005/Atom}"
     posts = []
@@ -163,14 +164,14 @@ def load_state() -> dict[str, Any]:
     if not PRODUCTHUNT_FILE.exists():
         return {}
     try:
-        return json.loads(PRODUCTHUNT_FILE.read_text(encoding="utf-8"))
+        return json.loads(PRODUCTHUNT_FILE.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return {}
 
 
 def save_state(state: dict[str, Any]) -> None:
     ensure_dirs()
-    PRODUCTHUNT_FILE.write_text(json.dumps(state), encoding="utf-8")
+    write_json(PRODUCTHUNT_FILE, state)
 
 
 def refresh_due(cfg: MyGeekyConfig, state: dict[str, Any], now: datetime | None = None) -> bool:

@@ -27,6 +27,7 @@ from typing import Any
 import requests
 
 from .config import GH_ACHIEVEMENTS_FILE, MyGeekyConfig, USAGE_FILE, ensure_dirs
+from .files import append_jsonl, write_json
 
 TIERS = ("bronze", "silver", "gold")
 TIER_COLORS = {"bronze": "#cd7f32", "silver": "#c0c7d4", "gold": "#ffd24a"}
@@ -63,8 +64,7 @@ def log(what: str, kind: str = "", category: str = "", explore: bool = False) ->
             entry["cat"] = category[:20]
         if explore:
             entry["explore"] = True
-        with USAGE_FILE.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(entry) + "\n")
+        append_jsonl(USAGE_FILE, entry)
     except Exception:
         pass
 
@@ -172,7 +172,7 @@ def parse_achievements(html: str) -> list[dict[str, str]]:
 def github_achievements(username: str, force: bool = False) -> list[dict[str, str]]:
     """Cached; re-read from your public profile at most once a week."""
     try:
-        cache = json.loads(GH_ACHIEVEMENTS_FILE.read_text(encoding="utf-8"))
+        cache = json.loads(GH_ACHIEVEMENTS_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         cache = {}
     try:
@@ -192,9 +192,8 @@ def github_achievements(username: str, force: bool = False) -> list[dict[str, st
         items = cache.get("items", [])
     try:
         ensure_dirs()
-        GH_ACHIEVEMENTS_FILE.write_text(json.dumps({"user": username, "items": items,
-                                                    "checked_at": datetime.now(timezone.utc).isoformat()}),
-                                        encoding="utf-8")
+        write_json(GH_ACHIEVEMENTS_FILE, {"user": username, "items": items,
+                                          "checked_at": datetime.now(timezone.utc).isoformat()})
     except OSError:
         pass
     return items

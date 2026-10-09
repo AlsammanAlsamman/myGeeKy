@@ -40,10 +40,11 @@ from typing import Any, Callable, Iterable
 import requests
 
 from .config import DATA_DIR, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
 BUNDLED = Path(__file__).parent / "data" / "keywords.json"
 CACHE_FILE = DATA_DIR / "keywords.json"
-REMOTE_URL = "https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/data/keywords.json"
+REMOTE_URL = "https://raw.githubusercontent.com/mygeeky/myGeeKy/main/src/mygeeky/data/keywords.json"
 CHECK_EVERY_DAYS = 7
 RELATED_WEIGHT = 0.6          # a related term counts at most this much of the keyword itself
 MAX_RELATED = 12
@@ -101,7 +102,7 @@ _loaded: dict[str, Any] | None = None
 
 def _read(path: Path) -> dict[str, Any] | None:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) and isinstance(data.get("terms"), dict) else None
@@ -189,10 +190,10 @@ def refresh_if_due(now: datetime | None = None, timeout: float = 20.0) -> bool:
     current = load(force=True)
     if isinstance(remote, dict) and isinstance(remote.get("terms"), dict) \
             and str(remote.get("version", "")) > str(current.get("version", "")):
-        CACHE_FILE.write_text(json.dumps({**remote, "checked_at": now.isoformat()}), encoding="utf-8")
+        write_json(CACHE_FILE, {**remote, "checked_at": now.isoformat()})
         load(force=True)
         return True
-    CACHE_FILE.write_text(json.dumps({**(cached or current), "checked_at": now.isoformat()}), encoding="utf-8")
+    write_json(CACHE_FILE, {**(cached or current), "checked_at": now.isoformat()})
     return False
 
 

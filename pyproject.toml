@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mygeeky"
-version = "0.18.8"
+version = "0.19.0"
 description = "Your corner of GitHub: the people, projects and pulse of your field, from your CV, repos and papers. Suggests only; never follows anyone for you."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -42,6 +42,7 @@ dependencies = [
     "pypdf>=4.0",
     "cryptography>=42",   # private Signals (X25519 + ChaCha20-Poly1305)
     "qrcode>=7.4",        # "Connect your phone" (pure Python)
+    "truststore>=0.9; python_version >= '3.10'",   # the computer's own certificates (work networks)
 ]
 
 # Qt for the panel is NOT a pip dependency: `mygeeky gui` installs it on first
@@ -60,10 +61,10 @@ mygeeky-setup = "mygeeky.gui.bootstrap:setup_main"
 
 [project.urls]
 Homepage = "https://mygeeky.org"
-Source = "https://github.com/AlsammanAlsamman/myGeeKy"
-Documentation = "https://github.com/AlsammanAlsamman/myGeeKy/blob/main/docs/GUIDE.md"
-Ideas = "https://github.com/AlsammanAlsamman/myGeeKy-ideas"
-Issues = "https://github.com/AlsammanAlsamman/myGeeKy/issues"
+Source = "https://github.com/mygeeky/myGeeKy"
+Documentation = "https://github.com/mygeeky/myGeeKy/blob/main/docs/GUIDE.md"
+Ideas = "https://github.com/mygeeky/myGeeKy-ideas"
+Issues = "https://github.com/mygeeky/myGeeKy/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

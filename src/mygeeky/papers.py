@@ -32,9 +32,10 @@ import requests
 
 from . import interests
 from .config import PAPERS_CACHE_FILE, TRENDS_FILE, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
 OPENALEX = "https://api.openalex.org/works"
-UA = {"User-Agent": "mygeeky (https://github.com/AlsammanAlsamman/myGeeKy)"}
+UA = {"User-Agent": "mygeeky (https://github.com/mygeeky/myGeeKy)"}
 SELECT = "id,doi,title,publication_date,cited_by_count,authorships,primary_location,abstract_inverted_index,type"
 PAPER_TTL_DAYS = 14
 
@@ -174,7 +175,7 @@ def people_behind(papers: list[dict[str, Any]], n: int = 8) -> list[dict[str, An
 
 def load_trends() -> dict[str, Any]:
     try:
-        return json.loads(TRENDS_FILE.read_text(encoding="utf-8"))
+        return json.loads(TRENDS_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
@@ -270,7 +271,7 @@ def refresh_trends(cfg: MyGeekyConfig, force: bool = False, log: Callable[[str],
     state = {"updated_at": datetime.now(timezone.utc).isoformat(), "topics": topics, "rising": rising,
              "tools": tool_list, "people": people_behind([p for p in rising if not p.get("explore")])}
     ensure_dirs()
-    TRENDS_FILE.write_text(json.dumps(state), encoding="utf-8")
+    write_json(TRENDS_FILE, state)
     # repos named in tool papers are published: remember that for the [P] badge
     cache = _load_cache()
     for p in tool_list:
@@ -287,14 +288,14 @@ def _slim(p: dict[str, Any]) -> dict[str, Any]:
 
 def _load_cache() -> dict[str, Any]:
     try:
-        return json.loads(PAPERS_CACHE_FILE.read_text(encoding="utf-8"))
+        return json.loads(PAPERS_CACHE_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
 
 def _save_cache(cache: dict[str, Any]) -> None:
     ensure_dirs()
-    PAPERS_CACHE_FILE.write_text(json.dumps(cache), encoding="utf-8")
+    write_json(PAPERS_CACHE_FILE, cache)
 
 
 def cached_paper(full_name: str) -> dict[str, Any] | None:

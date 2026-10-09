@@ -27,6 +27,7 @@ from typing import Any
 import requests
 
 from .config import SCHOLAR_PROFILE_FILE, ensure_dirs
+from .files import write_json
 
 ORCID_API = "https://pub.orcid.org/v3.0"
 OPENALEX_API = "https://api.openalex.org"
@@ -39,7 +40,7 @@ SCHOLAR_HEADERS = {
                   "(KHTML, like Gecko) Chrome/126.0 Safari/537.36",
     "Accept-Language": "en-US,en;q=0.9",
 }
-USER_AGENT = "mygeeky (https://github.com/AlsammanAlsamman/myGeeKy)"
+USER_AGENT = "mygeeky (https://github.com/mygeeky/myGeeKy)"
 
 
 def normalize_orcid(value: str) -> str:
@@ -175,7 +176,7 @@ def refresh_scholar_profile(orcid: str = "", scholar_id: str = "") -> dict[str, 
         if gs:
             profile["google_scholar"] = gs
     ensure_dirs()
-    SCHOLAR_PROFILE_FILE.write_text(json.dumps(profile, indent=1), encoding="utf-8")
+    write_json(SCHOLAR_PROFILE_FILE, profile, indent=1)
     return profile
 
 
@@ -183,7 +184,7 @@ def load_scholar_profile() -> dict[str, Any] | None:
     if not SCHOLAR_PROFILE_FILE.exists():
         return None
     try:
-        return json.loads(SCHOLAR_PROFILE_FILE.read_text(encoding="utf-8"))
+        return json.loads(SCHOLAR_PROFILE_FILE.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return None
 

@@ -987,11 +987,11 @@ def main() -> None:
     from ..config import LOG_DIR
     from ..errors import ISSUES_URL, describe, save_crash_report, show_message_box
 
-    def log_late_error(kind, exc, tb):   # errors after start-up: report, don't crash silently
-        if issubclass(kind, KeyboardInterrupt):
-            return sys.__excepthook__(kind, exc, tb)
-        save_crash_report(exc.with_traceback(tb), LOG_DIR, "panel")
-    sys.excepthook = log_late_error
+    from .. import crashreport, use_system_certificates
+    use_system_certificates()
+    # every error from here on (main thread, background threads, hard crashes) is
+    # saved as a report; once the panel is up it offers to send it (see _main)
+    crashreport.install(LOG_DIR, on_report=lambda path: _CRASH_INBOX.append(path))
     try:
         _main()
     except SystemExit:
@@ -1029,11 +1029,16 @@ def _main() -> None:
     ensure_dirs()
     lock = QLockFile(str(DATA_DIR / "panel.lock"))
     if not lock.tryLock(200):
+        _bring_running_panel_forward()   # don't just do nothing: the panel may be folded at the edge
         return
     try:                                   # an older weekly task opened a console every Monday
         import threading
         from .. import scheduler
-        threading.Thread(target=scheduler.make_windowless, daemon=True).start()
+        def tidy_weekly_task() -> None:
+            scheduler.make_windowless()
+            if scheduler.is_installed():
+                scheduler.catch_up_settings()     # tasks made before this: run when missed, and on battery
+        threading.Thread(target=tidy_weekly_task, daemon=True).start()
     except Exception:
         pass
 
@@ -1044,10 +1049,125 @@ def _main() -> None:
     if ICON_WINDOW.exists():
         from PySide6.QtGui import QIcon
         app.setWindowIcon(QIcon(str(ICON_WINDOW)))
+    from PySide6.QtCore import qInstallMessageHandler
+    from .. import crashreport
+    from ..config import LOG_DIR
+    qInstallMessageHandler(crashreport.qt_message_handler(LOG_DIR))
     cfg = load_config()
     panel = MyGeekyPanel(cfg)
     panel.show()
+    _watch_crashes(panel, cfg.github_username)
+    _say_if_settings_recovered(panel)
+    _listen_for_second_start(panel)
     app.exec()
+    crashreport.clean_fatal_log(LOG_DIR)
+    # Quitting mid-refresh: let running work finish (everything is saved as it happens).
+    # A thread stuck in a slow download can't be stopped, and Qt aborts if it's still
+    # running at exit, so after a few seconds leave without waiting for it.
+    from .qt_panel import _Worker
+    if _Worker.drain(5000):
+        os._exit(0)
+
+
+def _instance_name() -> str:
+    import getpass
+    import re
+    try:
+        user = getpass.getuser()
+    except Exception:
+        user = "user"
+    return "mygeeky-panel-" + re.sub(r"[^A-Za-z0-9_.-]", "_", user)   # per user: one machine, several people
+
+
+def _listen_for_second_start(panel) -> None:
+    """Starting myGeeKy again (Start menu, desktop icon) brings this panel forward."""
+    from PySide6.QtNetwork import QLocalServer
+    server = QLocalServer(panel)
+    QLocalServer.removeServer(_instance_name())          # a leftover from a crashed panel
+    if not server.listen(_instance_name()):
+        return
+
+    def on_connect() -> None:
+        conn = server.nextPendingConnection()
+        if conn is not None:
+            conn.disconnectFromServer()
+        try:
+            panel.unfold()
+        except Exception:
+            pass
+        panel.show()
+        panel.raise_()
+        panel.activateWindow()
+    server.newConnection.connect(on_connect)
+    panel._instance_server = server
+
+
+def _bring_running_panel_forward() -> None:
+    try:
+        from PySide6.QtNetwork import QLocalSocket
+        sock = QLocalSocket()
+        sock.connectToServer(_instance_name())
+        if sock.waitForConnected(1000):
+            sock.disconnectFromServer()
+    except Exception:
+        pass
+
+
+def _say_if_settings_recovered(panel) -> None:
+    """config.json was damaged (e.g. a power cut during a save) and was restored from a copy."""
+    from .. import config
+    if not config.RECOVERED_FROM:
+        return
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QMessageBox
+    source = ("the copy saved just before the last change" if config.RECOVERED_FROM == "config.previous.json"
+              else "your last backup of them" if config.RECOVERED_FROM.startswith("config.backup")
+              else "the copy synced from your other computers" if config.RECOVERED_FROM == "config.synced.json"
+              else "the defaults (no good copy was found)")
+    box = QMessageBox(QMessageBox.Information, "myGeeKy",
+                      "Your settings file was damaged (this happens if the computer turns off while it's being "
+                      f"saved), so myGeeKy restored your settings from {source}.\n\nThe damaged file was kept "
+                      f"next to it as {config.CONFIG_FILE.name}.broken-…, in {config.CONFIG_FILE.parent}. "
+                      "If anything looks wrong, check ⚙ Settings.", QMessageBox.Ok, panel)
+    box.setWindowFlag(Qt.WindowStaysOnTopHint, True)     # in front of the panel, without locking it
+    box.setWindowModality(Qt.NonModal)
+    box.setAttribute(Qt.WA_DeleteOnClose, True)
+    box.show()
+
+
+_CRASH_INBOX: list = []      # reports saved by any thread, waiting to be offered on the main one
+
+
+def _watch_crashes(panel, login: str) -> None:
+    """Offer reports: any left from earlier runs (incl. a hard crash) a few seconds after
+    start, then new ones as they happen. Reports are collected from every thread and
+    shown from the main one."""
+    from PySide6.QtCore import QTimer
+    from .. import crashreport
+    from ..config import LOG_DIR
+    from .crash_dialog import CrashDialog
+    _CRASH_INBOX.extend(p for p in crashreport.pending(LOG_DIR) if p not in _CRASH_INBOX)
+
+    def offer() -> None:
+        if not _CRASH_INBOX:
+            return
+        new, _CRASH_INBOX[:] = list(_CRASH_INBOX), []
+        dlg = getattr(panel, "_crash_dialog", None)
+        try:
+            if dlg is not None and dlg.isVisible():
+                for p in reversed(new):
+                    dlg.add(p)
+                return
+        except RuntimeError:            # its window was closed and deleted
+            pass
+        theme = THEMES.get(getattr(panel, "_theme_name", lambda: "")(), None)
+        panel._crash_dialog = CrashDialog(panel, new, LOG_DIR, login, theme)
+        panel._crash_dialog.show()
+        panel._crash_dialog.raise_()
+
+    timer = QTimer(panel)
+    timer.timeout.connect(offer)
+    QTimer.singleShot(4000, lambda: (offer(), timer.start(3000)))   # let the panel settle first
 
 
 if __name__ == "__main__":

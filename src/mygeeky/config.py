@@ -15,12 +15,15 @@ from typing import Any
 
 from platformdirs import user_config_dir, user_data_dir
 
+from .files import write_json
+
 APP_NAME = "mygeeky"
 
 CONFIG_DIR = Path(user_config_dir(APP_NAME))
 DATA_DIR = Path(user_data_dir(APP_NAME))
 
 CONFIG_FILE = CONFIG_DIR / "config.json"
+PREVIOUS_CONFIG_FILE = CONFIG_DIR / "config.previous.json"   # the version before the last save
 SUGGESTIONS_LOG = DATA_DIR / "suggestions_history.jsonl"
 TRAINING_LOG = DATA_DIR / "training_data.jsonl"
 FOLLOWING_SNAPSHOT = DATA_DIR / "following_snapshot.json"
@@ -252,16 +255,52 @@ def ensure_dirs() -> None:
     AVATAR_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+# set when this start had to recover settings from a damaged config.json (the panel says so)
+RECOVERED_FROM: str = ""
+
+
+def _readable(path: Path) -> dict[str, Any] | None:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))   # -sig: a BOM from a text editor is fine
+    except (OSError, ValueError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _recover_config() -> dict[str, Any]:
+    """config.json is damaged (a crash or power cut during a save, a bad hand edit):
+    keep it aside and take the newest good copy -- a save backup or the synced copy."""
+    global RECOVERED_FROM
+    from .files import set_aside
+    set_aside(CONFIG_FILE)
+    candidates = [PREVIOUS_CONFIG_FILE]
+    candidates += sorted(CONFIG_FILE.parent.glob("config.backup-*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    candidates.append(SYNCED_CONFIG_FILE)
+    for path in candidates:
+        raw = _readable(path)
+        if raw:
+            RECOVERED_FROM = path.name
+            return raw
+    RECOVERED_FROM = "defaults"
+    return {}
+
+
 def load_config() -> MyGeekyConfig:
     ensure_dirs()
     if not CONFIG_FILE.exists():
         return MyGeekyConfig()
-    raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+    raw = _readable(CONFIG_FILE)
+    recovered = raw is None
+    if recovered:
+        raw = _recover_config()
     base = asdict(MyGeekyConfig())
     # ignore keys this version doesn't know -- a config synced from another
     # machine may have been written by a newer myGeeKy
     base.update({k: v for k, v in raw.items() if k in base})
-    return MyGeekyConfig(**_migrate(base, raw.get("config_version", 1)))
+    cfg = MyGeekyConfig(**_migrate(base, raw.get("config_version", 1)))
+    if recovered:
+        write_json(CONFIG_FILE, cfg.to_dict(), indent=2)   # the restored settings become config.json again
+    return cfg
 
 
 def _migrate(values: dict[str, Any], version: int) -> dict[str, Any]:
@@ -285,14 +324,19 @@ def save_config(cfg: MyGeekyConfig) -> None:
     ensure_dirs()
     new = cfg.to_dict()
     try:
-        old = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        old = _readable(CONFIG_FILE) or {}
         if any(old.get(k) and not new.get(k) for k in _PRECIOUS):
             from datetime import datetime
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            CONFIG_FILE.with_name(f"config.backup-{stamp}.json").write_text(json.dumps(old, indent=2), encoding="utf-8")
+            write_json(CONFIG_FILE.with_name(f"config.backup-{stamp}.json"), old, indent=2)
     except (OSError, ValueError):
         pass
-    CONFIG_FILE.write_text(json.dumps(new, indent=2), encoding="utf-8")
+    try:                                       # the last good version, for when config.json gets damaged anyway
+        if _readable(CONFIG_FILE):
+            write_json(PREVIOUS_CONFIG_FILE, _readable(CONFIG_FILE), indent=2)
+    except OSError:
+        pass
+    write_json(CONFIG_FILE, new, indent=2)     # all at once: a crash mid-save leaves the old file, not half of it
 
 
 def config_summary(cfg: MyGeekyConfig) -> str:

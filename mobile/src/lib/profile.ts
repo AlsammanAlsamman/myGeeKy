@@ -5,7 +5,7 @@ import { fetchT } from './net';
 import { Dict, expand, Profile, Weights } from './interests';
 import { isStale, readCache, Settings, writeCache } from './storage';
 
-const DICT_URL = 'https://raw.githubusercontent.com/AlsammanAlsamman/myGeeKy/main/src/mygeeky/data/keywords.json';
+const DICT_URL = 'https://raw.githubusercontent.com/mygeeky/myGeeKy/main/src/mygeeky/data/keywords.json';
 const STOP = new Set(['and', 'the', 'for', 'with', 'studies', 'study', 'research', 'analysis', 'methods']);
 
 export async function loadDictionary(): Promise<Dict | null> {

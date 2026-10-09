@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import winproc
+from .files import write_text_atomic
 from .config import CONFIG_FILE, DATA_DIR, MODEL_FILE, SYNCED_CONFIG_FILE, ensure_dirs
 
 GITIGNORE = """\
@@ -49,6 +50,10 @@ papers_cache.json
 interest_seen.json
 *.token
 *.lock
+*.tmp
+*.broken-*
+config.previous.json
+config.backup-*.json
 """
 
 GITATTRIBUTES = """\
@@ -59,7 +64,7 @@ GITATTRIBUTES = """\
 README = """\
 # myGeeKy data (private)
 
-Synced automatically by [myGeeKy](https://github.com/AlsammanAlsamman/myGeeKy)
+Synced automatically by [myGeeKy](https://github.com/mygeeky/myGeeKy)
 (`mygeeky sync push` / `mygeeky sync pull`). Keep this repository **private**:
 it contains your CV text and your suggestion history.
 
@@ -104,8 +109,21 @@ def _git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.
         # let git borrow gh's login for github.com without touching the user's git config
         cmd += ["-c", "credential.https://github.com.helper=", "-c",
                 "credential.https://github.com.helper=!gh auth git-credential"]
+    # a stalled connection (proxy, captive portal) gives up instead of hanging the sync forever
+    cmd += ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=60"]
     cmd += list(args)
-    result = winproc.run(cmd, cwd=str(cwd or DATA_DIR), capture_output=True, text=True)
+    env = dict(os.environ)
+    if not _interactive:
+        # background syncs never wait on a password prompt nobody can see; only the
+        # `sync init` the user runs themselves may open Git's sign-in window
+        env.update(GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    timeout = 900 if _interactive else 180
+    try:
+        result = winproc.run(cmd, cwd=str(cwd or DATA_DIR), capture_output=True, text=True, env=env,
+                             timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise SyncError(f"`git {args[0] if args else ''}` didn't finish in {timeout // 60} minutes: the network is "
+                        "slow or blocking GitHub. Sync will try again later.") from None
     if check and result.returncode != 0:
         raise SyncError(f"`git {' '.join(args)}` failed:\n{result.stderr.strip() or result.stdout.strip()}")
     return result
@@ -184,15 +202,16 @@ def _write_meta_files() -> None:
 
 
 def export_config() -> None:
-    if CONFIG_FILE.exists():
-        shutil.copyfile(CONFIG_FILE, SYNCED_CONFIG_FILE)
+    from .config import _readable
+    if _readable(CONFIG_FILE):            # never spread a damaged config to the other computers
+        write_text_atomic(SYNCED_CONFIG_FILE, CONFIG_FILE.read_text(encoding="utf-8-sig"))
 
 
 def import_config() -> bool:
-    if not SYNCED_CONFIG_FILE.exists():
-        return False
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(SYNCED_CONFIG_FILE, CONFIG_FILE)
+    from .config import _readable
+    if not SYNCED_CONFIG_FILE.exists() or not _readable(SYNCED_CONFIG_FILE):
+        return False                      # a damaged synced copy never replaces a good local one
+    write_text_atomic(CONFIG_FILE, SYNCED_CONFIG_FILE.read_text(encoding="utf-8-sig"))
     return True
 
 
@@ -217,9 +236,21 @@ def _stamp() -> str:
     return f"{platform.node() or 'unknown-host'} {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
 
 
+_interactive = False     # True only inside init(): the user is there to sign in to Git
+
+
 def init(repo: str) -> str:
     """Turn the data dir into a clone of private GitHub repo `repo` ("owner/name"),
     creating the repo (private) if it doesn't exist yet."""
+    global _interactive
+    _interactive = True
+    try:
+        return _init(repo)
+    finally:
+        _interactive = False
+
+
+def _init(repo: str) -> str:
     if "/" not in repo:
         raise SyncError("Give the repo as owner/name, e.g. octocat/mygeeky-data.")
     if public_on_github(repo):   # checked first, with or without the GitHub CLI: your CV must never go public

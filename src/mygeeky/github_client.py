@@ -16,6 +16,54 @@ from typing import Any, Iterable, Iterator
 import requests
 
 API_ROOT = "https://api.github.com"
+MAX_WAIT = 60          # seconds a request may wait for GitHub's limit; longer, and we say so instead
+
+
+class RateLimited(requests.RequestException):
+    """GitHub asked us to wait longer than is reasonable inside one refresh. A
+    RequestException, so every caller that copes with a network error copes with this."""
+
+    def __init__(self, reset_at: float, secondary: bool = False) -> None:
+        self.reset_at = reset_at
+        when = time.strftime("%H:%M", time.localtime(reset_at))
+        kind = "asked to slow down" if secondary else "limit reached"
+        super().__init__(f"GitHub {kind}: myGeeKy will try again after {when}."
+                         + ("" if secondary else " Signing in (a token) raises the limit a lot."))
+
+
+class NotGitHub(requests.ConnectionError):
+    """The network answered with a web page of its own (hotel/airport Wi-Fi sign-in)."""
+
+    def __init__(self) -> None:
+        super().__init__("The network answered with a web page instead of GitHub: probably a Wi-Fi sign-in page. "
+                         "Open your browser, sign in to the network, then refresh.")
+
+
+def _looks_like_web_page(resp: requests.Response) -> bool:
+    kind = str(resp.headers.get("Content-Type", "")).lower()
+    if "json" in kind:
+        return False
+    return str(getattr(resp, "text", "") or "").lstrip()[:15].lower().startswith(("<!doctype", "<html"))
+
+
+def _is_slow_down(resp: requests.Response) -> bool:
+    if resp.headers.get("Retry-After") or resp.headers.get("X-RateLimit-Remaining") == "0":
+        return True
+    try:
+        return "rate limit" in str(resp.json().get("message", "")).lower()
+    except (ValueError, AttributeError):
+        return False
+
+
+def _retry_after(resp: requests.Response) -> float:
+    try:
+        return max(1.0, float(resp.headers["Retry-After"]))
+    except (KeyError, ValueError):
+        pass
+    try:
+        return max(1.0, float(resp.headers["X-RateLimit-Reset"]) - time.time() + 1)
+    except (KeyError, ValueError):
+        return 60.0        # GitHub's advice when it says neither
 
 
 class GitHubClient:
@@ -31,6 +79,7 @@ class GitHubClient:
             headers["Authorization"] = f"Bearer {token}"
         self.session.headers.update(headers)
         self.rate_limit_sleep = rate_limit_sleep
+        self._blocked_until = 0.0
         # GitHub's /search/* endpoints have their own, much tighter rate limit
         # (~30 requests/min) independent of the main 5000/hour REST limit, so
         # they need their own, longer pacing regardless of X-RateLimit-Remaining.
@@ -38,13 +87,30 @@ class GitHubClient:
 
     def _get(self, path: str, params: dict[str, Any] | None = None, is_search: bool = False) -> requests.Response:
         url = path if path.startswith("http") else f"{API_ROOT}{path}"
+        if self._blocked_until > time.time():
+            raise RateLimited(self._blocked_until)
         resp = self.session.get(url, params=params, timeout=30)
+        if resp.status_code in (403, 429) and _is_slow_down(resp):
+            # GitHub's secondary limit: it says how long to back off (Retry-After) or when the limit resets
+            wait = _retry_after(resp)
+            if wait > MAX_WAIT:
+                self._blocked_until = time.time() + wait
+                raise RateLimited(self._blocked_until, secondary=True)
+            time.sleep(wait)
+            resp = self.session.get(url, params=params, timeout=30)
+            if resp.status_code in (403, 429) and _is_slow_down(resp):
+                self._blocked_until = time.time() + max(_retry_after(resp), MAX_WAIT)
+                raise RateLimited(self._blocked_until, secondary=True)
+        if resp.status_code == 200 and _looks_like_web_page(resp):
+            raise NotGitHub()
         remaining = resp.headers.get("X-RateLimit-Remaining")
         if remaining is not None and int(remaining) <= 1:
             reset = int(resp.headers.get("X-RateLimit-Reset", time.time() + 60))
             wait = max(0, reset - int(time.time())) + 1
-            print(f"[mygeeky] GitHub rate limit reached, waiting {wait}s...")
-            time.sleep(wait)
+            if wait <= MAX_WAIT:
+                time.sleep(wait)
+            else:                      # this answer is fine; the next request would have to wait an hour
+                self._blocked_until = float(reset)
         elif is_search and self.search_pause:
             time.sleep(self.search_pause)
         elif self.rate_limit_sleep:

@@ -405,7 +405,7 @@ def register_uninstaller(python: str, version: str, icon: str | None) -> None:
             "DisplayName": APP,
             "DisplayVersion": version,
             "Publisher": "Alsamman M. Alsamman",
-            "URLInfoAbout": "https://github.com/AlsammanAlsamman/myGeeKy",
+            "URLInfoAbout": "https://github.com/mygeeky/myGeeKy",
             "UninstallString": f'"{pythonw_for(python)}" -m mygeeky.gui.setup_wizard --uninstall',
             "DisplayIcon": icon or "",
         }

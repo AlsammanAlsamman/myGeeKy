@@ -54,6 +54,7 @@ import requests
 from . import signal_crypto as sc
 from .config import BEACON_CACHE_FILE, MY_BEACON_FILE, MyGeekyConfig, ensure_dirs
 from .github_client import API_ROOT, GitHubClient
+from .files import write_json
 
 BEACON_REPO = "mygeeky-beacon"
 BEACON_TOPIC = "mygeeky-beacon"
@@ -249,7 +250,7 @@ def load_my_beacon() -> dict[str, Any]:
     if not MY_BEACON_FILE.exists():
         return base
     try:
-        data = json.loads(MY_BEACON_FILE.read_text(encoding="utf-8"))
+        data = json.loads(MY_BEACON_FILE.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return base
     if not isinstance(data, dict):
@@ -264,7 +265,7 @@ def load_my_beacon() -> dict[str, Any]:
 
 def save_my_beacon(beacon: dict[str, Any]) -> None:
     ensure_dirs()
-    MY_BEACON_FILE.write_text(json.dumps(beacon, indent=2), encoding="utf-8")
+    write_json(MY_BEACON_FILE, beacon, indent=2)
 
 
 def prune(beacon: dict[str, Any], ttl_days: int, now: datetime | None = None) -> dict[str, Any]:
@@ -397,7 +398,7 @@ def _interests(cfg: MyGeekyConfig) -> list[str]:
 BEACON_README = """\
 # mygeeky-beacon
 
-This is a [myGeeKy](https://github.com/AlsammanAlsamman/myGeeKy) beacon.
+This is a [myGeeKy](https://github.com/mygeeky/myGeeKy) beacon.
 
 `beacon.json` holds a public key, an optional status and a few interest tags.
 It also holds **sealed signals** (🙏 thanks, 📚 learned from your work, ⭐ used
@@ -507,14 +508,14 @@ def load_cache() -> dict[str, Any]:
     if not BEACON_CACHE_FILE.exists():
         return {"fetched_at": None, "users": {}}
     try:
-        return json.loads(BEACON_CACHE_FILE.read_text(encoding="utf-8"))
+        return json.loads(BEACON_CACHE_FILE.read_text(encoding="utf-8-sig"))
     except (json.JSONDecodeError, OSError):
         return {"fetched_at": None, "users": {}}
 
 
 def save_cache(cache: dict[str, Any]) -> None:
     ensure_dirs()
-    BEACON_CACHE_FILE.write_text(json.dumps(cache), encoding="utf-8")
+    write_json(BEACON_CACHE_FILE, cache)
 
 
 def refresh_due(cfg: MyGeekyConfig, cache: dict[str, Any], now: datetime | None = None) -> bool:

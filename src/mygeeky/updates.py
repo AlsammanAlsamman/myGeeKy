@@ -22,9 +22,10 @@ import requests
 from . import winproc
 from . import __version__
 from .config import UPDATE_CHECK_FILE, ensure_dirs
+from .files import write_json
 
 PYPI_URL = "https://pypi.org/pypi/mygeeky/json"
-RELEASES_URL = "https://github.com/AlsammanAlsamman/myGeeKy/releases/latest"
+RELEASES_URL = "https://github.com/mygeeky/myGeeKy/releases/latest"
 
 
 def parse_version(v: str) -> tuple[int, ...]:
@@ -51,7 +52,7 @@ def latest_version(timeout: float = 4.0) -> str | None:
 
 def _load_cache() -> dict[str, Any]:
     try:
-        return json.loads(UPDATE_CHECK_FILE.read_text(encoding="utf-8"))
+        return json.loads(UPDATE_CHECK_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
@@ -71,7 +72,7 @@ def check(force: bool = False, max_age_hours: float = 24.0, timeout: float = 4.0
             cache = {"latest": latest, "checked_at": datetime.now(timezone.utc).isoformat()}
             try:
                 ensure_dirs()
-                UPDATE_CHECK_FILE.write_text(json.dumps(cache), encoding="utf-8")
+                write_json(UPDATE_CHECK_FILE, cache)
             except OSError:
                 pass
     latest = cache.get("latest")

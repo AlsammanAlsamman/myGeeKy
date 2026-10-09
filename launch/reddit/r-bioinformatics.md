@@ -44,7 +44,7 @@ no telemetry.
 Install: `pip install mygeeky`, then `mygeeky init` and `mygeeky gui`, or on Windows the
 one-click installer on the releases page.
 
-GitHub: https://github.com/AlsammanAlsamman/myGeeKy
+GitHub: https://github.com/mygeeky/myGeeKy
 
 Video (2.5 min, install + tour): https://youtu.be/NTYDY7IGufw
 

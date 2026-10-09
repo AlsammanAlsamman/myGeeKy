@@ -29,12 +29,13 @@ import requests
 
 from . import interests
 from .config import NEWS_FILE, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
 ARXIV_API = "https://export.arxiv.org/api/query"
 BIORXIV_API = "https://api.biorxiv.org/details/biorxiv/{start}/{end}/{cursor}/json"
 HN_SEARCH = "https://hn.algolia.com/api/v1/search_by_date"
 HN_FRONT = "https://hn.algolia.com/api/v1/search"
-UA = {"User-Agent": "mygeeky-news (https://github.com/AlsammanAlsamman/myGeeKy)"}
+UA = {"User-Agent": "mygeeky-news (https://github.com/mygeeky/myGeeKy)"}
 SOURCE_LABELS = {"arxiv": "arXiv", "biorxiv": "bioRxiv", "hackernews": "Hacker News"}
 
 _ARXIV_ID = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$|^[a-z\-]+(\.[A-Z]{2})?/\d{7}(v\d+)?$")
@@ -160,14 +161,14 @@ def rank(items: list[dict[str, Any]], weights: dict[str, float], now: datetime |
 # --------------------------------------------------------------------------- refresh
 def load_state() -> dict[str, Any]:
     try:
-        return json.loads(NEWS_FILE.read_text(encoding="utf-8"))
+        return json.loads(NEWS_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
 
 def save_state(state: dict[str, Any]) -> None:
     ensure_dirs()
-    NEWS_FILE.write_text(json.dumps(state), encoding="utf-8")
+    write_json(NEWS_FILE, state)
 
 
 def refresh_due(cfg: MyGeekyConfig, state: dict[str, Any], now: datetime | None = None) -> bool:

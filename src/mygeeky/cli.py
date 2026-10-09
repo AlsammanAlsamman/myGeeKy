@@ -74,6 +74,8 @@ def main() -> None:
 
     myGeeKy only ever suggests people. It never follows anyone for you.
     """
+    from . import use_system_certificates
+    use_system_certificates()
     # On Windows, piped/redirected output (e.g. the scheduled weekly task's
     # log) falls back to cp1252, which can't encode the ★/→ used in output.
     import sys

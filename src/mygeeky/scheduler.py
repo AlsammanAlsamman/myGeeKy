@@ -37,6 +37,12 @@ def windows_command() -> str:
     )
 
 
+def is_installed() -> bool:
+    if platform.system() != "Windows":
+        return False
+    return winproc.run(f'schtasks /Query /TN "{TASK_NAME}"', shell=True, capture_output=True, text=True).returncode == 0
+
+
 def make_windowless() -> bool:
     """Tasks made before 0.15.2 ran python.exe, which opens a console window every
     Monday; switch an existing one to pythonw (same schedule). True if changed."""
@@ -48,9 +54,40 @@ def make_windowless() -> bool:
     return winproc.run(windows_command(), shell=True, capture_output=True, text=True).returncode == 0
 
 
+CRON_MARK = "-m mygeeky pipeline"     # how our line is recognised, old formats included
+
+
 def cron_line() -> str:
+    """Paths quoted (a space in a folder name broke it), the log folder made first (a
+    missing one made cron skip the run), and the session bus given, so the keyring
+    holding the GitHub token can be reached from cron."""
+    import os
+    import shlex
+    from .config import LOG_DIR
     python, _ = _python_and_module()
-    return f"0 9 * * 1 {python} -m mygeeky pipeline >> ~/.local/share/mygeeky/logs/weekly.log 2>&1"
+    env = ""
+    if hasattr(os, "getuid") and Path(f"/run/user/{os.getuid()}/bus").exists():
+        env = f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{os.getuid()}/bus "
+    log = shlex.quote(str(LOG_DIR / "weekly.log"))
+    return (f"0 9 * * 1 mkdir -p {shlex.quote(str(LOG_DIR))} && {env}{shlex.quote(python)} "
+            f"{CRON_MARK} >> {log} 2>&1")
+
+
+def catch_up_settings() -> bool:
+    """Windows: a run missed while the PC was off or asleep starts as soon as it's back,
+    and it runs on battery too (schtasks' defaults skip both). True if the task has them."""
+    if platform.system() != "Windows":
+        return False
+    script = (f"$t = Get-ScheduledTask -TaskName '{TASK_NAME}' -ErrorAction Stop; "
+              "if ($t.Settings.StartWhenAvailable -and -not $t.Settings.DisallowStartIfOnBatteries) { 'ok'; exit } "
+              "$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; "
+              f"Set-ScheduledTask -TaskName '{TASK_NAME}' -Settings $s | Out-Null; 'set'")
+    try:
+        r = winproc.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                        capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return r.returncode == 0 and r.stdout.strip() in ("ok", "set")
 
 
 def describe() -> str:
@@ -80,14 +117,17 @@ def install(confirmed: bool) -> str:
         result = winproc.run(cmd, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             return f"Failed to create scheduled task:\n{result.stderr or result.stdout}"
-        return f"Scheduled task '{TASK_NAME}' created. It will run `mygeeky pipeline` every Monday at 09:00."
+        catch_up_settings()
+        return (f"Scheduled task '{TASK_NAME}' created. It will run `mygeeky pipeline` every Monday at 09:00 "
+                "(or as soon as the computer is on, if it was off then).")
 
     line = cron_line()
     result = subprocess.run("crontab -l", shell=True, capture_output=True, text=True)
     existing = result.stdout if result.returncode == 0 else ""
-    if line in existing:
+    if line in existing.splitlines():
         return "That cron entry already exists -- nothing to do."
-    new_crontab = existing.rstrip("\n") + f"\n{line}\n"
+    kept = [l for l in existing.splitlines() if CRON_MARK not in l]     # an older myGeeKy line is replaced
+    new_crontab = "\n".join(kept).rstrip("\n") + f"\n{line}\n"
     proc = subprocess.run("crontab -", shell=True, input=new_crontab, capture_output=True, text=True)
     if proc.returncode != 0:
         return f"Failed to update crontab:\n{proc.stderr}"
@@ -102,12 +142,11 @@ def remove() -> str:
             return f"Could not remove scheduled task (maybe it wasn't installed):\n{result.stderr or result.stdout}"
         return f"Scheduled task '{TASK_NAME}' removed."
 
-    line = cron_line()
     result = subprocess.run("crontab -l", shell=True, capture_output=True, text=True)
     existing = result.stdout if result.returncode == 0 else ""
-    if line not in existing:
+    if CRON_MARK not in existing:
         return "No matching cron entry found -- nothing to do."
-    new_crontab = "\n".join(l for l in existing.splitlines() if l != line) + "\n"
+    new_crontab = "\n".join(l for l in existing.splitlines() if CRON_MARK not in l) + "\n"
     proc = subprocess.run("crontab -", shell=True, input=new_crontab, capture_output=True, text=True)
     if proc.returncode != 0:
         return f"Failed to update crontab:\n{proc.stderr}"

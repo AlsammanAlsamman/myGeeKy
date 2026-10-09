@@ -17,7 +17,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-ISSUES_URL = "https://github.com/AlsammanAlsamman/myGeeKy/issues"
+ISSUES_URL = "https://github.com/mygeeky/myGeeKy/issues"
 
 PROGRAM_HINTS = {
     "git": "git isn't installed (or isn't on PATH). Install it from https://git-scm.com/download/win and try again.",
@@ -59,7 +59,13 @@ def describe(exc: BaseException) -> str:
     if isinstance(exc, PermissionError):
         where = f": {exc.filename}" if exc.filename else ""
         return f"Windows didn't allow access{where}. Close other myGeeKy windows and try again."
-    if type(exc).__name__ in ("ConnectionError", "Timeout", "ConnectTimeout", "ReadTimeout", "SSLError"):
+    if type(exc).__name__ in ("RateLimited", "NotGitHub"):
+        return str(exc)                  # they already say what happened and what to do
+    if type(exc).__name__ == "SSLError" or "CERTIFICATE_VERIFY_FAILED" in str(exc):
+        return ("Couldn't make a secure connection to GitHub: the network seems to inspect secure connections "
+                "(common on work networks), and its certificate isn't trusted. Try another network, or ask IT "
+                "to install the company certificate in Windows' certificate store.")
+    if type(exc).__name__ in ("ConnectionError", "Timeout", "ConnectTimeout", "ReadTimeout"):
         return "Couldn't reach the internet (GitHub or PyPI). Check your connection and try again."
     if isinstance(exc, OSError):
         where = f" ({exc.filename})" if exc.filename else ""

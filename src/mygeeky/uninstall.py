@@ -58,7 +58,7 @@ def erase_data(data_dir: Path) -> bool:
 
 def erase_everything() -> list[str]:
     """Tokens first (they need the username from the settings), then the folder."""
-    from .config import DATA_DIR, load_config
+    from .config import CONFIG_DIR, DATA_DIR, load_config
     notes = []
     try:
         username = load_config().github_username
@@ -69,6 +69,9 @@ def erase_everything() -> list[str]:
                  else "No saved tokens were left in your keyring.")
     notes.append(f"Erased your myGeeKy data ({DATA_DIR})." if erase_data(DATA_DIR)
                  else f"Some of your data couldn't be removed; delete {DATA_DIR} by hand.")
+    if CONFIG_DIR != DATA_DIR and CONFIG_DIR.exists():      # Linux/macOS keep settings in their own folder
+        notes.append(f"Erased your settings ({CONFIG_DIR})." if erase_data(CONFIG_DIR)
+                     else f"Some settings couldn't be removed; delete {CONFIG_DIR} by hand.")
     notes.append("Your GitHub repos (private sync, public mygeeky-beacon) were not touched; delete them on GitHub "
                  "if you no longer want them.")
     return notes

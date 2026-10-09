@@ -26,9 +26,10 @@ import requests
 
 from . import interests
 from .config import HF_MODELS_FILE, MyGeekyConfig, ensure_dirs
+from .files import write_json
 
 API = "https://huggingface.co/api/models"
-UA = {"User-Agent": "mygeeky (https://github.com/AlsammanAlsamman/myGeeKy)"}
+UA = {"User-Agent": "mygeeky (https://github.com/mygeeky/myGeeKy)"}
 _ID_RE = re.compile(r"^[A-Za-z0-9][\w.-]{0,95}/[\w.-]{1,95}$")
 _TAG_RE = re.compile(r"^[a-z0-9][a-z0-9_:.+-]{0,59}$")
 # Hugging Face tags for whole fields, reached from the words people use for them
@@ -101,14 +102,14 @@ def rank(models: list[dict[str, Any]], weights: dict[str, float]) -> list[dict[s
 
 def load_state() -> dict[str, Any]:
     try:
-        return json.loads(HF_MODELS_FILE.read_text(encoding="utf-8"))
+        return json.loads(HF_MODELS_FILE.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return {}
 
 
 def save_state(state: dict[str, Any]) -> None:
     ensure_dirs()
-    HF_MODELS_FILE.write_text(json.dumps(state), encoding="utf-8")
+    write_json(HF_MODELS_FILE, state)
 
 
 def refresh_due(cfg: MyGeekyConfig, state: dict[str, Any], now: datetime | None = None) -> bool:

@@ -437,3 +437,32 @@ def test_the_idea_window_never_locks_the_panel_and_opens_once(monkeypatch):
             w.wait(3000)
         panel.close()
         panel.deleteLater()
+
+
+def test_a_worker_stays_alive_until_its_thread_has_stopped():
+    """Qt aborts the program if a running QThread is destroyed: the caller dropping its
+    reference (as the panel does in its `done` handler) must not free a running worker."""
+    pytest.importorskip("PySide6")
+    import gc
+    import time as _t
+    import weakref
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from mygeeky.gui.qt_panel import _Worker
+    got = []
+    w = _Worker(lambda: (_t.sleep(0.3), "ok")[1])
+    w.done.connect(got.append)
+    w.start()
+    ref = weakref.ref(w)
+    w = None
+    gc.collect()                                   # would have destroyed the running thread
+    assert ref() is not None and ref() in _Worker._alive
+    end = _t.time() + 5
+    while (ref() is not None or not got) and _t.time() < end:
+        app.processEvents(); gc.collect(); _t.sleep(0.02)                  # noqa: E702
+    assert got == ["ok"] and ref() is None          # released, but only once stopped
+    stuck = _Worker(lambda: _t.sleep(2)); stuck.start()                    # noqa: E702
+    t0 = _t.time()
+    assert _Worker.drain(200) >= 1 and stuck.isRunning() and _t.time() - t0 < 1.5   # quit doesn't wait forever
+    assert stuck.wait(5000) and not stuck.isRunning()
+    app.processEvents()
