@@ -75,12 +75,16 @@ THEMES: dict[str, dict[str, Any]] = {
         "section_btn": "rgba(120,180,255,56)",
         "accent": "#7fd8ff",
         "swatch_border": "rgba(255,255,255,80)",
+        # text roles: every label asks the theme for its kind of text, never a fixed colour
+        "title": "#ffffff", "link": "#7fd8ff", "good": "#34d399", "bad": "#f87171", "warn": "#fbbf24",
+        "cat_ai": "#ff6fd8", "cat_science": "#34d399", "cat_tech": "#7fd8ff",
+        "on_accent": "#15151f", "explore": "#9b87ff", "dark": True,
     },
     "frosted": {
         "bg": "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(255,255,255,140), stop:1 rgba(255,255,255,71))",
         "border": "rgba(255,255,255,153)",
         "text": "#241f1a",
-        "muted": "rgba(36,31,26,150)",
+        "muted": "rgba(36,31,26,175)",
         "card_bg": "rgba(255,255,255,89)",
         "btn_bg": "rgba(0,0,0,31)",
         "btn_hover": "rgba(0,0,0,51)",
@@ -88,18 +92,27 @@ THEMES: dict[str, dict[str, Any]] = {
         "section_btn": "rgba(224,138,79,71)",
         "accent": "#b5591f",
         "swatch_border": "rgba(0,0,0,60)",
+        # darker shades: they have to stay readable on white
+        "title": "#14110e", "link": "#0b5f8f", "good": "#047857", "bad": "#b91c1c", "warn": "#a16207",
+        "cat_ai": "#a21caf", "cat_science": "#047857", "cat_tech": "#0369a1",
+        "on_accent": "#ffffff", "explore": "#6d28d9", "dark": False,
     },
     "aurora": {
-        "bg": "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 rgba(255,255,255,41), stop:1 rgba(255,255,255,15))",
+        # an opaque aurora: the panel paints its background solid (the Transparency slider sees to the
+        # glass), and the old near-transparent white turned into a white panel under white text
+        "bg": "qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #3a1d5e, stop:0.55 #272463, stop:1 #10385f)",
         "border": "rgba(255,255,255,89)",
         "text": "#ffffff",
-        "muted": "rgba(255,255,255,170)",
+        "muted": "rgba(255,255,255,195)",
         "card_bg": "rgba(255,255,255,26)",
         "btn_bg": "rgba(255,255,255,46)",
         "btn_hover": "rgba(255,255,255,71)",
         "tab_active": "qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 #ff6fd8, stop:1 #7a5cff)",
         "section_btn": "rgba(255,111,216,77)",
         "accent": "#ff6fd8",
+        "title": "#ffffff", "link": "#a5f3fc", "good": "#6ee7b7", "bad": "#fca5a5", "warn": "#fde68a",
+        "cat_ai": "#ff9ce6", "cat_science": "#6ee7b7", "cat_tech": "#a5f3fc",
+        "on_accent": "#1a1030", "explore": "#c4b5fd", "dark": True,
         "swatch_border": "rgba(255,255,255,120)",
     },
 }

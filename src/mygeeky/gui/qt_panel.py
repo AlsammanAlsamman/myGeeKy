@@ -777,7 +777,7 @@ class HeadlineRow(QFrame):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(8, 5, 8, 5)
         lay.setSpacing(7)
-        color = HEADLINE_COLORS.get(item.get("category", ""), theme["muted"])
+        color = theme.get(f"cat_{item.get('category', '')}", theme["muted"])
         tag = QLabel(("\U0001f30d " if item.get("explore") else "") + item.get("source", ""))
         tag.setTextFormat(Qt.PlainText)
         tag.setFixedWidth(92)
@@ -1095,8 +1095,9 @@ class InterestMap(QWidget):
         self._timer.timeout.connect(self._tick)
         self._intro_anim = _grow_animation(self, self._set_intro, 1400)
 
-    def set_theme_colors(self, text_color: str) -> None:
-        self._text = QColor(text_color)
+    def set_theme_colors(self, text_color: str, explore_color: str | None = None) -> None:
+        self._text = _parse_color(text_color, force_alpha=255)
+        self._explore = QColor(explore_color) if explore_color else None
         self.update()
 
     def set_data(self, center: str, field: list[str], learned: list[tuple[str, float]], explore: list[str]) -> None:
@@ -1175,7 +1176,9 @@ class InterestMap(QWidget):
         cx, cy, radii = self._geometry()
         # rings
         for i, r in enumerate(radii):
-            pen = QPen(QColor(255, 255, 255, 26 if i < 2 else 34), 1)
+            ring = QColor(self._text)
+            ring.setAlpha(30 if i < 2 else 40)
+            pen = QPen(ring, 1)
             if i == 2:
                 pen.setStyle(Qt.DashLine)
             painter.setPen(pen)
@@ -1239,7 +1242,7 @@ class InterestMap(QWidget):
                 if any(rect.intersects(r.adjusted(-2, -1, 2, 1)) for r in taken if r != own):
                     continue
                 taken.append(rect)
-                painter.setPen(self._text if n["ring"] < 2 else QColor(n["color"]))
+                painter.setPen(self._text if n["ring"] < 2 else (getattr(self, "_explore", None) or QColor(n["color"])))
                 painter.drawText(rect, Qt.AlignLeft | Qt.AlignVCenter, label)
                 break
         # you
@@ -4176,7 +4179,7 @@ class MyGeekyPanel(QWidget):
         import html as h
         self._setup = info
         theme = THEMES[self._theme_name()]
-        ok, off = "#34d399", theme["muted"]
+        ok, off = theme["good"], theme["muted"]
 
         def row(name: str, value: str, color: str | None = None) -> str:
             return (f"<tr><td style='color:{theme['muted']}; padding:1px 10px 1px 0'>{name}</td>"
@@ -4186,7 +4189,7 @@ class MyGeekyPanel(QWidget):
             label = "Token 1 (read)" if t["name"] == "read" else "Token 2 (Signals)" if t["name"] == "beacon" else t["name"]
             msg = t["message"].split(") ", 1)[-1] if ") " in t["message"] else t["message"]
             bad = t["state"] in ("expired", "invalid", "soon")
-            rows.append(row(label, h.escape(msg or "stored"), "#f87171" if bad else None))
+            rows.append(row(label, h.escape(msg or "stored"), theme["bad"] if bad else None))
         if info.get("signals"):
             rows.append(row("Signals", "\u2713 on: you send and receive", ok))
         else:
@@ -4219,7 +4222,7 @@ class MyGeekyPanel(QWidget):
 
         def done(result: dict[str, Any]) -> None:
             if not result.get("ok"):
-                self.setup_label.setText(self.setup_label.text() + f"<p style='color:#f87171; font-size:10.5px'>"
+                self.setup_label.setText(self.setup_label.text() + f"<p style='color:{THEMES[self._theme_name()]['bad']}; font-size:10.5px'>"
                                          f"Couldn't turn Signals on: {result.get('error')}</p>")
             self._refresh_signals(force=True)
             self._load_setup()
@@ -4422,7 +4425,7 @@ class MyGeekyPanel(QWidget):
             f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
             f"border-radius:7px; padding:4px 9px; font-size:11px; }}"
             f"QPushButton:hover {{ background:{theme['btn_hover']}; }}"
-            f"QPushButton#updateNow {{ background:{theme['accent']}; color:#15151f; font-weight:700; }}"
+            f"QPushButton#updateNow {{ background:{theme['accent']}; color:{theme['on_accent']}; font-weight:700; }}"
             f"QPushButton:disabled {{ color:{theme['muted']}; }}")
         self.token_banner.setStyleSheet(
             f"QFrame#tokenBanner {{ background:rgba(255,196,87,40); border:1px solid rgba(255,196,87,120); "
@@ -4455,7 +4458,7 @@ class MyGeekyPanel(QWidget):
         self.pair_btn.setStyleSheet(f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; "
                                     f"border:none; border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
                                     f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
-        self.uninstall_btn.setStyleSheet(f"QPushButton {{ background:transparent; color:#f87171; border:none; "
+        self.uninstall_btn.setStyleSheet(f"QPushButton {{ background:transparent; color:{theme['bad']}; border:none; "
                                          f"padding:4px 6px; font-size:11px; }} QPushButton:hover {{ text-decoration:underline; }}")
         self.quit_btn.setStyleSheet(f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
                                     f"border-radius:7px; padding:4px 10px; font-size:11px; }}"
@@ -4495,7 +4498,6 @@ class MyGeekyPanel(QWidget):
     def _update_tab_styles(self) -> None:
         theme = THEMES[self._theme_name()]
         self.tab_bar.setStyleSheet(f"QFrame#tabBar {{ background:{theme['card_bg']}; border-radius:10px; }}")
-        dark = _parse_color(theme["text"], force_alpha=255).lightness() > 128
         for name, btn in self.tab_buttons.items():
             active = name == self.active_tab
             icon, label = TABS[name]
@@ -4503,7 +4505,7 @@ class MyGeekyPanel(QWidget):
             # the text isn't drawn (the planet is): it's for screen readers and the tests
             btn.setText(f"{icon}  {label}" if active else icon + ("\u2022" if new_badge else ""))
             btn.setStyleSheet("QPushButton { background: transparent; border: none; }")
-            btn.set_planet_bg(QColor("#1c1c2c") if dark else QColor("#ffffff"))
+            btn.set_planet_bg(QColor("#1c1c2c") if theme["dark"] else QColor("#ffffff"))
             btn.set_dot(new_badge)
             btn.set_selected(active)
 
@@ -5431,7 +5433,7 @@ class MyGeekyPanel(QWidget):
         for lbl in (self.map_header, self.teach_header, self.explore_header, self.followback_header):
             lbl.setStyleSheet(f"color:{theme['text']}; font-size:10.5px; font-weight:700; letter-spacing:0.5px; "
                               "margin-top:8px; background:transparent;")
-        self.interest_map.set_theme_colors(theme["text"])
+        self.interest_map.set_theme_colors(theme["text"], theme["explore"])
         self.explore_donut.set_theme_colors(theme["text"])
         for tile in self.teach_tiles.values():
             tile.apply_theme(theme)
