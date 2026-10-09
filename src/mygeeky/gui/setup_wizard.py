@@ -414,18 +414,31 @@ def register_uninstaller(python: str, version: str, icon: str | None) -> None:
             winreg.SetValueEx(key, name, 0, winreg.REG_DWORD, 1)
 
 
-def uninstall(python: str) -> list[str]:
-    """Remove shortcuts, the weekly task, the package and the Apps entry.
-    Your data and tokens stay, so a reinstall picks up where you left off."""
+def uninstall(python: str, erase: bool = False) -> list[str]:
+    """Remove shortcuts, the weekly task, the package and the Apps entry. Your
+    data and tokens stay (a reinstall picks up where you left off) unless
+    `erase`, which also removes them (see uninstall.py)."""
     notes = []
     stop_running_panels()
-    for p in shortcut_paths().values():
-        if p.exists():
-            p.unlink()
-    try:
-        _run(["schtasks", "/Delete", "/TN", "myGeeKyWeeklyRun", "/F"], timeout=60)
-    except SetupError:
-        pass  # no Task Scheduler, so there's no weekly task to remove either
+    if erase:   # before pip removes the package: erasing needs it
+        from .. import uninstall as un
+        notes += un.erase_everything()
+    if sys.platform == "win32":
+        for p in shortcut_paths().values():
+            if p.exists():
+                p.unlink()
+        try:
+            _run(["schtasks", "/Delete", "/TN", "myGeeKyWeeklyRun", "/F"], timeout=60)
+        except SetupError:
+            pass  # no Task Scheduler, so there's no weekly task to remove either
+    else:
+        try:
+            from . import desktop
+            desktop.remove_menu_entry()
+            from .. import scheduler
+            scheduler.remove()
+        except Exception:
+            pass
     try:
         r = _run([python, "-m", "pip", "uninstall", "-y", "mygeeky"], timeout=300)
         notes.append("Removed the myGeeKy package." if r.returncode == 0 else
@@ -435,9 +448,10 @@ def uninstall(python: str) -> list[str]:
     try:
         import winreg
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
-    except OSError:
+    except (OSError, ImportError):
         pass
-    notes.append("Your data, settings and tokens were kept.")
+    if not erase:
+        notes.append("Your data, settings and tokens were kept, so a reinstall picks up where you left off.")
     return notes
 
 
@@ -1259,11 +1273,14 @@ def main(argv: list[str] | None = None) -> int:
     if "--uninstall" in argv:
         from PySide6.QtWidgets import QMessageBox
         python = sys.executable if not FROZEN else (find_python() or "")
-        if QMessageBox.question(None, "Uninstall myGeeKy",
-                                "Remove myGeeKy from this computer?\n\nYour data, settings and tokens are kept, "
-                                "so a reinstall picks up where you left off.") != QMessageBox.Yes:
+        erase = "--erase" in argv
+        # "--confirmed": the panel's ⚙ already asked
+        if "--confirmed" not in argv and QMessageBox.question(
+                None, "Uninstall myGeeKy",
+                "Remove myGeeKy from this computer?\n\nYour data, settings and tokens are kept, "
+                "so a reinstall picks up where you left off.") != QMessageBox.Yes:
             return 1
-        QMessageBox.information(None, "myGeeKy", "\n".join(uninstall(python)))
+        QMessageBox.information(None, "myGeeKy uninstalled", "\n\n".join(uninstall(python, erase=erase)))
         return 0
     import platform
     log(f"=== myGeeKy setup started (bundled wheel: {wheel_version(bundled_wheel()) or 'none'}, "

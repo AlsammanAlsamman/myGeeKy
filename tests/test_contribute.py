@@ -92,7 +92,8 @@ def test_search_terms_keep_one_slot_for_new_territory():
 
 
 def test_suggest_repositories_ranks_merge_friendly_fit_first():
-    cfg = MyGeekyConfig(github_username="me", contribute_queries=1, contribute_check_top_n=10)
+    # explore_share=0: with one query, the day's "new territory" term would otherwise take it on some days
+    cfg = MyGeekyConfig(github_username="me", contribute_queries=1, contribute_check_top_n=10, explore_share=0)
     client = FakeRepoClient()
     results = contribute.suggest_repositories(client, cfg, _self(), {"gwas": 1.0})
     names = [r["full_name"] for r in results]

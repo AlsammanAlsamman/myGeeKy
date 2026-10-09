@@ -7,6 +7,8 @@ from __future__ import annotations
 import hashlib
 import html
 import math
+import os
+import sys
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,6 +54,7 @@ from PySide6.QtWidgets import (
     QCompleter,
     QProgressBar,
     QDialog,
+    QMessageBox,
     QLineEdit,
     QPlainTextEdit,
     QRadioButton,
@@ -4080,6 +4083,11 @@ class MyGeekyPanel(QWidget):
         self.sync_label = QLabel("")
         self.sync_label.setWordWrap(True)
         bottom.addWidget(self.sync_label, 1)
+        self.uninstall_btn = QPushButton("Uninstall\u2026")
+        self.uninstall_btn.setCursor(Qt.PointingHandCursor)
+        self.uninstall_btn.setToolTip("Remove myGeeKy from this computer (you choose whether to keep your data)")
+        self.uninstall_btn.clicked.connect(self._uninstall)
+        bottom.addWidget(self.uninstall_btn)
         self.quit_btn = QPushButton("Quit myGeeKy")
         self.quit_btn.setCursor(Qt.PointingHandCursor)
         self.quit_btn.setToolTip("Close the panel. Open it again from your apps menu or `mygeeky gui`.")
@@ -4141,6 +4149,37 @@ class MyGeekyPanel(QWidget):
         from PySide6.QtCore import QRect
         top_left = self.folded_widget.mapToGlobal(QPoint(0, 0))
         self.hearts.puff(QRect(top_left, self.folded_widget.size()), self.cfg.gui_dock_side)
+
+    def _uninstall(self) -> None:
+        """⚙ → Uninstall: ask keep-or-erase here, then hand over to the uninstaller
+        (a separate process: the panel closes first, so nothing is in use)."""
+        box = QMessageBox(self)
+        box.setWindowFlag(Qt.WindowStaysOnTopHint, True)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("Uninstall myGeeKy")
+        box.setText("Remove myGeeKy from this computer?")
+        box.setInformativeText(
+            "Keep my data: your settings, history and tokens stay here, so a reinstall picks up where you left off.\n\n"
+            "Erase everything: also deletes your myGeeKy data folder and the tokens and Signals key saved in your "
+            "system keyring.\n\nNothing on GitHub is deleted either way (your sync and beacon repos stay).")
+        keep = box.addButton("Uninstall, keep my data", QMessageBox.AcceptRole)
+        erase = box.addButton("Uninstall and erase everything", QMessageBox.DestructiveRole)
+        box.addButton("Cancel", QMessageBox.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked not in (keep, erase):
+            return
+        args = ["-m", "mygeeky.gui.setup_wizard", "--uninstall", "--confirmed"] + (["--erase"] if clicked is erase else [])
+        exe = sys.executable
+        if exe.lower().endswith("python.exe") and os.path.exists(exe[:-len("python.exe")] + "pythonw.exe"):
+            exe = exe[:-len("python.exe")] + "pythonw.exe"
+        from .. import winproc
+        winproc.popen([exe] + args, creationflags=0x00000008 if sys.platform == "win32" else 0, close_fds=True,
+                      **({} if sys.platform == "win32" else {"start_new_session": True}))
+        if clicked is erase:
+            QApplication.quit()          # no last sync: everything here is about to be erased
+        else:
+            self._quit()
 
     def _toggle_settings(self) -> None:
         self.settings_panel.setVisible(not self.settings_panel.isVisible())
@@ -4436,6 +4475,8 @@ class MyGeekyPanel(QWidget):
         self.pair_btn.setStyleSheet(f"QPushButton {{ background:{theme['section_btn']}; color:{theme['text']}; "
                                     f"border:none; border-radius:8px; padding:6px 10px; font-size:11.5px; }}"
                                     f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
+        self.uninstall_btn.setStyleSheet(f"QPushButton {{ background:transparent; color:#f87171; border:none; "
+                                         f"padding:4px 6px; font-size:11px; }} QPushButton:hover {{ text-decoration:underline; }}")
         self.quit_btn.setStyleSheet(f"QPushButton {{ background:{theme['btn_bg']}; color:{theme['text']}; border:none; "
                                     f"border-radius:7px; padding:4px 10px; font-size:11px; }}"
                                     f"QPushButton:hover {{ background:{theme['btn_hover']}; }}")
