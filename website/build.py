@@ -44,6 +44,9 @@ def main() -> None:
     (OUT / "img").mkdir(parents=True)
     html = (ROOT / "website/index.html").read_text(encoding="utf-8").replace("{{VERSION}}", version())
     (OUT / "index.html").write_text(html, encoding="utf-8")
+    for page in ("privacy.html",):                      # other pages, e.g. the privacy policy
+        (OUT / page).write_text((ROOT / "website" / page).read_text(encoding="utf-8").replace("{{VERSION}}", version()),
+                                encoding="utf-8")
     for name, src in IMAGES.items():
         shutil.copyfile(src, OUT / "img" / name)
     cname = ROOT / "website/CNAME"

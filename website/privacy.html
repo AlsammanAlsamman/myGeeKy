@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>myGeeKy privacy policy</title>
+<meta name="description" content="What myGeeKy reads, what it keeps, where it goes, and what it never does. Plain words, no tracking.">
+<link rel="icon" type="image/png" href="img/icon_64.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f1a; --card: rgba(255, 255, 255, 0.045); --line: rgba(255, 255, 255, 0.10);
+    --text: #f2f2f7; --muted: rgba(242, 242, 247, 0.70); --pink: #ff6fd8; --violet: #7a5cff; --cyan: #7fd8ff;
+    --green: #34d399; --grad: linear-gradient(100deg, var(--pink), var(--violet) 55%, var(--cyan));
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) { --bg: #fafaff; --card: rgba(15, 15, 40, 0.035); --line: rgba(15, 15, 40, 0.12);
+      --text: #17172a; --muted: rgba(23, 23, 42, 0.72); --green: #047857; --cyan: #0e7490; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 Inter, system-ui, sans-serif; }
+  a { color: var(--cyan); } a:hover { color: var(--pink); }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 16px; }
+  header { border-bottom: 1px solid var(--line); }
+  header .wrap { display: flex; align-items: center; gap: 10px; height: 60px; }
+  header a.brand { display: flex; align-items: center; gap: 10px; color: var(--text); text-decoration: none; font-weight: 800; }
+  header img { width: 30px; height: 30px; }
+  header .back { margin-left: auto; font-size: 14px; }
+  h1 { font-size: clamp(30px, 6vw, 44px); line-height: 1.15; margin: 44px 0 6px; letter-spacing: -0.02em; }
+  h1 span { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .meta { color: var(--muted); font-size: 14px; margin: 0 0 26px; }
+  h2 { font-size: 21px; margin: 38px 0 10px; letter-spacing: -0.01em; }
+  p, li { color: var(--text); }
+  .muted { color: var(--muted); }
+  ul { padding-left: 22px; } li { margin: 5px 0; }
+  .tldr { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; }
+  .tldr li::marker { color: var(--green); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; margin: 10px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .table { overflow-x: auto; }
+  code { font-size: 13.5px; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; word-break: break-word; }
+  footer { border-top: 1px solid var(--line); margin-top: 56px; padding: 22px 0 40px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="./"><img src="img/icon_64.png" alt="">myGeeKy</a>
+    <a class="back" href="./">← Back to mygeeky.org</a>
+  </div>
+</header>
+
+<main class="wrap">
+  <h1>Privacy <span>policy</span></h1>
+  <p class="meta">Effective 8 October 2026 · applies to the myGeeKy desktop panel, command line, installer and phone app, and to this website</p>
+
+  <div class="tldr">
+    <strong>In short</strong>
+    <ul>
+      <li>myGeeKy runs on your computer and your phone. <strong>There is no myGeeKy server</strong>, no account with us, and no database of users.</li>
+      <li>Your CV, your settings and what myGeeKy learns about you <strong>stay on your devices</strong>, unless you turn on sync, which uses <strong>your own private GitHub repository</strong>.</li>
+      <li>Your GitHub tokens are kept in your system's <strong>secure credential store</strong>, never in files, logs or messages.</li>
+      <li>myGeeKy <strong>only reads</strong> public data. It never follows, stars, posts or writes anything on your behalf.</li>
+      <li><strong>No analytics, no tracking, no ads</strong>, and nothing is sold or shared.</li>
+    </ul>
+  </div>
+
+  <h2>Who we are</h2>
+  <p>myGeeKy is free, open-source software (MIT License), written and maintained by Alsamman M. Alsamman. Its source code is
+    public at <a href="https://github.com/AlsammanAlsamman/myGeeKy">github.com/AlsammanAlsamman/myGeeKy</a>, so everything
+    below can be checked against the code.</p>
+
+  <h2>What myGeeKy reads, and where it keeps it</h2>
+  <div class="table"><table>
+    <tr><th>What</th><th>Why</th><th>Where it stays</th></tr>
+    <tr><td>Your GitHub username</td><td>To find your followers, repos and the people and projects in your field</td><td>On your device</td></tr>
+    <tr><td>Your CV (only if you point myGeeKy to it)</td><td>To learn your research interests. The text is extracted and analysed on your computer</td><td>On your computer. It is never uploaded anywhere, except to your own private sync repository if you turn sync on</td></tr>
+    <tr><td>Your ORCID iD and Google Scholar profile (only if you give them)</td><td>To find your research field and rising papers</td><td>On your device</td></tr>
+    <tr><td>Keywords you add, and what you click in myGeeKy</td><td>To rank news, papers, people and repos for you. Clicks are recorded as interest terms and as the <em>kind</em> of thing opened (for badges), never as titles or links</td><td>On your device</td></tr>
+    <tr><td>Your GitHub tokens</td><td>To read GitHub's public data with a higher rate limit, and (only if you set up Signals) to update your own beacon repository</td><td>Your system's credential store (Windows Credential Manager, macOS Keychain, Linux Secret Service; on the phone, Android Keystore / iOS Keychain)</td></tr>
+  </table></div>
+  <p class="muted">On a computer, myGeeKy's files live in your user data folder (on Windows, <code>%LOCALAPPDATA%\mygeeky</code>).
+    On the phone, in the app's private storage. Uninstalling removes the program; you can delete that folder, or use the phone app's
+    <em>Start over</em>, to remove everything.</p>
+
+  <h2>Your GitHub tokens</h2>
+  <ul>
+    <li><strong>Read-only by design.</strong> The main token (or <em>Sign in with GitHub</em>, which asks for no permissions at all) can only read public data. Setup checks this and refuses a token that can follow people or change repositories.</li>
+    <li>To tell the two tokens apart, setup asks GitHub what a token can do, with checks that change nothing you can see. One of them creates a small unreferenced file object in one of your repositories, which never appears in it and which GitHub removes automatically.</li>
+    <li>The optional Signals token can write to <strong>one</strong> repository only: your <code>mygeeky-beacon</code>.</li>
+    <li>Tokens are never written to files or logs and never sent anywhere except to GitHub. <em>Connect your phone</em> shows a QR code containing your read-only token only if it is strictly read-only, only when you ask, and only for two minutes. The Signals token never goes into a QR code.</li>
+    <li>You can revoke a token, or <em>Sign in with GitHub</em>, at any time in your GitHub settings.</li>
+  </ul>
+
+  <h2>Who myGeeKy talks to</h2>
+  <p>myGeeKy fetches public information directly from these services. They see an ordinary request from your computer or
+    phone (your IP address and what was asked for), under their own privacy policies:</p>
+  <ul>
+    <li><strong>GitHub</strong>: profiles, repositories, followers, public activity, and your own beacon and sync repositories</li>
+    <li><strong>OpenAlex</strong> and <strong>ORCID</strong>: research topics and papers; <strong>Google Scholar</strong>: your public profile, if you give one</li>
+    <li><strong>arXiv</strong>, <strong>bioRxiv</strong>, <strong>Hacker News</strong> and public news feeds (AI labs, journals, the tech press): headlines</li>
+    <li><strong>Hugging Face</strong>, <strong>Product Hunt</strong> and <strong>pypistats</strong>: trending models, launches and download counts</li>
+    <li><strong>PyPI</strong>: once a day, to see whether a newer myGeeKy exists</li>
+  </ul>
+  <p>myGeeKy sends none of your personal data to these services beyond what a search needs, such as a topic word or a username.</p>
+
+  <h2>What you choose to make public</h2>
+  <ul>
+    <li><strong>Signals</strong> (optional). Your <code>mygeeky-beacon</code> repository is public. It holds your public encryption keys, your status, whether you are in quiet mode, your interest tags (you can turn this off), and the signals you sent. Each signal is encrypted so that <strong>only its recipient can read it</strong>, including who sent it. Signals expire after 90 days.</li>
+    <li><strong>Sync</strong> (optional). Your settings, CV text, scholarly profile and history go to a <strong>private</strong> repository in your own GitHub account, so your other computers see the same. myGeeKy never makes it public.</li>
+    <li><strong>The 💡 idea lamp</strong>. It opens a prefilled issue on GitHub in the public <a href="https://github.com/AlsammanAlsamman/myGeeKy-ideas">myGeeKy-ideas</a> repository. Nothing is sent until you submit it yourself, and you can edit it first.</li>
+  </ul>
+
+  <h2>What myGeeKy never does</h2>
+  <ul>
+    <li>It never follows, unfollows, stars, forks, comments or posts for you. It only suggests, and you act on GitHub yourself.</li>
+    <li>It has no analytics, telemetry, crash reporting or advertising, and it never sells or shares your data.</li>
+    <li>It does not ask for your contacts, location, camera or microphone. The phone app uses the camera only when you tap <em>Scan from your computer</em>, to read the QR code; no picture is saved or sent.</li>
+  </ul>
+
+  <h2>This website</h2>
+  <p>mygeeky.org is a static page hosted on GitHub Pages. It uses no cookies, analytics or tracking. GitHub may keep standard
+    server logs (such as IP addresses) as described in GitHub's privacy statement. The page loads its fonts from Google Fonts,
+    and the video player loads from YouTube's privacy-enhanced domain (youtube-nocookie.com) only when you press play.</p>
+
+  <h2>Children</h2>
+  <p>myGeeKy is a tool for researchers and developers and is not directed to children under 13.</p>
+
+  <h2>Changes</h2>
+  <p>If this policy changes, the new version will appear on this page with a new date, and the history of every change is
+    public in the <a href="https://github.com/AlsammanAlsamman/myGeeKy/commits/main/website/privacy.html">repository</a>.</p>
+
+  <h2>Questions</h2>
+  <p>Ask in the <a href="https://github.com/AlsammanAlsamman/myGeeKy/issues">myGeeKy issues</a>, or with the 💡 lamp in the
+    panel.</p>
+</main>
+
+<footer>
+  <div class="wrap">© myGeeKy · MIT License · <a href="./">mygeeky.org</a> · version {{VERSION}}</div>
+</footer>
+</body>
+</html>
