@@ -49,6 +49,7 @@ def main() -> None:
                                 encoding="utf-8")
     for name, src in IMAGES.items():
         shutil.copyfile(src, OUT / "img" / name)
+    shutil.copytree(ROOT / "website/fonts", OUT / "fonts")      # self-hosted fonts (no request to Google)
     cname = ROOT / "website/CNAME"
     if cname.exists():
         shutil.copyfile(cname, OUT / "CNAME")
