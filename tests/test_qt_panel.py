@@ -412,3 +412,28 @@ def test_clicking_a_person_unfolds_their_card_in_place_and_again_folds_it(monkey
             w.wait(2000)
         panel.close()
         panel.deleteLater()
+
+
+def test_the_idea_window_never_locks_the_panel_and_opens_once(monkeypatch):
+    pytest.importorskip("PySide6")
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from mygeeky.config import MyGeekyConfig
+    from mygeeky.gui.qt_panel import MyGeekyPanel
+    panel = MyGeekyPanel(MyGeekyConfig(github_username="me"))
+    try:
+        panel._open_idea_dialog()
+        first = panel._idea_dialog
+        assert first.isVisible() and QApplication.activeModalWidget() is None   # the panel stays usable
+        panel._open_idea_dialog()
+        assert panel._idea_dialog is first                                    # one window, brought forward
+        first.close()
+    finally:
+        panel.ticker.stop()
+        for t in (panel._activity_timer, panel._signals_timer, panel._update_timer, panel._news_timer,
+                  panel._dock_guard, panel._sync_timer):
+            t.stop()
+        for w in list(panel._workers):
+            w.wait(3000)
+        panel.close()
+        panel.deleteLater()

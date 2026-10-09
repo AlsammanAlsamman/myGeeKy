@@ -1880,7 +1880,11 @@ class IdeaDialog(QDialog):
             self.status.setText("Give it a short title first.")
             return
         url = issue_url(self.kind(), self.title_edit.text(), self.details.toPlainText(), self.with_version.isChecked())
-        QDesktopServices.openUrl(QUrl(url))
+        # in the background: handing a long link to the browser can block for a while on some
+        # Windows setups (e.g. while Windows asks which app should open it)
+        import threading
+        import webbrowser
+        threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
         from ..achievements import log
         log("idea")
         self.status.setText("✓ Your browser opened it on GitHub: click <b>Submit new issue</b> there to send it. "
@@ -3846,7 +3850,20 @@ class MyGeekyPanel(QWidget):
 
     # ------------------------------------------------------------------ 💡 ideas
     def _open_idea_dialog(self) -> None:
-        IdeaDialog(self, THEMES[self._theme_name()]).exec()
+        self._show_dialog("_idea_dialog", lambda: IdeaDialog(self, THEMES[self._theme_name()]))
+
+    def _show_dialog(self, slot: str, make) -> None:
+        """Open a small window WITHOUT locking the panel (a locking window that ends up behind the
+        always-on-top panel made it look frozen); pressing again brings the open one to the front."""
+        dlg = getattr(self, slot, None)
+        if dlg is None or not _alive(dlg) or not dlg.isVisible():
+            dlg = make()
+            dlg.setAttribute(Qt.WA_DeleteOnClose, True)
+            dlg.setWindowModality(Qt.NonModal)
+            setattr(self, slot, dlg)
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     # ------------------------------------------------------------------ 🛡 admin (the maker only)
     def _build_admin_tab(self) -> QScrollArea:
@@ -4112,7 +4129,8 @@ class MyGeekyPanel(QWidget):
         self.pair_btn = QPushButton("\U0001f4f1 Connect your phone")
         self.pair_btn.setCursor(Qt.PointingHandCursor)
         self.pair_btn.setToolTip("Show a QR code that sets up the myGeeKy phone app in one scan")
-        self.pair_btn.clicked.connect(lambda: PairDialog(self, THEMES[self._theme_name()]).exec())
+        self.pair_btn.clicked.connect(lambda: self._show_dialog(
+            "_pair_dialog", lambda: PairDialog(self, THEMES[self._theme_name()])))
         layout.addWidget(self.pair_btn)
 
         bottom = QHBoxLayout()
