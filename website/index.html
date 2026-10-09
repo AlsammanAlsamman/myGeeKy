@@ -309,7 +309,7 @@
     </div>
     <div class="pip mono"><span class="dollar">$</span><code id="pip">pip install mygeeky</code><button type="button" id="copy">Copy</button></div>
     <p class="note">Free and open source (MIT) · v{{VERSION}} · Windows installer, or pip on Windows, Linux and macOS</p>
-    <p class="note signpath">Free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
+    <p class="note signpath">Windows releases are currently unsigned. We have applied to the <a href="https://signpath.org">SignPath Foundation</a> for free open-source code signing, and future releases will be signed once approved. See our <a href="#code-signing">code signing policy</a>.</p>
     <div class="hero-shot" id="heroShot"><picture>
       <source media="(max-width: 600px)" srcset="img/model.png">
       <img src="img/hero.png" alt="myGeeKy panel tabs: People, what myGeeKy knows about you, and research rising in your field" width="1400" height="560">
@@ -518,6 +518,28 @@
   </div>
 </section>
 
+<section id="code-signing">
+  <div class="wrap reveal" style="max-width:760px">
+    <div class="eyebrow">Code signing policy</div>
+    <h2 style="font-size:clamp(24px,4vw,32px)">How Windows releases are signed</h2>
+    <p class="sub" style="margin-bottom:18px">Windows releases of myGeeKy will be signed through the
+      <a href="https://signpath.org">SignPath Foundation</a>'s free code signing program for open-source projects
+      (application pending). Until approved, releases are unsigned.</p>
+    <ul class="ticks">
+      <li>Only binaries built by this project's public
+        <a href="https://github.com/AlsammanAlsamman/myGeeKy/blob/main/.github/workflows/release.yml">GitHub Actions workflow</a>
+        from the source in <a href="https://github.com/AlsammanAlsamman/myGeeKy">github.com/AlsammanAlsamman/myGeeKy</a>
+        will be signed.</li>
+      <li><b>Committers and reviewers:</b> Alsamman M. Alsamman</li>
+      <li><b>Approvers:</b> Alsamman M. Alsamman</li>
+      <li><b>Privacy:</b> this program will not transfer any information to other networked systems unless specifically
+        requested by the user or the person installing or operating it. Its job is to read public data from GitHub and
+        research services for the account you set up, and to check PyPI for updates once a day; it sends no personal data
+        or telemetry. See the <a href="privacy.html">privacy policy</a>.</li>
+    </ul>
+  </div>
+</section>
+
 <section id="start">
   <div class="wrap center reveal">
     <div class="eyebrow">Get started</div>
@@ -554,8 +576,8 @@
       <a class="btn primary" href="https://github.com/AlsammanAlsamman/myGeeKy/releases/latest/download/MyGeeKySetup-{{VERSION}}.exe">⬇ Download for Windows</a>
       <a class="btn" href="https://pypi.org/project/mygeeky/">🐍 pip install mygeeky</a>
     </div>
-    <p class="note signpath">Free code signing provided by <a href="https://signpath.io">SignPath.io</a>, certificate by <a href="https://signpath.org">SignPath Foundation</a>.</p>
-    <p class="note">Until a signed installer reaches you, Windows may warn you: click <em>More info → Run anyway</em>.</p>
+    <p class="note signpath">Windows releases are currently unsigned. We have applied to the <a href="https://signpath.org">SignPath Foundation</a> for free open-source code signing, and future releases will be signed once approved. See our <a href="#code-signing">code signing policy</a>.</p>
+    <p class="note">Until then, if Windows warns you, click <em>More info → Run anyway</em>.</p>
   </div>
 </section>
 
@@ -569,6 +591,7 @@
       <a href="https://youtu.be/NTYDY7IGufw">Video</a>
       <a href="https://github.com/AlsammanAlsamman/myGeeKy-ideas">Ideas</a>
       <a href="privacy.html">Privacy</a>
+      <a href="#code-signing">Code signing</a>
     </div>
   </div>
 </footer>
