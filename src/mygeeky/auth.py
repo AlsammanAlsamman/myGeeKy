@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from . import winproc
 import getpass
+import sys
 import os
 import shutil
 import subprocess
@@ -93,25 +94,26 @@ def token_source(username: str) -> str:
     return "none"
 
 
-def prompt_and_store_token(username: str) -> None:
+def prompt_and_store_token(username: str, show_guide: bool = True) -> None:
     """Interactively prompt for a token (hidden input) and store it in the OS keyring."""
-    print(
-        "myGeeKy needs a GitHub Personal Access Token to read public profile/repo/\n"
-        "follower data on your behalf (and to raise your API rate limit).\n\n"
-        "Create one at: https://github.com/settings/tokens?type=beta\n"
-        "  -> grant it READ-ONLY access to public repositories and followers.\n"
-        "  -> do NOT grant any write, follow, or admin scopes -- myGeeKy never needs them\n"
-        "     and has no code path that could use them.\n"
-        "  -> Expiration: pick a long one (90 days or a year). myGeeKy reminds you a week\n"
-        "     before it ends (`mygeeky auth status` shows the date).\n\n"
-        "The token will be typed with hidden input and stored ONLY in your OS's\n"
-        "encrypted secret store (Windows Credential Locker / macOS Keychain / Linux\n"
-        "Secret Service) via the `keyring` package. It is never written to any file\n"
-        "in this project, never logged, and never leaves your machine.\n"
-    )
-    token = getpass.getpass("Paste your GitHub token (input hidden): ").strip()
+    if show_guide:
+        print(
+            "\nCreate a read-only token at: https://github.com/settings/personal-access-tokens/new\n"
+            "  -> Repository access: Public repositories. Under Account, add Followers: Read-only.\n"
+            "  -> Nothing else: myGeeKy never needs write, follow or admin access.\n"
+            "  -> Expiration: pick a long one (90 days or a year); myGeeKy reminds you before it ends.\n\n"
+            "It's stored only in your system keyring, never in a file or a log.\n"
+        )
+    paste_key = "Ctrl+Shift+V or right-click → Paste" if sys.platform.startswith("linux") else "right-click or Ctrl+V"
+    print(f"Paste it below ({paste_key}). The text stays hidden while you type, then press Enter.")
+    token = getpass.getpass("GitHub token: ").strip()
     if not token:
-        raise ValueError("Empty token, nothing stored.")
+        raise ValueError("Nothing was pasted, so no token was stored. "
+                         f"(In a Linux terminal, paste with Ctrl+Shift+V.)" if sys.platform.startswith("linux")
+                         else "Nothing was pasted, so no token was stored.")
+    if not token.startswith(("github_pat_", "ghp_", "gho_", "ghu_")):
+        raise ValueError(f"That doesn't look like a GitHub token (they start with github_pat_ or ghp_; got "
+                         f"{len(token)} characters starting '{token[:4]}…'). Copy it again from GitHub and paste.")
     from . import token_check
     verdict = token_check.check("read", token, username, other_token=get_beacon_token(username))
     if not verdict["ok"]:

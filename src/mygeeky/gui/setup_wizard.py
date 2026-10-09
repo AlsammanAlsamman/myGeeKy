@@ -53,6 +53,7 @@ from .. import winproc  # noqa: E402
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 FROZEN = getattr(sys, "frozen", False)
+WINDOWS = sys.platform == "win32"     # elsewhere (Linux, macOS) setup runs inside myGeeKy's own Python
 BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
 ASSETS = BUNDLE_DIR / "assets" if FROZEN else Path(__file__).parent / "assets"
 READ_TOKEN_URL = "https://github.com/settings/personal-access-tokens/new"
@@ -414,6 +415,28 @@ def register_uninstaller(python: str, version: str, icon: str | None) -> None:
             winreg.SetValueEx(key, name, 0, winreg.REG_DWORD, 1)
 
 
+def remove_install_script_folder() -> list[str]:
+    """If install.sh put myGeeKy in its own folder, remove that folder and the
+    ~/.local/bin/mygeeky link to it (this process can finish: Linux keeps the
+    open files until it exits)."""
+    import shutil
+    app_dir = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "mygeeky-app"
+    try:
+        inside = Path(sys.prefix).resolve().is_relative_to(app_dir.resolve())
+    except (OSError, ValueError):
+        inside = False
+    if not app_dir.exists() or not inside:
+        return []
+    link = Path.home() / ".local" / "bin" / "mygeeky"
+    try:
+        if link.is_symlink() and str(app_dir) in os.readlink(link):
+            link.unlink()
+    except OSError:
+        pass
+    shutil.rmtree(app_dir, ignore_errors=True)
+    return [f"Removed myGeeKy's own folder ({app_dir}) and the mygeeky command."]
+
+
 def uninstall(python: str, erase: bool = False) -> list[str]:
     """Remove shortcuts, the weekly task, the package and the Apps entry. Your
     data and tokens stay (a reinstall picks up where you left off) unless
@@ -439,6 +462,7 @@ def uninstall(python: str, erase: bool = False) -> list[str]:
             scheduler.remove()
         except Exception:
             pass
+        notes += remove_install_script_folder()
     try:
         r = _run([python, "-m", "pip", "uninstall", "-y", "mygeeky"], timeout=300)
         notes.append("Removed the myGeeKy package." if r.returncode == 0 else
@@ -573,12 +597,15 @@ class WelcomePage(Page):
             icon.setPixmap(QPixmap(str(ASSETS / "icon_128.png")))
         row.addWidget(icon)
         row.addWidget(_label("This wizard will:\n"
-                             "  •  install or update myGeeKy (and Python, if you don't have it)\n"
-                             "  •  connect your GitHub account\n"
-                             "  •  optionally keep your data in a private GitHub repo (and install Git for it)\n"
-                             "  •  optionally turn on Signals (👋 📚 🤝 👀)\n"
-                             "  •  add myGeeKy to your Start menu\n\n"
-                             "myGeeKy only ever suggests. It never follows anyone for you."), 1)
+                             + ("  •  install or update myGeeKy (and Python, if you don't have it)\n" if WINDOWS
+                                else "  •  check your myGeeKy install\n")
+                             + "  •  connect your GitHub account\n"
+                             + ("  •  optionally keep your data in a private GitHub repo (and install Git for it)\n"
+                                if WINDOWS else "  •  optionally keep your data in a private GitHub repo\n")
+                             + "  •  optionally turn on Signals (👋 📚 🤝 👀)\n"
+                             + ("  •  add myGeeKy to your Start menu\n\n" if WINDOWS
+                                else "  •  add myGeeKy to your applications menu\n\n")
+                             + "myGeeKy only ever suggests. It never follows anyone for you."), 1)
         wrap = QWidget()
         wrap.setLayout(row)
         self.add(wrap)
@@ -645,7 +672,9 @@ class InstallPage(Page):
                                               "https://www.python.org/downloads/ (tick 'Add python.exe to PATH'), "
                                               "then run this setup again."}
         wk.line.emit(f"Using Python: {w.python}")
-        if w.info.get("editable") and not self.update_editable.isChecked():
+        if not WINDOWS and not FROZEN:
+            wk.line.emit("myGeeKy is installed in this Python, so there's nothing to download.")
+        elif w.info.get("editable") and not self.update_editable.isChecked():
             wk.line.emit("Developer (editable) install found, so it was kept as is.")
         else:
             stopped = stop_running_panels()
@@ -805,7 +834,8 @@ class TokenPage(Page):
         self.add(steps)
         self.token = QLineEdit()
         self.token.setEchoMode(QLineEdit.Password)
-        self.token.setPlaceholderText("github_pat_…   (stored only in your Windows Credential Locker)")
+        self.token.setPlaceholderText("github_pat_…   (stored only in your " +
+                                      ("Windows Credential Locker)" if WINDOWS else "system keyring)"))
         self.add(self.token)
         self.token.textChanged.connect(lambda: self.paste.setChecked(True))
         self.finish_layout()
@@ -903,6 +933,10 @@ class SyncPage(Page):
         self.enable.setChecked(already or bool(s.get("git") and s.get("gh")))
         if already:
             self.note.setText(f"✓ Already syncing with {s['sync_repo']}. Next re-connects and pulls the latest.")
+        elif not s.get("git") and not WINDOWS:
+            self.note.setText("<b>Optional.</b> Sync needs <b>Git</b>, which isn't installed yet. Install it with your "
+                              "package manager (for example <code>sudo apt install git</code>), then come back to "
+                              "this page. Everything else works without it.")
         elif not s.get("git"):
             self.note.setText("<b>Optional.</b> Sync needs <b>Git</b>, which isn't on this PC yet. Tick the box and "
                               "setup <b>installs Git for you</b> (just for you, no admin, a minute or two), then "
@@ -922,7 +956,11 @@ class SyncPage(Page):
         needs_git = not self.w.state.get("git")
 
         def run(wk):
-            if needs_git:
+            if needs_git and not WINDOWS:
+                if not find_git():
+                    return {"ok": False, "error": "Sync needs Git: install it (e.g. `sudo apt install git`) and click "
+                                                  "Next again, or untick this to skip sync."}
+            elif needs_git:
                 git = find_git() or install_git(lambda m: log(m))
                 if not git:
                     return {"ok": False, "error": "Git couldn't be installed. Untick this to skip sync, or install "
@@ -1151,10 +1189,14 @@ class SignalsPage(Page):
 class FinishPage(Page):
     def __init__(self) -> None:
         super().__init__("Almost done", "Pick what you'd like, then click Finish.")
-        self.start_menu = self.add(QCheckBox("Add myGeeKy to the Start menu"))
+        self.start_menu = self.add(QCheckBox("Add myGeeKy to the Start menu" if WINDOWS
+                                             else "Add myGeeKy to the applications menu"))
         self.desktop = self.add(QCheckBox("Add a desktop shortcut"))
-        self.startup = self.add(QCheckBox("Open the panel when I sign in to Windows"))
-        self.weekly = self.add(QCheckBox("Refresh suggestions every Monday at 09:00 (scheduled task)"))
+        self.desktop.setVisible(WINDOWS)
+        self.startup = self.add(QCheckBox("Open the panel when I sign in to Windows" if WINDOWS
+                                          else "Open the panel when I log in"))
+        self.weekly = self.add(QCheckBox("Refresh suggestions every Monday at 09:00 (scheduled task)" if WINDOWS
+                                         else "Refresh suggestions every Monday at 09:00 (cron)"))
         self.launch = self.add(QCheckBox("Open the myGeeKy panel now"))
         for box in (self.start_menu, self.startup, self.launch):
             box.setChecked(True)
@@ -1163,9 +1205,13 @@ class FinishPage(Page):
 
     def initializePage(self) -> None:  # noqa: N802
         super().initializePage()
-        paths = shortcut_paths()
-        self.desktop.setChecked(paths["desktop"].exists())
-        self.startup.setChecked(paths["startup"].exists() or not self.w.state.get("configured"))
+        if WINDOWS:
+            paths = shortcut_paths()
+            self.desktop.setChecked(paths["desktop"].exists())
+            self.startup.setChecked(paths["startup"].exists() or not self.w.state.get("configured"))
+        else:
+            from . import desktop
+            self.startup.setChecked(desktop.autostart_path().exists() or not self.w.state.get("configured"))
         self.summary.setText("\n".join(n for n in self.w.notes if n))
 
     def job(self):
@@ -1228,6 +1274,8 @@ class SetupWizard(QWizard):
 
     # ---- the Finish page's work (runs in a Worker)
     def apply_finish(self, choices: dict[str, bool]) -> dict[str, Any]:
+        if not WINDOWS:
+            return self._apply_finish_elsewhere(choices)
         python = self.python or sys.executable
         pythonw = pythonw_for(python)
         pkg = package_dir(python)
@@ -1257,6 +1305,31 @@ class SetupWizard(QWizard):
                    close_fds=True, cwd=str(Path.home()))
         return {"ok": True}
 
+    def _apply_finish_elsewhere(self, choices: dict[str, bool]) -> dict[str, Any]:
+        """Linux and macOS: the applications menu (and login) entry, cron, and the panel."""
+        from . import desktop
+        python = self.python or sys.executable
+        problems = []
+        try:
+            if choices["start_menu"] or choices["startup"]:
+                desktop.install_menu_entry(autostart=choices["startup"])
+            elif desktop.autostart_path().exists():
+                desktop.autostart_path().unlink()
+        except OSError as exc:
+            problems.append(f"Couldn't add myGeeKy to the applications menu ({exc}).")
+        if choices["weekly"]:
+            result = api(python, "schedule")
+            if not result.get("ok"):
+                problems.append(f"Couldn't set up the weekly run: {result.get('error') or result.get('message')}")
+        if problems:
+            return {"ok": False, "error": " ".join(problems) + " Untick it and click Finish again, or open "
+                                          "myGeeKy any time with `mygeeky gui`."}
+        if choices["launch"] or self.restart_panel:
+            winproc.popen([python, "-m", "mygeeky.gui.app"], cwd=str(Path.home()), close_fds=True,
+                          start_new_session=True, stdin=subprocess.DEVNULL,
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"ok": True}
+
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
@@ -1275,7 +1348,7 @@ def main(argv: list[str] | None = None) -> int:
         return uninstall_main()
     import platform
     log(f"=== myGeeKy setup started (bundled wheel: {wheel_version(bundled_wheel()) or 'none'}, "
-        f"frozen: {FROZEN}, Windows {platform.version()})")
+        f"frozen: {FROZEN}, {platform.platform()})")
     wizard = SetupWizard()
     wizard.show()
     return app.exec()

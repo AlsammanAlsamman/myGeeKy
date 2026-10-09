@@ -154,6 +154,21 @@ def entry() -> None:
         raise SystemExit(1)
 
 
+# --------------------------------------------------------------------------- setup / uninstall windows
+@main.command("setup")
+def setup_window() -> None:
+    """Open the setup window (the same as the Windows installer's), to set up or change myGeeKy."""
+    from .gui.setup_wizard import main as setup_main
+    raise SystemExit(setup_main([]))
+
+
+@main.command("uninstall")
+def uninstall_window() -> None:
+    """Open the step-by-step uninstall window."""
+    from .gui.uninstall_wizard import main as uninstall_main
+    raise SystemExit(uninstall_main())
+
+
 # --------------------------------------------------------------------------- init
 @main.command()
 def init() -> None:
@@ -248,10 +263,9 @@ def init() -> None:
     if auth.get_token(cfg.github_username):
         click.echo("A GitHub token is already stored for this username.")
         if click.confirm("Replace it?", default=False):
-            auth.prompt_and_store_token(cfg.github_username)
+            _connect_github(cfg)
     else:
-        if click.confirm("\nSet up your GitHub token now?", default=True):
-            auth.prompt_and_store_token(cfg.github_username)
+        _connect_github(cfg)
 
     if auth.get_token(cfg.github_username) and click.confirm(
         "\nBootstrap the learning model from accounts you already follow? "
@@ -365,6 +379,56 @@ def auth_cmd() -> None:
 main.add_command(auth_cmd, name="auth")
 
 
+def _github_sign_in(cfg) -> bool:
+    """Sign in with GitHub (the device flow): True when it worked."""
+    from . import github_login as gl
+    try:
+        flow = gl.start()
+        click.echo(f"\n  1. Open {flow['verification_uri']}  (your browser should open it now)")
+        click.secho(f"  2. Enter this code:  {flow['user_code']}", bold=True)
+        click.echo("  3. Click Authorize myGeeKy. It can only read public data.\n")
+        click.launch(flow["verification_uri"])
+        click.echo("Waiting for you on github.com…")
+        token = gl.poll(flow["device_code"], flow["interval"], flow["expires_in"])
+        login = gl.who(token)
+    except gl.LoginError as exc:
+        click.secho(str(exc), fg="red")
+        return False
+    if cfg.github_username and login.lower() != cfg.github_username.lower():
+        click.secho(f"You signed in as {login}, but myGeeKy is set up for {cfg.github_username}. "
+                    "Sign in with that account.", fg="red")
+        return False
+    if not cfg.github_username:
+        cfg.github_username = login
+        save_config(cfg)
+    gl.store(token, login)
+    click.secho(f"Signed in as {login}.", fg="green")
+    return True
+
+
+def _connect_github(cfg) -> None:
+    """Connect GitHub during init: signing in is the easy way; pasting a token you
+    made yourself is the other; either can be done later."""
+    click.echo("\nConnect your GitHub account (read-only: myGeeKy can never follow, star or post):")
+    click.echo("  (s) Sign in with GitHub    easiest: type a short code on GitHub's page, no token to make")
+    click.echo("  (p) Paste a token          one you created yourself")
+    click.echo("  (k) Skip for now           later: `mygeeky auth login`")
+    choice = click.prompt("Choose", type=click.Choice(["s", "p", "k"], case_sensitive=False), default="s")
+    if choice.lower() == "s":
+        if not _github_sign_in(cfg) and click.confirm("Paste a token instead?", default=False):
+            choice = "p"
+    if choice.lower() == "p":
+        for attempt in range(3):
+            try:
+                auth.prompt_and_store_token(cfg.github_username, show_guide=attempt == 0)
+                return
+            except ValueError as exc:
+                click.secho(str(exc), fg="red")
+                if attempt < 2 and not click.confirm("Try again?", default=True):
+                    break
+        click.echo("No token saved. Do it any time with `mygeeky auth login`.")
+
+
 @auth_cmd.command("login")
 @click.option("--paste", is_flag=True, help="Paste a token you made yourself instead of signing in.")
 def auth_login(paste: bool) -> None:
@@ -374,27 +438,8 @@ def auth_login(paste: bool) -> None:
         if not cfg.github_username:
             raise click.ClickException("Run `mygeeky init` first to set your GitHub username.")
         auth.prompt_and_store_token(cfg.github_username)
-    else:
-        from . import github_login as gl
-        try:
-            flow = gl.start()
-            click.echo(f"\n  1. Open {flow['verification_uri']}")
-            click.secho(f"  2. Enter this code:  {flow['user_code']}", bold=True)
-            click.echo("  3. Click Authorize myGeeKy. It can only read public data.\n")
-            click.launch(flow["verification_uri"])
-            click.echo("Waiting for you on github.com…")
-            token = gl.poll(flow["device_code"], flow["interval"], flow["expires_in"])
-            login = gl.who(token)
-        except gl.LoginError as exc:
-            raise click.ClickException(str(exc)) from exc
-        if cfg.github_username and login.lower() != cfg.github_username.lower():
-            raise click.ClickException(f"You signed in as {login}, but myGeeKy is set up for "
-                                       f"{cfg.github_username}. Sign in with that account (or run `mygeeky init`).")
-        if not cfg.github_username:
-            cfg.github_username = login
-            save_config(cfg)
-        gl.store(token, login)
-        click.secho(f"Signed in as {login}.", fg="green")
+    elif not _github_sign_in(cfg):
+        raise click.ClickException("Not signed in. Try again, or `mygeeky auth login --paste` to paste a token.")
     from . import tokens
     tokens.forget()
     for t in tokens.status(cfg, force=True):

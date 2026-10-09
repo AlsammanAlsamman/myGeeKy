@@ -50,6 +50,7 @@ def main() -> None:
     for name, src in IMAGES.items():
         shutil.copyfile(src, OUT / "img" / name)
     shutil.copytree(ROOT / "website/fonts", OUT / "fonts")      # self-hosted fonts (no request to Google)
+    shutil.copyfile(ROOT / "website/install.sh", OUT / "install.sh")   # curl -fsSL https://mygeeky.org/install.sh | sh
     cname = ROOT / "website/CNAME"
     if cname.exists():
         shutil.copyfile(cname, OUT / "CNAME")
